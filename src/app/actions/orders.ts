@@ -116,12 +116,12 @@ export async function placeOrder(input: PlaceOrderInput) {
     return created;
   });
 
-  // Mark this visitor's leads as converted.
+  // Mark this visitor's leads as ordered.
   if (data.visitorId) {
     await prisma.lead
       .updateMany({
-        where: { visitorId: data.visitorId, status: { not: "converted" } },
-        data: { status: "converted" },
+        where: { visitorId: data.visitorId, status: { notIn: ["ordered", "lost"] } },
+        data: { status: "ordered" },
       })
       .catch(() => {});
   }

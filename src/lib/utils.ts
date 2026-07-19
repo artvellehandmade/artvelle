@@ -30,6 +30,23 @@ export function orderNumber(): string {
   return `AV-${t}${r}`;
 }
 
+/**
+ * Normalise an Indian phone number to E.164-ish digits for wa.me links.
+ * 10 digits → prefixed with 91; keeps existing country codes; strips symbols.
+ */
+export function normalisePhone(phone: string): string {
+  let digits = (phone || "").replace(/\D/g, "");
+  if (digits.startsWith("0")) digits = digits.replace(/^0+/, "");
+  if (digits.length === 10) digits = `91${digits}`;
+  return digits;
+}
+
+/** Build a click-to-send WhatsApp link with a pre-filled message. */
+export function whatsappLink(phone: string, message: string): string {
+  const to = normalisePhone(phone);
+  return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
+}
+
 export const CATEGORIES = [
   "Resin Art",
   "Coasters",

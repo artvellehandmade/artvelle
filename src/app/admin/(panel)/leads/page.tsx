@@ -1,36 +1,66 @@
 import Image from "next/image";
 import { Users } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatINR } from "@/lib/utils";
 import { LeadActions } from "@/components/admin/lead-actions";
+import { LeadFilters } from "@/components/admin/lead-filters";
+import { LEAD_STATUS_COLOR, LEAD_STATUS_LABEL, isLeadStatus } from "@/lib/leads";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Interested customers" };
 
-const statusColor: Record<string, string> = {
-  interested: "bg-accent/15 text-accent",
-  contacted: "bg-blue-500/15 text-blue-500",
-  converted: "bg-success/15 text-success",
-};
+export default async function AdminLeads({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; q?: string }>;
+}) {
+  const { status, q } = await searchParams;
 
-export default async function AdminLeads() {
-  const leads = await prisma.lead
-    .findMany({ orderBy: { createdAt: "desc" }, take: 300 })
-    .catch(() => []);
+  const where: Prisma.LeadWhereInput = {};
+  if (status && isLeadStatus(status)) where.status = status;
+  if (q) {
+    where.OR = [
+      { name: { contains: q, mode: "insensitive" } },
+      { phone: { contains: q, mode: "insensitive" } },
+      { email: { contains: q, mode: "insensitive" } },
+      { productName: { contains: q, mode: "insensitive" } },
+    ];
+  }
+
+  const [leads, grouped, total] = await Promise.all([
+    prisma.lead
+      .findMany({ where, orderBy: { createdAt: "desc" }, take: 300 })
+      .catch(() => []),
+    prisma.lead.groupBy({ by: ["status"], _count: { _all: true } }).catch(
+      () => [] as { status: string; _count: { _all: number } }[]
+    ),
+    prisma.lead.count().catch(() => 0),
+  ]);
+
+  const counts: Record<string, number> = { all: total };
+  for (const g of grouped) counts[g.status] = g._count._all;
 
   return (
     <div>
       <h1 className="font-serif text-3xl">Interested customers</h1>
       <p className="mt-1 text-sm text-muted-foreground">
-        Everyone who added a product to their cart — your warm leads.
+        Everyone who added a product to their cart — your warm leads. Update their
+        status and jot notes as you follow up.
       </p>
 
+      <div className="mt-6">
+        <LeadFilters counts={counts} />
+      </div>
+
       {leads.length === 0 ? (
-        <div className="mt-10 rounded-2xl border border-dashed border-border p-12 text-center">
+        <div className="mt-8 rounded-2xl border border-dashed border-border p-12 text-center">
           <Users className="mx-auto h-10 w-10 text-muted-foreground" />
-          <p className="mt-4 font-serif text-xl">No cart activity yet</p>
+          <p className="mt-4 font-serif text-xl">No matching customers</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            When visitors add products to their cart, they&apos;ll show up here.
+            {status || q
+              ? "Try clearing the filters."
+              : "When visitors add products to their cart, they'll show up here."}
           </p>
         </div>
       ) : (
@@ -39,41 +69,18 @@ export default async function AdminLeads() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="px-4 py-3 font-medium">Customer</th>
                   <th className="px-4 py-3 font-medium">Product</th>
-                  <th className="px-4 py-3 font-medium">Qty</th>
-                  <th className="px-4 py-3 font-medium">Contact</th>
                   <th className="px-4 py-3 font-medium">When</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3" />
+                  <th className="px-4 py-3 text-right font-medium">
+                    Manage &amp; notes
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {leads.map((l) => (
-                  <tr key={l.id} className="hover:bg-muted/40">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted">
-                          {l.productImage && (
-                            <Image
-                              src={l.productImage}
-                              alt={l.productName}
-                              fill
-                              sizes="40px"
-                              className="object-cover"
-                            />
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">{l.productName}</p>
-                          {l.price != null && (
-                            <p className="text-xs text-muted-foreground">
-                              {formatINR(l.price)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{l.quantity}</td>
+                  <tr key={l.id} className="align-top hover:bg-muted/40">
                     <td className="px-4 py-3">
                       {l.name || l.email || l.phone ? (
                         <div className="text-muted-foreground">
@@ -106,21 +113,56 @@ export default async function AdminLeads() {
                           Guest ({l.visitorId?.slice(0, 6) || "—"})
                         </span>
                       )}
+                      {l.notes && (
+                        <p className="mt-1.5 max-w-[16rem] rounded-lg bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
+                          {l.notes}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-muted">
+                          {l.productImage && (
+                            <Image
+                              src={l.productImage}
+                              alt={l.productName}
+                              fill
+                              sizes="40px"
+                              className="object-cover"
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">{l.productName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Qty {l.quantity}
+                            {l.price != null ? ` · ${formatINR(l.price)}` : ""}
+                          </p>
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {l.createdAt.toLocaleString("en-IN")}
                     </td>
                     <td className="px-4 py-3">
                       <span
-                        className={`rounded-full px-2.5 py-1 text-xs capitalize ${
-                          statusColor[l.status] ?? "bg-muted"
+                        className={`rounded-full px-2.5 py-1 text-xs ${
+                          isLeadStatus(l.status)
+                            ? LEAD_STATUS_COLOR[l.status]
+                            : "bg-muted"
                         }`}
                       >
-                        {l.status}
+                        {isLeadStatus(l.status)
+                          ? LEAD_STATUS_LABEL[l.status]
+                          : l.status}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <LeadActions id={l.id} status={l.status} />
+                      <LeadActions
+                        id={l.id}
+                        status={l.status}
+                        notes={l.notes}
+                      />
                     </td>
                   </tr>
                 ))}

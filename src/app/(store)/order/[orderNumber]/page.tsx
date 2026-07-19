@@ -1,6 +1,7 @@
-import { CheckCircle2, Package } from "lucide-react";
+import { CheckCircle2, Package, MessageCircle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { formatINR } from "@/lib/utils";
+import { getSettings } from "@/lib/settings";
+import { formatINR, whatsappLink } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
 import {
   OrderTimeline,
@@ -42,6 +43,20 @@ export default async function OrderPage({
   const history = (
     Array.isArray(order.statusHistory) ? order.statusHistory : []
   ) as unknown as StatusEntry[];
+
+  const settings = await getSettings();
+  const waMessage = [
+    `Hi ${settings.brandName}, I just placed an order! 🧡`,
+    ``,
+    `Order: ${order.orderNumber}`,
+    ...items.map((i) => `• ${i.name} × ${i.quantity}`),
+    `Total: ${formatINR(order.total)} (${order.paymentMethod})`,
+    `Name: ${order.customerName}`,
+    `Phone: ${order.phone}`,
+  ].join("\n");
+  const waHref = settings.whatsapp
+    ? whatsappLink(settings.whatsapp, waMessage)
+    : null;
 
   return (
     <div className="container-px mx-auto max-w-2xl py-16">
@@ -110,6 +125,18 @@ export default async function OrderPage({
           .
         </p>
       </div>
+
+      {waHref && (
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-5 py-3.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        >
+          <MessageCircle className="h-5 w-5" />
+          Send order details to us on WhatsApp
+        </a>
+      )}
 
       <div className="mt-8 flex flex-wrap justify-center gap-3">
         <ButtonLink href="/account" variant="outline">

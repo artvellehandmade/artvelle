@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getAdminSession, hashPassword } from "@/lib/auth";
 import { getSettings } from "@/lib/settings";
 import { sendOrderStatusEmail } from "@/lib/email";
+import { isLeadStatus } from "@/lib/leads";
 import { slugify } from "@/lib/utils";
 
 async function requireAdmin() {
@@ -273,12 +274,25 @@ export async function deleteMessage(id: string) {
   return { ok: true as const };
 }
 
-// -------- Leads --------
+// -------- Leads (interested customers) --------
 export async function updateLeadStatus(id: string, status: string) {
   await requireAdmin();
+  if (!isLeadStatus(status)) {
+    return { ok: false as const, error: "Invalid status" };
+  }
   await prisma.lead.update({ where: { id }, data: { status } });
   revalidatePath("/admin/leads");
   revalidatePath("/admin");
+  return { ok: true as const };
+}
+
+export async function updateLeadNotes(id: string, notes: string) {
+  await requireAdmin();
+  await prisma.lead.update({
+    where: { id },
+    data: { notes: notes.trim() || null },
+  });
+  revalidatePath("/admin/leads");
   return { ok: true as const };
 }
 

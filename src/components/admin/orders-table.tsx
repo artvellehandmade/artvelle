@@ -3,13 +3,33 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Loader2, Truck } from "lucide-react";
-import { formatINR } from "@/lib/utils";
+import { ChevronDown, Loader2, Truck, MessageCircle } from "lucide-react";
+import { formatINR, whatsappLink } from "@/lib/utils";
 import {
   updateOrderStatus,
   updatePaymentStatus,
   updateOrderTracking,
 } from "@/app/actions/admin";
+
+function orderWhatsAppMessage(o: AdminOrder): string {
+  const lines = [
+    `Hi ${o.customerName.split(" ")[0]}, thank you for your order with Artvelle! 🧡`,
+    ``,
+    `Order: ${o.orderNumber}`,
+    ...o.items.map((i) => `• ${i.name} × ${i.quantity}`),
+    `Total: ${formatINR(o.total)} (${o.paymentMethod})`,
+  ];
+  if (o.trackingNumber) {
+    lines.push(
+      ``,
+      `Courier: ${o.courier ?? "—"}`,
+      `Tracking: ${o.trackingNumber}`
+    );
+    if (o.trackingUrl) lines.push(o.trackingUrl);
+  }
+  lines.push(``, `We'll keep you posted on delivery. Thank you! 🙏`);
+  return lines.join("\n");
+}
 
 export type AdminOrder = {
   id: string;
@@ -186,6 +206,17 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         {o.paymentMethod} ·{" "}
                         {o.paymentStatus === "paid" ? "Paid" : "Mark paid"}
                       </button>
+
+                      <a
+                        href={whatsappLink(o.phone, orderWhatsAppMessage(o))}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-[#25D366]/15 px-3 py-1.5 text-xs font-medium text-[#128C7E] hover:bg-[#25D366]/25"
+                        title="Send order confirmation to the customer on WhatsApp"
+                      >
+                        <MessageCircle className="h-3.5 w-3.5" />
+                        WhatsApp customer
+                      </a>
                     </div>
 
                     <TrackingEditor order={o} />
