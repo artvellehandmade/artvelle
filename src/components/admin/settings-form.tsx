@@ -1,0 +1,296 @@
+"use client";
+
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import Image from "next/image";
+import { toast } from "sonner";
+import { Loader2, Upload, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { updateSettings } from "@/app/actions/admin";
+import type { SettingsDTO } from "@/lib/types";
+
+export function SettingsForm({ initial }: { initial: SettingsDTO }) {
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [f, setF] = useState({
+    ...initial,
+    shippingFee: String(initial.shippingFee ?? 0),
+    freeShippingThreshold:
+      initial.freeShippingThreshold != null
+        ? String(initial.freeShippingThreshold)
+        : "",
+    logoUrl: initial.logoUrl ?? "",
+    whatsapp: initial.whatsapp ?? "",
+    address: initial.address ?? "",
+    instagram: initial.instagram ?? "",
+    facebook: initial.facebook ?? "",
+    announcement: initial.announcement ?? "",
+  });
+
+  function set<K extends keyof typeof f>(key: K, value: (typeof f)[K]) {
+    setF((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function onLogo(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (res.ok && data.url) set("logoUrl", data.url);
+      else toast.error(data.error || "Upload failed");
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const res = await updateSettings({
+      brandName: f.brandName,
+      tagline: f.tagline,
+      logoUrl: f.logoUrl || null,
+      heroHeadline: f.heroHeadline,
+      heroSubtext: f.heroSubtext,
+      aboutText: f.aboutText,
+      contactEmail: f.contactEmail,
+      contactPhone: f.contactPhone,
+      whatsapp: f.whatsapp || null,
+      address: f.address || null,
+      instagram: f.instagram || null,
+      facebook: f.facebook || null,
+      adminNotifyEmail: f.adminNotifyEmail,
+      currency: f.currency,
+      shippingFee: Number(f.shippingFee || 0),
+      freeShippingThreshold: f.freeShippingThreshold
+        ? Number(f.freeShippingThreshold)
+        : null,
+      codEnabled: f.codEnabled,
+      announcement: f.announcement || null,
+    });
+    setSaving(false);
+    if (res.ok) {
+      toast.success("Settings saved");
+      router.refresh();
+    } else {
+      toast.error(res.error || "Could not save");
+    }
+  }
+
+  return (
+    <form onSubmit={onSubmit} className="max-w-3xl space-y-6">
+      <Card title="Brand identity">
+        <Text label="Brand name" value={f.brandName} onChange={(v) => set("brandName", v)} />
+        <Text label="Tagline" value={f.tagline} onChange={(v) => set("tagline", v)} />
+
+        <div>
+          <span className="label">Logo</span>
+          <div className="flex items-center gap-4">
+            {f.logoUrl ? (
+              <div className="relative h-14 w-40 overflow-hidden rounded-lg border border-border bg-muted">
+                <Image
+                  src={f.logoUrl}
+                  alt="Logo"
+                  fill
+                  sizes="160px"
+                  className="object-contain p-1"
+                />
+                <button
+                  type="button"
+                  onClick={() => set("logoUrl", "")}
+                  className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/60 text-white"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                No logo — your brand name is shown as text.
+              </span>
+            )}
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2 text-sm hover:bg-muted">
+              {uploading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="h-4 w-4" />
+              )}
+              Upload logo
+              <input
+                type="file"
+                accept="image/*"
+                onChange={onLogo}
+                className="hidden"
+                disabled={uploading}
+              />
+            </label>
+          </div>
+        </div>
+
+        <Text
+          label="Announcement bar (leave empty to hide)"
+          value={f.announcement}
+          onChange={(v) => set("announcement", v)}
+        />
+      </Card>
+
+      <Card title="Homepage content">
+        <Text
+          label="Hero headline"
+          value={f.heroHeadline}
+          onChange={(v) => set("heroHeadline", v)}
+        />
+        <Area
+          label="Hero subtext"
+          value={f.heroSubtext}
+          onChange={(v) => set("heroSubtext", v)}
+        />
+        <Area
+          label="About text"
+          value={f.aboutText}
+          onChange={(v) => set("aboutText", v)}
+        />
+      </Card>
+
+      <Card title="Contact information">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Text
+            label="Contact email"
+            type="email"
+            value={f.contactEmail}
+            onChange={(v) => set("contactEmail", v)}
+          />
+          <Text
+            label="Contact phone"
+            value={f.contactPhone}
+            onChange={(v) => set("contactPhone", v)}
+          />
+          <Text
+            label="WhatsApp number (with country code)"
+            value={f.whatsapp}
+            onChange={(v) => set("whatsapp", v)}
+          />
+          <Text
+            label="Studio address"
+            value={f.address}
+            onChange={(v) => set("address", v)}
+          />
+          <Text
+            label="Instagram URL"
+            value={f.instagram}
+            onChange={(v) => set("instagram", v)}
+          />
+          <Text
+            label="Facebook URL"
+            value={f.facebook}
+            onChange={(v) => set("facebook", v)}
+          />
+        </div>
+      </Card>
+
+      <Card title="Orders & notifications">
+        <Text
+          label="Send order & lead emails to"
+          type="email"
+          value={f.adminNotifyEmail}
+          onChange={(v) => set("adminNotifyEmail", v)}
+        />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Text
+            label="Shipping fee (₹)"
+            type="number"
+            value={f.shippingFee}
+            onChange={(v) => set("shippingFee", v)}
+          />
+          <Text
+            label="Free shipping above (₹, optional)"
+            type="number"
+            value={f.freeShippingThreshold}
+            onChange={(v) => set("freeShippingThreshold", v)}
+          />
+        </div>
+        <label className="flex items-center gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={f.codEnabled}
+            onChange={(e) => set("codEnabled", e.target.checked)}
+            className="h-4 w-4 accent-[var(--accent)]"
+          />
+          Cash on delivery enabled
+        </label>
+      </Card>
+
+      <div className="sticky bottom-4 flex justify-end">
+        <Button type="submit" disabled={saving} size="lg" className="shadow-lg">
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Saving…
+            </>
+          ) : (
+            "Save settings"
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function Card({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <h2 className="mb-4 font-serif text-lg">{title}</h2>
+      <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function Text({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="label">{label}</span>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input"
+      />
+    </label>
+  );
+}
+
+function Area({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="label">{label}</span>
+      <textarea
+        rows={3}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input resize-none"
+      />
+    </label>
+  );
+}

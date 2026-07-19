@@ -1,0 +1,123 @@
+// Artvelle — Prisma schema
+// Database: PostgreSQL (Vercel Postgres / Neon)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// -------- Products --------
+model Product {
+  id             String   @id @default(cuid())
+  name           String
+  slug           String   @unique
+  description    String
+  category       String
+  tags           String[] @default([])
+  price          Int // whole rupees
+  compareAtPrice Int? // optional "was" price for showing a discount
+  images         String[] @default([])
+  stock          Int      @default(0)
+  isFeatured     Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+}
+
+// -------- Orders --------
+model Order {
+  id            String   @id @default(cuid())
+  orderNumber   String   @unique
+  customerName  String
+  email         String
+  phone         String
+  address       String
+  city          String
+  state         String
+  pincode       String
+  items         Json // [{ productId, name, image, price, quantity }]
+  subtotal      Int
+  shipping      Int      @default(0)
+  total         Int
+  paymentMethod String   @default("COD")
+  paymentStatus String   @default("pending") // pending | paid
+  status        String   @default("pending") // pending | confirmed | shipped | delivered | cancelled
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+}
+
+// -------- Leads (interested customers / add-to-cart) --------
+model Lead {
+  id           String   @id @default(cuid())
+  productId    String?
+  productName  String
+  productImage String?
+  quantity     Int      @default(1)
+  price        Int?
+  visitorId    String?
+  email        String?
+  name         String?
+  phone        String?
+  status       String   @default("interested") // interested | contacted | converted
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
+// -------- Contact messages / inquiries --------
+model Message {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  phone     String?
+  subject   String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([isRead])
+}
+
+// -------- Site settings (branding + contact), single row --------
+model SiteSettings {
+  id                    String   @id @default("main")
+  brandName             String   @default("Artvelle")
+  tagline               String   @default("Handcrafted resin art, made to be seen.")
+  logoUrl               String?
+  heroHeadline          String   @default("Art that captures light.")
+  heroSubtext           String   @default("Original, handmade resin pieces — coasters, wall art, keepsakes and custom commissions.")
+  aboutText             String   @default("Artvelle is a small studio creating one-of-a-kind resin art. Every piece is poured, cured and finished by hand.")
+  contactEmail          String   @default("hello@artvelle.example")
+  contactPhone          String   @default("+91 90000 00000")
+  whatsapp              String?  @default("+919000000000")
+  address               String?  @default("Studio Artvelle, India")
+  instagram             String?  @default("https://instagram.com")
+  facebook              String?  @default("")
+  adminNotifyEmail      String   @default("admin@artvelle.example")
+  currency              String   @default("INR")
+  shippingFee           Int      @default(0)
+  freeShippingThreshold Int? // free shipping above this order value
+  codEnabled            Boolean  @default(true)
+  announcement          String?  @default("Free shipping on all prepaid orders • Handmade in India")
+  updatedAt             DateTime @updatedAt
+}
+
+// -------- Admin users --------
+model AdminUser {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime @default(now())
+}
