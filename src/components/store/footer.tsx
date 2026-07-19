@@ -81,6 +81,11 @@ export function Footer() {
                   Contact
                 </Link>
               </li>
+              <li>
+                <Link href="/account" className="hover:text-accent">
+                  My account &amp; orders
+                </Link>
+              </li>
             </ul>
           </div>
 

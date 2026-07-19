@@ -3,9 +3,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Loader2, Truck } from "lucide-react";
 import { formatINR } from "@/lib/utils";
-import { updateOrderStatus, updatePaymentStatus } from "@/app/actions/admin";
+import {
+  updateOrderStatus,
+  updatePaymentStatus,
+  updateOrderTracking,
+} from "@/app/actions/admin";
 
 export type AdminOrder = {
   id: string;
@@ -24,6 +28,9 @@ export type AdminOrder = {
   paymentMethod: string;
   paymentStatus: string;
   status: string;
+  courier: string | null;
+  trackingNumber: string | null;
+  trackingUrl: string | null;
   note: string | null;
   createdAt: string;
 };
@@ -47,7 +54,7 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
     start(async () => {
       const res = await updateOrderStatus(id, status);
       if (res.ok) {
-        toast.success("Order status updated");
+        toast.success(`Status updated to “${status}” — customer notified`);
         router.refresh();
       } else toast.error(res.error || "Failed");
     });
@@ -180,6 +187,8 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         {o.paymentStatus === "paid" ? "Paid" : "Mark paid"}
                       </button>
                     </div>
+
+                    <TrackingEditor order={o} />
                   </div>
                 </div>
               </div>
@@ -187,6 +196,91 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function TrackingEditor({ order }: { order: AdminOrder }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [courier, setCourier] = useState(order.courier ?? "");
+  const [trackingNumber, setTrackingNumber] = useState(
+    order.trackingNumber ?? ""
+  );
+  const [trackingUrl, setTrackingUrl] = useState(order.trackingUrl ?? "");
+
+  function save() {
+    start(async () => {
+      const res = await updateOrderTracking(order.id, {
+        courier,
+        trackingNumber,
+        trackingUrl,
+      });
+      if (res.ok) {
+        toast.success("Tracking details saved");
+        router.refresh();
+      } else toast.error(res.error || "Failed to save");
+    });
+  }
+
+  return (
+    <div className="mt-5 rounded-xl border border-border p-4">
+      <div className="flex items-center gap-2 text-sm font-medium">
+        <Truck className="h-4 w-4 text-muted-foreground" />
+        Shipment tracking
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Add courier &amp; tracking so the customer can follow their order. Saved
+        details show in their account.
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <label className="block">
+          <span className="mb-1 block text-xs text-muted-foreground">
+            Courier
+          </span>
+          <input
+            value={courier}
+            onChange={(e) => setCourier(e.target.value)}
+            className="input h-9"
+            placeholder="e.g. Delhivery"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs text-muted-foreground">
+            Tracking number
+          </span>
+          <input
+            value={trackingNumber}
+            onChange={(e) => setTrackingNumber(e.target.value)}
+            className="input h-9"
+            placeholder="e.g. 1234567890"
+          />
+        </label>
+        <label className="block">
+          <span className="mb-1 block text-xs text-muted-foreground">
+            Tracking URL (optional)
+          </span>
+          <input
+            value={trackingUrl}
+            onChange={(e) => setTrackingUrl(e.target.value)}
+            className="input h-9"
+            placeholder="https://…"
+          />
+        </label>
+      </div>
+      <button
+        onClick={save}
+        disabled={pending}
+        className="mt-3 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background disabled:opacity-50"
+      >
+        {pending ? (
+          <>
+            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
+          </>
+        ) : (
+          "Save tracking"
+        )}
+      </button>
     </div>
   );
 }

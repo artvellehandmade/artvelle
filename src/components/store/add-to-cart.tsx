@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import { ShoppingBag, Minus, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { Button } from "@/components/ui/button";
@@ -16,13 +15,16 @@ export function AddToCartButton({
   className?: string;
   withQuantity?: boolean;
 }) {
-  const { addItem } = useCart();
+  const { addItem, leadInfo } = useCart();
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const soldOut = product.stock <= 0;
 
   function add() {
     if (soldOut) return;
+    // If we already have the shopper's contact, this adds immediately; otherwise
+    // the mini sign-up modal opens first (toast/animation handled after it saves).
+    const hadInfo = leadInfo !== null;
     addItem(
       {
         productId: product.id,
@@ -34,9 +36,10 @@ export function AddToCartButton({
       },
       qty
     );
-    toast.success(`Added to cart`, { description: product.name });
-    setAdded(true);
-    setTimeout(() => setAdded(false), 1600);
+    if (hadInfo) {
+      setAdded(true);
+      setTimeout(() => setAdded(false), 1600);
+    }
   }
 
   if (soldOut) {

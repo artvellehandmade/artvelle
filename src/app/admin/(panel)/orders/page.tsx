@@ -27,6 +27,9 @@ export default async function AdminOrders() {
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
     status: o.status,
+    courier: o.courier,
+    trackingNumber: o.trackingNumber,
+    trackingUrl: o.trackingUrl,
     note: o.note,
     createdAt: o.createdAt.toISOString(),
   }));

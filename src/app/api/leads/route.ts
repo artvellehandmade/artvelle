@@ -32,6 +32,8 @@ export async function POST(req: Request) {
         productName: data.productName,
         quantity: data.quantity,
         price: data.price ?? null,
+        name: data.name ?? null,
+        phone: data.phone ?? null,
       });
     } catch (err) {
       console.error("[leads] email failed:", err);

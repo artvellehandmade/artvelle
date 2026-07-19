@@ -7,10 +7,17 @@ import {
   useState,
   useCallback,
 } from "react";
+import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
+import { MiniSignupModal } from "@/components/store/mini-signup-modal";
 
 const STORAGE_KEY = "artvelle_cart";
 const VISITOR_KEY = "artvelle_vid";
+const LEAD_COOKIE = "artvelle_lead";
+const LEAD_MAX_AGE = 60 * 60 * 24 * 180; // 180 days
+
+export type LeadInfo = { name: string; phone: string };
+type PendingAdd = { item: Omit<CartItem, "quantity">; qty: number };
 
 type CartContextType = {
   items: CartItem[];
@@ -22,6 +29,11 @@ type CartContextType = {
   removeItem: (productId: string) => void;
   updateQty: (productId: string, qty: number) => void;
   clear: () => void;
+  // Mini lead capture (name + phone) gate for add-to-cart
+  leadInfo: LeadInfo | null;
+  pendingAdd: PendingAdd | null;
+  submitLead: (info: LeadInfo) => void;
+  cancelLead: () => void;
 };
 
 const CartContext = createContext<CartContextType | null>(null);
@@ -36,12 +48,47 @@ function getVisitorId(): string {
   return id;
 }
 
+function readLeadCookie(): LeadInfo | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${LEAD_COOKIE}=([^;]+)`)
+  );
+  if (!match) return null;
+  const raw = match[1];
+  // The cookie may be percent-encoded (client/server) or raw — try both.
+  const candidates = [raw];
+  try {
+    candidates.push(decodeURIComponent(raw));
+  } catch {
+    /* ignore */
+  }
+  for (const candidate of candidates) {
+    try {
+      const obj = JSON.parse(candidate);
+      if (obj && typeof obj.name === "string" && obj.name) {
+        return { name: obj.name, phone: typeof obj.phone === "string" ? obj.phone : "" };
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return null;
+}
+
+function writeLeadCookie(info: LeadInfo) {
+  if (typeof document === "undefined") return;
+  const value = encodeURIComponent(JSON.stringify(info));
+  document.cookie = `${LEAD_COOKIE}=${value}; path=/; max-age=${LEAD_MAX_AGE}; samesite=lax`;
+}
+
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null);
+  const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
-  // Load from localStorage on mount
+  // Load cart + saved lead contact on mount
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
@@ -49,38 +96,46 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore */
     }
+    setLeadInfo(readLeadCookie());
     setHydrated(true);
   }, []);
 
-  // Persist
+  // Persist cart
   useEffect(() => {
     if (!hydrated) return;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
   }, [items, hydrated]);
 
-  const recordLead = useCallback((item: Omit<CartItem, "quantity">, qty: number) => {
-    // Fire-and-forget: log an "interested customer" lead + notify admin.
-    try {
-      fetch("/api/leads", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          productId: item.productId,
-          productName: item.name,
-          productImage: item.image,
-          quantity: qty,
-          price: item.price,
-          visitorId: getVisitorId(),
-        }),
-        keepalive: true,
-      }).catch(() => {});
-    } catch {
-      /* ignore */
-    }
-  }, []);
+  const recordLead = useCallback(
+    (item: Omit<CartItem, "quantity">, qty: number, contact: LeadInfo | null) => {
+      // Fire-and-forget: log an "interested customer" lead + notify admin.
+      try {
+        fetch("/api/leads", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            productId: item.productId,
+            productName: item.name,
+            productImage: item.image,
+            quantity: qty,
+            price: item.price,
+            visitorId: getVisitorId(),
+            name: contact?.name,
+            phone: contact?.phone,
+          }),
+          keepalive: true,
+        }).catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    },
+    []
+  );
 
-  const addItem = useCallback(
-    (item: Omit<CartItem, "quantity">, qty = 1) => {
+  // Actually add to cart + record the lead (contact already known).
+  const commitAdd = useCallback(
+    (item: Omit<CartItem, "quantity">, qty: number, contact: LeadInfo | null) => {
+      let isNew = false;
       setItems((prev) => {
         const existing = prev.find((i) => i.productId === item.productId);
         if (existing) {
@@ -90,14 +145,43 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               : i
           );
         }
-        // Only record a lead the first time a product is added.
-        recordLead(item, qty);
+        isNew = true;
         return [...prev, { ...item, quantity: qty }];
       });
+      // Only record a lead the first time a product is added.
+      if (isNew) recordLead(item, qty, contact);
+      toast.success("Added to cart", { description: item.name });
       setOpen(true);
     },
     [recordLead]
   );
+
+  const addItem = useCallback(
+    (item: Omit<CartItem, "quantity">, qty = 1) => {
+      // Gate: first add ever needs a quick name + phone (mini sign-up).
+      if (!leadInfo) {
+        setPendingAdd({ item, qty });
+        return;
+      }
+      commitAdd(item, qty, leadInfo);
+    },
+    [leadInfo, commitAdd]
+  );
+
+  // Called from the mini sign-up modal once name + phone are entered.
+  const submitLead = useCallback(
+    (info: LeadInfo) => {
+      writeLeadCookie(info);
+      setLeadInfo(info);
+      if (pendingAdd) {
+        commitAdd(pendingAdd.item, pendingAdd.qty, info);
+        setPendingAdd(null);
+      }
+    },
+    [pendingAdd, commitAdd]
+  );
+
+  const cancelLead = useCallback(() => setPendingAdd(null), []);
 
   const removeItem = useCallback((productId: string) => {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
@@ -132,9 +216,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeItem,
         updateQty,
         clear,
+        leadInfo,
+        pendingAdd,
+        submitLead,
+        cancelLead,
       }}
     >
       {children}
+      <MiniSignupModal />
     </CartContext.Provider>
   );
 }

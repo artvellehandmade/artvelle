@@ -46,19 +46,27 @@ function shell(brand: string, title: string, body: string) {
 /** Fired when someone adds a product to their cart (a warm lead). */
 export async function sendLeadEmail(
   settings: SettingsDTO,
-  lead: { productName: string; quantity: number; price?: number | null }
+  lead: {
+    productName: string;
+    quantity: number;
+    price?: number | null;
+    name?: string | null;
+    phone?: string | null;
+  }
 ) {
   const body = `
-    <p style="font-size:15px;margin:0 0 12px">A visitor just added a product to their cart — a potential lead 👀</p>
+    <p style="font-size:15px;margin:0 0 12px">${lead.name ? `<b>${lead.name}</b> just added a product to their cart — a warm lead 👀` : "A visitor just added a product to their cart — a potential lead 👀"}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px">
+      ${lead.name ? `<tr><td style="padding:8px 0;color:#777">Name</td><td style="padding:8px 0;text-align:right;font-weight:600">${lead.name}</td></tr>` : ""}
+      ${lead.phone ? `<tr><td style="padding:8px 0;color:#777">Mobile</td><td style="padding:8px 0;text-align:right;font-weight:600">${lead.phone}</td></tr>` : ""}
       <tr><td style="padding:8px 0;color:#777">Product</td><td style="padding:8px 0;text-align:right;font-weight:600">${lead.productName}</td></tr>
       <tr><td style="padding:8px 0;color:#777">Quantity</td><td style="padding:8px 0;text-align:right">${lead.quantity}</td></tr>
       ${lead.price != null ? `<tr><td style="padding:8px 0;color:#777">Price</td><td style="padding:8px 0;text-align:right">${formatINR(lead.price)}</td></tr>` : ""}
     </table>
-    <p style="font-size:13px;color:#999;margin-top:16px">See all interested customers in your admin panel → Leads.</p>`;
+    <p style="font-size:13px;color:#999;margin-top:16px">See all interested customers in your admin panel → Interested customers.</p>`;
   return send({
     to: settings.adminNotifyEmail,
-    subject: `🛒 New lead: ${lead.productName} added to cart`,
+    subject: `🛒 New lead${lead.name ? ` from ${lead.name}` : ""}: ${lead.productName} added to cart`,
     html: shell(settings.brandName, "New cart lead", body),
   });
 }
@@ -137,6 +145,67 @@ export async function sendOrderEmails(settings: SettingsDTO, order: OrderLike) {
       html: shell(settings.brandName, "Order confirmation", customerBody),
     }),
   ]);
+}
+
+/** Fired when a customer requests a password reset. */
+export async function sendPasswordResetEmail(
+  settings: SettingsDTO,
+  to: string,
+  resetUrl: string
+) {
+  const body = `
+    <p style="font-size:15px;margin:0 0 12px">We received a request to reset your ${settings.brandName} account password.</p>
+    <p style="font-size:14px;color:#555;margin:0 0 20px">Click the button below to choose a new password. This link expires in 1 hour. If you didn't request this, you can safely ignore this email.</p>
+    <p style="margin:0 0 20px"><a href="${resetUrl}" style="display:inline-block;background:#141210;color:#fff;text-decoration:none;padding:12px 22px;border-radius:999px;font-size:14px;font-weight:600">Reset my password</a></p>
+    <p style="font-size:12px;color:#999;margin:0">Or paste this link into your browser:<br>${resetUrl}</p>`;
+  return send({
+    to,
+    subject: `Reset your ${settings.brandName} password`,
+    html: shell(settings.brandName, "Password reset", body),
+  });
+}
+
+const STATUS_COPY: Record<string, string> = {
+  pending: "We've received your order and it's being prepared.",
+  confirmed: "Your order is confirmed and being packed with care.",
+  shipped: "Good news — your order is on its way!",
+  delivered: "Your order has been delivered. We hope you love it! 🧡",
+  cancelled: "Your order has been cancelled. Contact us if this is unexpected.",
+};
+
+/** Fired when the admin updates an order's status. Keeps the customer in the loop. */
+export async function sendOrderStatusEmail(
+  settings: SettingsDTO,
+  order: {
+    orderNumber: string;
+    customerName: string;
+    email: string;
+    status: string;
+    courier?: string | null;
+    trackingNumber?: string | null;
+    trackingUrl?: string | null;
+  }
+) {
+  const copy = STATUS_COPY[order.status] ?? "Your order status has been updated.";
+  const tracking =
+    order.status === "shipped" && (order.trackingNumber || order.courier)
+      ? `<div style="margin-top:16px;padding:14px;background:#f7f5f1;border-radius:10px;font-size:14px">
+           ${order.courier ? `<p style="margin:2px 0"><b>Courier:</b> ${order.courier}</p>` : ""}
+           ${order.trackingNumber ? `<p style="margin:2px 0"><b>Tracking no:</b> ${order.trackingNumber}</p>` : ""}
+           ${order.trackingUrl ? `<p style="margin:8px 0 0"><a href="${order.trackingUrl}" style="color:#141210">Track your shipment →</a></p>` : ""}
+         </div>`
+      : "";
+  const body = `
+    <p style="font-size:15px;margin:0 0 4px">Hi ${order.customerName.split(" ")[0]},</p>
+    <p style="font-size:14px;color:#555;margin:0 0 8px">${copy}</p>
+    <p style="font-size:14px;margin:12px 0 0">Order <b>${order.orderNumber}</b> — status: <b style="text-transform:capitalize">${order.status}</b></p>
+    ${tracking}
+    <p style="font-size:13px;color:#999;margin-top:20px">Track your order any time from your account on our website.</p>`;
+  return send({
+    to: order.email,
+    subject: `Update on your ${settings.brandName} order ${order.orderNumber}`,
+    html: shell(settings.brandName, "Order update", body),
+  });
 }
 
 /** Fired when the contact form is submitted. */

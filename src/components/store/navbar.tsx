@@ -5,7 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { ShoppingBag, Menu, X } from "lucide-react";
+import { ShoppingBag, Menu, X, User } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -18,7 +18,7 @@ const links = [
   { href: "/contact", label: "Contact" },
 ];
 
-export function Navbar() {
+export function Navbar({ account }: { account?: { name: string } | null }) {
   const settings = useSettings();
   const { count, setOpen } = useCart();
   const pathname = usePathname();
@@ -99,6 +99,17 @@ export function Navbar() {
         {/* Right: actions */}
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <Link
+            href="/account"
+            className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
+            aria-label={account ? "My account" : "Log in"}
+            title={account ? `Hi, ${account.name.split(" ")[0]}` : "Log in"}
+          >
+            <User className="h-[18px] w-[18px]" />
+            {account && (
+              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-background" />
+            )}
+          </Link>
           <button
             onClick={() => setOpen(true)}
             className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
@@ -153,6 +164,15 @@ export function Navbar() {
                     </Link>
                   </li>
                 ))}
+                <li className="mt-2 border-t border-border pt-2">
+                  <Link
+                    href="/account"
+                    className="flex items-center gap-3 rounded-xl px-3 py-3 text-lg hover:bg-muted"
+                  >
+                    <User className="h-5 w-5" />
+                    {account ? "My account" : "Log in / Sign up"}
+                  </Link>
+                </li>
               </ul>
             </motion.div>
           </>

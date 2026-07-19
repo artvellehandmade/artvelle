@@ -156,6 +156,21 @@ async function main() {
   });
   console.log(`✓ Admin ready → ${email} / ${password}`);
 
+  // Demo customer account (for trying the login + order tracking flow)
+  const demoEmail = "customer@artvelle.com";
+  const demoPassword = "customer123";
+  await prisma.user.upsert({
+    where: { email: demoEmail },
+    update: {},
+    create: {
+      email: demoEmail,
+      name: "Demo Customer",
+      phone: "+91 90000 11111",
+      passwordHash: await bcrypt.hash(demoPassword, 10),
+    },
+  });
+  console.log(`✓ Demo customer → ${demoEmail} / ${demoPassword}`);
+
   // Products
   for (const p of products) {
     const slug = slugify(p.name);

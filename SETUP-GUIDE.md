@@ -99,10 +99,12 @@ Wait ~30 seconds. You should see:
 ```
 ✓ Site settings ready
 ✓ Admin ready → admin@artvelle.com / artvelle123
+✓ Demo customer → customer@artvelle.com / customer123
 ✓ Seeded 10 products
 ```
 
-🎉 Your database now has 10 sample resin products and your admin account.
+🎉 Your database now has 10 sample resin products, your admin account, and a demo
+customer account you can use to test login + order tracking.
 
 > ❌ **Got an error?** Jump to Part 5 (Troubleshooting) at the bottom.
 
@@ -121,10 +123,25 @@ Wait until you see `Ready`. Then open your browser and go to:
 | Page | Address |
 |------|---------|
 | 🛍️ **Your store** | http://localhost:3000 |
+| 👤 **Customer account** | http://localhost:3000/account |
 | 🔐 **Admin panel** | http://localhost:3000/admin |
 
 **Admin login:** the email + password you put in the `.env` file
 (default: `admin@artvelle.com` / `artvelle123`)
+
+**Two-tier customer capture:**
+
+1. **Add to cart → mini sign-up.** The first time a visitor adds any product to
+   their cart, a small popup asks for just their **name + mobile number**. It's
+   saved in a cookie on their device, so they're never asked again. You see every
+   one of these as a lead in **Admin → Interested customers** (with their name &
+   phone) — even if they never complete an order.
+2. **Place an order → full login / sign-up.** At checkout they must log in or
+   create an account (fast 3-field signup), which collects the full details
+   (address, email, payment mode, etc.). They can then track every order — with a
+   live status timeline — under **My account**.
+
+Try the demo customer: `customer@artvelle.com` / `customer123`.
 
 > 💡 To **stop** the website, go back to PowerShell and press `Ctrl + C`.
 > To start again later: open PowerShell, `cd` into the folder (Step 1.1), then `npm run dev`.
@@ -285,10 +302,27 @@ Log in to your **live admin panel** (`https://your-site.vercel.app/admin`) and:
    - 🗑️ Delete the 10 sample products
    - ➕ Add your real resin art products with real photos
 3. **Test the full flow yourself:**
-   - Open your store → add a product to cart → place a test order (COD)
+   - Open your store → add a product to cart → a **mini popup asks for your name +
+     mobile** (this is the guest lead capture)
+   - Check that lead appears in **Admin → Interested customers** with the name & phone
+   - Go to checkout → it asks you to **log in or sign up** (create a quick account)
+   - Place a test order (COD)
    - Check it appears in **Admin → Orders**
    - Check the lead appears in **Admin → Interested customers**
+   - In **Admin → Orders**, open the order, change its **status** (e.g. to *Shipped*)
+     and add a **courier + tracking number** → the customer gets an email
+   - Log in as that customer → **My account** → watch the order's **tracking timeline** update
    - If email is set up: check your inbox 📬
+
+### 📦 How order tracking works
+
+- The **customer** can only see their own orders — they must be **logged in** (account-only tracking).
+- **You (admin)** drive the tracking: in **Admin → Orders**, expand any order to
+  change its status (Pending → Confirmed → Shipped → Delivered) and add courier +
+  tracking number/URL. Every change is timestamped on the customer's timeline and
+  emails them automatically.
+- Customers who forget their password use **"Forgot password?"** on the login page
+  (needs email set up — Part 2 — to actually send the reset link).
 
 ## How to update the website later (when I change the code)
 

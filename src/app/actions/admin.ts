@@ -4,6 +4,8 @@ import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAdminSession, hashPassword } from "@/lib/auth";
+import { getSettings } from "@/lib/settings";
+import { sendOrderStatusEmail } from "@/lib/email";
 import { slugify } from "@/lib/utils";
 
 async function requireAdmin() {
@@ -166,14 +168,85 @@ const ORDER_STATUSES = [
   "cancelled",
 ] as const;
 
-export async function updateOrderStatus(id: string, status: string) {
+type StatusEntry = { status: string; note?: string; at: string };
+
+export async function updateOrderStatus(
+  id: string,
+  status: string,
+  note?: string
+) {
   await requireAdmin();
   if (!ORDER_STATUSES.includes(status as (typeof ORDER_STATUSES)[number])) {
     return { ok: false as const, error: "Invalid status" };
   }
-  await prisma.order.update({ where: { id }, data: { status } });
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return { ok: false as const, error: "Order not found" };
+
+  const history = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as unknown as StatusEntry[])
+    : [];
+  const entry: StatusEntry = { status, at: new Date().toISOString() };
+  const trimmed = note?.trim();
+  if (trimmed) entry.note = trimmed;
+  history.push(entry);
+
+  await prisma.order.update({
+    where: { id },
+    data: { status, statusHistory: history as unknown as object[] },
+  });
+
+  // Notify the customer of the new status.
+  try {
+    const settings = await getSettings();
+    await sendOrderStatusEmail(settings, {
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      email: order.email,
+      status,
+      courier: order.courier,
+      trackingNumber: order.trackingNumber,
+      trackingUrl: order.trackingUrl,
+    });
+  } catch (err) {
+    console.error("[admin] status email failed:", err);
+  }
+
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
+  return { ok: true as const };
+}
+
+const trackingSchema = z.object({
+  courier: z.string().trim().optional(),
+  trackingNumber: z.string().trim().optional(),
+  trackingUrl: z
+    .string()
+    .trim()
+    .url("Enter a valid URL")
+    .optional()
+    .or(z.literal("")),
+});
+
+export async function updateOrderTracking(
+  id: string,
+  input: { courier?: string; trackingNumber?: string; trackingUrl?: string }
+) {
+  await requireAdmin();
+  const parsed = trackingSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const data = parsed.data;
+  await prisma.order.update({
+    where: { id },
+    data: {
+      courier: data.courier || null,
+      trackingNumber: data.trackingNumber || null,
+      trackingUrl: data.trackingUrl || null,
+    },
+  });
+  revalidatePath("/admin/orders");
   return { ok: true as const };
 }
 

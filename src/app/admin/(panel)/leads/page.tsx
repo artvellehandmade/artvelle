@@ -74,15 +74,35 @@ export default async function AdminLeads() {
                       </div>
                     </td>
                     <td className="px-4 py-3">{l.quantity}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {l.email || l.phone ? (
-                        <span>
-                          {l.email}
-                          {l.email && l.phone ? " · " : ""}
-                          {l.phone}
-                        </span>
+                    <td className="px-4 py-3">
+                      {l.name || l.email || l.phone ? (
+                        <div className="text-muted-foreground">
+                          {l.name && (
+                            <p className="font-medium text-foreground">
+                              {l.name}
+                            </p>
+                          )}
+                          {l.phone && (
+                            <a
+                              href={`tel:${l.phone}`}
+                              className="hover:text-accent"
+                            >
+                              {l.phone}
+                            </a>
+                          )}
+                          {l.email && (
+                            <p>
+                              <a
+                                href={`mailto:${l.email}`}
+                                className="hover:text-accent"
+                              >
+                                {l.email}
+                              </a>
+                            </p>
+                          )}
+                        </div>
                       ) : (
-                        <span className="text-xs">
+                        <span className="text-xs text-muted-foreground">
                           Guest ({l.visitorId?.slice(0, 6) || "—"})
                         </span>
                       )}

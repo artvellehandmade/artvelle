@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { sendOrderEmails } from "@/lib/email";
+import { getUserSession } from "@/lib/user-auth";
 import { orderNumber } from "@/lib/utils";
 
 const inputSchema = z.object({
@@ -31,6 +32,16 @@ const inputSchema = z.object({
 export type PlaceOrderInput = z.input<typeof inputSchema>;
 
 export async function placeOrder(input: PlaceOrderInput) {
+  // Login is required to confirm an order (browsing/cart stays open to guests).
+  const user = await getUserSession();
+  if (!user) {
+    return {
+      ok: false as const,
+      error: "Please log in to confirm your order.",
+      requiresLogin: true as const,
+    };
+  }
+
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0].message };
@@ -74,6 +85,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     const created = await tx.order.create({
       data: {
         orderNumber: number,
+        userId: user.id,
         customerName: data.customerName,
         email: data.email,
         phone: data.phone,
@@ -87,6 +99,9 @@ export async function placeOrder(input: PlaceOrderInput) {
         subtotal,
         shipping,
         total,
+        statusHistory: [
+          { status: "pending", note: "Order placed", at: new Date().toISOString() },
+        ],
       },
     });
 

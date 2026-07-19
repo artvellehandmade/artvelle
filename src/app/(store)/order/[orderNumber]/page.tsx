@@ -1,8 +1,11 @@
-import Link from "next/link";
 import { CheckCircle2, Package } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { formatINR } from "@/lib/utils";
 import { ButtonLink } from "@/components/ui/button";
+import {
+  OrderTimeline,
+  type StatusEntry,
+} from "@/components/store/order-timeline";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order confirmed" };
@@ -36,6 +39,9 @@ export default async function OrderPage({
   }
 
   const items = order.items as unknown as Item[];
+  const history = (
+    Array.isArray(order.statusHistory) ? order.statusHistory : []
+  ) as unknown as StatusEntry[];
 
   return (
     <div className="container-px mx-auto max-w-2xl py-16">
@@ -91,7 +97,24 @@ export default async function OrderPage({
         </div>
       </div>
 
-      <div className="mt-8 text-center">
+      <div className="mt-6 rounded-2xl border border-border bg-card p-6">
+        <h2 className="font-serif text-xl">Order status</h2>
+        <div className="mt-5">
+          <OrderTimeline status={order.status} history={history} />
+        </div>
+        <p className="mt-4 text-sm text-muted-foreground">
+          Track this order any time from{" "}
+          <a href="/account" className="text-accent hover:underline">
+            your account
+          </a>
+          .
+        </p>
+      </div>
+
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <ButtonLink href="/account" variant="outline">
+          View in my account
+        </ButtonLink>
         <ButtonLink href="/shop">Continue shopping</ButtonLink>
       </div>
     </div>

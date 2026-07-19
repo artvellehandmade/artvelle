@@ -36,6 +36,8 @@ model Product {
 model Order {
   id            String   @id @default(cuid())
   orderNumber   String   @unique
+  userId        String? // linked customer account (null for legacy/guest)
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   customerName  String
   email         String
   phone         String
@@ -50,11 +52,31 @@ model Order {
   paymentMethod String   @default("COD")
   paymentStatus String   @default("pending") // pending | paid
   status        String   @default("pending") // pending | confirmed | shipped | delivered | cancelled
+  // -------- Fulfilment / tracking (managed by admin) --------
+  courier        String? // e.g. Delhivery, BlueDart, India Post
+  trackingNumber String?
+  trackingUrl    String? // optional courier tracking link
+  statusHistory  Json     @default("[]") // [{ status, note, at }] appended on each admin update
   note          String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   @@index([status])
+  @@index([userId])
+}
+
+// -------- Customer accounts --------
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  phone            String?
+  resetToken       String?   @unique
+  resetTokenExpiry DateTime?
+  orders           Order[]
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 }
 
 // -------- Leads (interested customers / add-to-cart) --------
