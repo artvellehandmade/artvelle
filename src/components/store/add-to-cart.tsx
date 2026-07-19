@@ -5,6 +5,7 @@ import { ShoppingBag, Minus, Plus, Check } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { Button } from "@/components/ui/button";
 import type { ProductDTO } from "@/lib/types";
+import { BuyNowButton } from "./product-actions";
 
 export function AddToCartButton({
   product,
@@ -50,14 +51,14 @@ export function AddToCartButton({
     );
   }
 
-  return (
-    <div className={withQuantity ? "flex flex-col gap-4 sm:flex-row" : ""}>
-      {withQuantity && (
-        <div className="inline-flex items-center rounded-full border border-border h-11">
+  if (withQuantity) {
+    return (
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="inline-flex h-11 items-center rounded-full border border-border">
           <button
             type="button"
             onClick={() => setQty((q) => Math.max(1, q - 1))}
-            className="h-11 w-11 grid place-items-center hover:bg-muted rounded-l-full cursor-pointer"
+            className="grid h-11 w-11 cursor-pointer place-items-center rounded-l-full hover:bg-muted"
             aria-label="Decrease quantity"
           >
             <Minus className="h-4 w-4" />
@@ -66,24 +67,44 @@ export function AddToCartButton({
           <button
             type="button"
             onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
-            className="h-11 w-11 grid place-items-center hover:bg-muted rounded-r-full cursor-pointer"
+            className="grid h-11 w-11 cursor-pointer place-items-center rounded-r-full hover:bg-muted"
             aria-label="Increase quantity"
           >
             <Plus className="h-4 w-4" />
           </button>
         </div>
+        <Button onClick={add} className="min-w-[10rem] flex-1">
+          {added ? (
+            <>
+              <Check className="h-4 w-4" /> Added
+            </>
+          ) : (
+            <>
+              <ShoppingBag className="h-4 w-4" /> Add to cart
+            </>
+          )}
+        </Button>
+        <BuyNowButton
+          product={product}
+          qty={qty}
+          showPrice
+          className="min-w-[10rem] flex-1"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <Button onClick={add} className={className}>
+      {added ? (
+        <>
+          <Check className="h-4 w-4" /> Added
+        </>
+      ) : (
+        <>
+          <ShoppingBag className="h-4 w-4" /> Add to cart
+        </>
       )}
-      <Button onClick={add} className={withQuantity ? "flex-1" : className}>
-        {added ? (
-          <>
-            <Check className="h-4 w-4" /> Added
-          </>
-        ) : (
-          <>
-            <ShoppingBag className="h-4 w-4" /> Add to cart
-          </>
-        )}
-      </Button>
-    </div>
+    </Button>
   );
 }

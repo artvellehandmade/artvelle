@@ -6,6 +6,7 @@ import { getProductBySlug, getRelated } from "@/lib/products";
 import { formatINR } from "@/lib/utils";
 import { ProductGallery } from "@/components/store/product-gallery";
 import { AddToCartButton } from "@/components/store/add-to-cart";
+import { WhatsAppProductButton } from "@/components/store/product-actions";
 import { ProductCard } from "@/components/store/product-card";
 
 export const dynamic = "force-dynamic";
@@ -113,8 +114,9 @@ export default async function ProductPage({
             </div>
           )}
 
-          <div className="mt-8">
+          <div className="mt-8 space-y-3">
             <AddToCartButton product={product} withQuantity />
+            <WhatsAppProductButton product={product} variant="full" />
           </div>
 
           <div className="mt-8 grid gap-4 rounded-2xl border border-border p-5 sm:grid-cols-3">

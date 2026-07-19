@@ -84,8 +84,9 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
               <li key={l.href}>
                 <Link
                   href={l.href}
+                  data-active={active}
                   className={cn(
-                    "text-sm tracking-wide transition-colors hover:text-accent",
+                    "link-underline text-sm tracking-wide transition-colors hover:text-accent",
                     active ? "text-accent" : "text-foreground"
                   )}
                 >

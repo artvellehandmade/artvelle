@@ -26,9 +26,14 @@ export function WhatsAppButton() {
       target="_blank"
       rel="noreferrer"
       aria-label="Chat on WhatsApp"
-      className="fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 transition-transform hover:scale-105"
+      className="group fixed bottom-5 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-[#25D366] text-white shadow-lg shadow-black/20 transition-transform hover:scale-110"
     >
-      <WhatsAppIcon className="h-7 w-7" />
+      {/* Attention ping ring */}
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#25D366] opacity-20 [animation-duration:2.5s]" />
+      <WhatsAppIcon className="relative h-7 w-7" />
+      <span className="pointer-events-none absolute right-16 whitespace-nowrap rounded-full bg-card px-3 py-1.5 text-xs font-medium text-foreground opacity-0 shadow-lg transition-all duration-300 group-hover:right-[4.25rem] group-hover:opacity-100">
+        Chat with us
+      </span>
     </a>
   );
 }

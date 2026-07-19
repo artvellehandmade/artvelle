@@ -1,6 +1,14 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Sparkles, Truck, HandHeart, ShieldCheck } from "lucide-react";
+import {
+  ArrowRight,
+  Sparkles,
+  Truck,
+  HandHeart,
+  ShieldCheck,
+  Star,
+  Quote,
+} from "lucide-react";
 import { getFeatured, getCategoryCounts } from "@/lib/products";
 import { getSettings } from "@/lib/settings";
 import { ButtonLink } from "@/components/ui/button";
@@ -12,6 +20,45 @@ export const dynamic = "force-dynamic";
 
 const heroImg = (s: string) => `https://picsum.photos/seed/${s}/800/1000`;
 
+/* Style the final word of the headline in shimmering gold italic */
+function FancyHeadline({ text }: { text: string }) {
+  const words = text.trim().split(" ");
+  const last = words.pop();
+  return (
+    <h1 className="mt-6 font-serif text-5xl leading-[1.04] tracking-tight md:text-7xl">
+      {words.join(" ")}{" "}
+      <em className="text-gold-shimmer not-italic font-serif italic">{last}</em>
+    </h1>
+  );
+}
+
+const MARQUEE_ITEMS = [
+  "Handmade with love",
+  "One-of-a-kind pieces",
+  "Custom commissions",
+  "Ships across India",
+  "Cash on delivery",
+  "Poured & cured by hand",
+];
+
+const TESTIMONIALS = [
+  {
+    name: "Priya S.",
+    city: "Mumbai",
+    text: "The ocean-wave coasters are even more beautiful in person — the gold rim catches light like real waves. Gifting a second set already!",
+  },
+  {
+    name: "Aarav M.",
+    city: "Bengaluru",
+    text: "Ordered a custom name plate for our new home. The colours matched our door perfectly and it arrived safely packed. Truly premium work.",
+  },
+  {
+    name: "Ishita R.",
+    city: "Delhi",
+    text: "My preserved-rose keepsake made the best anniversary gift ever. You can tell every piece is made with so much care. 10/10.",
+  },
+];
+
 export default async function HomePage() {
   const [settings, featured, counts] = await Promise.all([
     getSettings(),
@@ -21,24 +68,29 @@ export default async function HomePage() {
 
   const countFor = (c: string) =>
     counts.find((x) => x.category === c)?.count ?? 0;
+  const totalPieces = counts.reduce((n, c) => n + c.count, 0);
 
   return (
-    <div>
+    <div className="overflow-x-clip">
       {/* ---------------- Hero ---------------- */}
       <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute -top-32 left-1/2 h-[420px] w-[720px] -translate-x-1/2 rounded-full bg-accent/15 blur-3xl" />
+        {/* Glow orbs */}
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+
         <div className="container-px mx-auto grid max-w-7xl items-center gap-12 py-16 md:grid-cols-2 md:py-24">
           <div>
             <Reveal>
-              <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 text-xs uppercase tracking-widest text-muted-foreground">
-                <Sparkles className="h-3.5 w-3.5 gold-text" />
+              <span className="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-card px-4 py-1.5 text-xs uppercase tracking-widest text-muted-foreground shadow-sm">
+                <span className="relative flex h-2 w-2">
+                  <span className="absolute inline-flex h-full w-full animate-pulse-soft rounded-full bg-accent" />
+                </span>
                 Handmade resin art studio
+                <Sparkles className="h-3.5 w-3.5 gold-text" />
               </span>
             </Reveal>
             <Reveal delay={0.05}>
-              <h1 className="mt-6 font-serif text-5xl leading-[1.05] tracking-tight md:text-6xl">
-                {settings.heroHeadline}
-              </h1>
+              <FancyHeadline text={settings.heroHeadline} />
             </Reveal>
             <Reveal delay={0.1}>
               <p className="mt-6 max-w-md text-lg leading-relaxed text-muted-foreground">
@@ -70,60 +122,112 @@ export default async function HomePage() {
             </Reveal>
           </div>
 
+          {/* Floating image collage */}
           <Reveal delay={0.1} className="relative">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="mt-8 space-y-4">
-                <HeroTile seed="heroA" ratio="aspect-[4/5]" />
-                <HeroTile seed="heroB" ratio="aspect-square" />
+            <div className="pointer-events-none absolute -inset-8 rounded-[3rem] bg-gradient-to-tr from-accent/10 via-transparent to-accent/10 blur-2xl" />
+            <div className="relative grid grid-cols-2 gap-4">
+              <div className="mt-10 space-y-4">
+                <div className="animate-float">
+                  <HeroTile seed="heroA" ratio="aspect-[4/5]" />
+                </div>
+                <div className="animate-float-delay">
+                  <HeroTile seed="heroB" ratio="aspect-square" />
+                </div>
               </div>
               <div className="space-y-4">
-                <HeroTile seed="heroC" ratio="aspect-square" />
-                <HeroTile seed="heroD" ratio="aspect-[4/5]" />
+                <div className="animate-float-slow">
+                  <HeroTile seed="heroC" ratio="aspect-square" />
+                </div>
+                <div className="animate-float">
+                  <HeroTile seed="heroD" ratio="aspect-[4/5]" />
+                </div>
               </div>
+
+              {/* Floating trust chip */}
+              <div className="animate-float-delay absolute -left-4 bottom-10 hidden rounded-2xl border border-border bg-card/90 px-4 py-3 shadow-xl backdrop-blur md:block">
+                <div className="flex items-center gap-1 text-accent">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star key={i} className="h-3.5 w-3.5 fill-current" />
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Loved by customers across India
+                </p>
+              </div>
+
+              {/* Floating counter chip */}
+              {totalPieces > 0 && (
+                <div className="animate-float absolute -right-3 top-6 hidden rounded-2xl border border-border bg-card/90 px-4 py-3 text-center shadow-xl backdrop-blur md:block">
+                  <p className="font-serif text-2xl gold-text">{totalPieces}+</p>
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    unique pieces
+                  </p>
+                </div>
+              )}
             </div>
           </Reveal>
         </div>
       </section>
 
+      {/* ---------------- Marquee band ---------------- */}
+      <section className="border-y border-border bg-foreground py-3.5 text-background">
+        <div className="relative flex overflow-hidden">
+          <div className="animate-marquee flex shrink-0 items-center gap-8 pr-8">
+            {[...MARQUEE_ITEMS, ...MARQUEE_ITEMS].map((item, i) => (
+              <span
+                key={i}
+                className="flex items-center gap-8 whitespace-nowrap text-sm uppercase tracking-[0.2em]"
+              >
+                {item}
+                <Sparkles className="h-4 w-4 gold-text" />
+              </span>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ---------------- Categories ---------------- */}
-      <section className="container-px mx-auto max-w-7xl py-8">
+      <section className="container-px mx-auto max-w-7xl py-16">
         <Reveal>
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs uppercase tracking-widest gold-text">
                 Browse by
               </p>
-              <h2 className="mt-1 font-serif text-3xl">Categories</h2>
+              <h2 className="mt-1 font-serif text-3xl md:text-4xl">
+                Categories
+              </h2>
             </div>
             <Link
               href="/shop"
-              className="hidden items-center gap-1 text-sm hover:text-accent sm:inline-flex"
+              className="link-underline hidden items-center gap-1 text-sm sm:inline-flex"
             >
               View all <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </Reveal>
-        <div className="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
           {CATEGORIES.map((cat, i) => (
-            <Reveal key={cat} delay={i * 0.04}>
+            <Reveal key={cat} delay={i * 0.05}>
               <Link
                 href={`/shop?category=${encodeURIComponent(cat)}`}
-                className="group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
+                className="card-lift group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
                   src={heroImg(`cat-${cat}`)}
                   alt={cat}
                   fill
                   sizes="(max-width:768px) 50vw, 16vw"
-                  className="object-cover transition-transform duration-700 group-hover:scale-110"
+                  className="object-cover transition-transform duration-700 group-hover:scale-110 group-hover:rotate-1"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
-                <div className="absolute inset-x-0 bottom-0 p-3 text-white">
+                <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent transition-opacity duration-500 group-hover:from-black/85" />
+                <div className="absolute inset-x-0 bottom-0 translate-y-1 p-3 text-white transition-transform duration-500 group-hover:translate-y-0">
                   <p className="font-serif text-base leading-tight">{cat}</p>
-                  <p className="text-[11px] opacity-80">
-                    {countFor(cat)} pieces
-                  </p>
+                  <p className="text-[11px] opacity-80">{countFor(cat)} pieces</p>
                 </div>
+                <span className="absolute right-3 top-3 grid h-8 w-8 translate-y-1 place-items-center rounded-full bg-white/15 opacity-0 backdrop-blur transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
+                  <ArrowRight className="h-4 w-4 text-white" />
+                </span>
               </Link>
             </Reveal>
           ))}
@@ -131,18 +235,20 @@ export default async function HomePage() {
       </section>
 
       {/* ---------------- Featured ---------------- */}
-      <section className="container-px mx-auto max-w-7xl py-16">
+      <section className="container-px mx-auto max-w-7xl pb-16">
         <Reveal>
           <div className="flex items-end justify-between">
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs uppercase tracking-widest gold-text">
                 Handpicked
               </p>
-              <h2 className="mt-1 font-serif text-3xl">Featured pieces</h2>
+              <h2 className="mt-1 font-serif text-3xl md:text-4xl">
+                Featured pieces
+              </h2>
             </div>
             <Link
               href="/shop"
-              className="inline-flex items-center gap-1 text-sm hover:text-accent"
+              className="link-underline inline-flex items-center gap-1 text-sm"
             >
               Shop all <ArrowRight className="h-4 w-4" />
             </Link>
@@ -150,9 +256,9 @@ export default async function HomePage() {
         </Reveal>
 
         {featured.length > 0 ? (
-          <div className="mt-8 grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
             {featured.map((p, i) => (
-              <Reveal key={p.id} delay={(i % 4) * 0.05}>
+              <Reveal key={p.id} delay={(i % 4) * 0.06}>
                 <ProductCard product={p} />
               </Reveal>
             ))}
@@ -166,12 +272,18 @@ export default async function HomePage() {
       </section>
 
       {/* ---------------- Process ---------------- */}
-      <section className="border-y border-border bg-card">
-        <div className="container-px mx-auto max-w-7xl py-16">
+      <section className="relative border-y border-border bg-card">
+        <div className="pointer-events-none absolute right-0 top-0 h-56 w-56 rounded-full bg-accent/10 blur-3xl" />
+        <div className="container-px mx-auto max-w-7xl py-20">
           <Reveal>
-            <h2 className="text-center font-serif text-3xl">How it works</h2>
+            <p className="text-center text-xs uppercase tracking-widest gold-text">
+              Simple &amp; personal
+            </p>
+            <h2 className="mt-1 text-center font-serif text-3xl md:text-4xl">
+              How it works
+            </h2>
           </Reveal>
-          <div className="mt-10 grid gap-8 md:grid-cols-3">
+          <div className="mt-12 grid gap-10 md:grid-cols-3">
             {[
               {
                 n: "01",
@@ -189,9 +301,11 @@ export default async function HomePage() {
                 d: "Carefully packed and shipped across India. Pay online or on delivery.",
               },
             ].map((step, i) => (
-              <Reveal key={step.n} delay={i * 0.08}>
-                <div className="text-center">
-                  <span className="font-serif text-5xl gold-text">{step.n}</span>
+              <Reveal key={step.n} delay={i * 0.1}>
+                <div className="group relative rounded-3xl border border-transparent p-6 text-center transition-all duration-500 hover:border-border hover:bg-background hover:shadow-xl">
+                  <span className="font-serif text-6xl text-gold-shimmer">
+                    {step.n}
+                  </span>
                   <h3 className="mt-3 font-serif text-xl">{step.t}</h3>
                   <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-muted-foreground">
                     {step.d}
@@ -203,27 +317,69 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ---------------- About snippet ---------------- */}
+      {/* ---------------- Testimonials ---------------- */}
       <section className="container-px mx-auto max-w-7xl py-20">
+        <Reveal>
+          <p className="text-center text-xs uppercase tracking-widest gold-text">
+            Kind words
+          </p>
+          <h2 className="mt-1 text-center font-serif text-3xl md:text-4xl">
+            Customers love their pieces
+          </h2>
+        </Reveal>
+        <div className="mt-12 grid gap-6 md:grid-cols-3">
+          {TESTIMONIALS.map((t, i) => (
+            <Reveal key={t.name} delay={i * 0.08}>
+              <figure className="card-lift relative flex h-full flex-col rounded-3xl border border-border bg-card p-7">
+                <Quote className="absolute -top-4 left-7 h-8 w-8 rounded-full bg-accent p-1.5 text-accent-foreground" />
+                <div className="flex items-center gap-1 text-accent">
+                  {Array.from({ length: 5 }).map((_, j) => (
+                    <Star key={j} className="h-4 w-4 fill-current" />
+                  ))}
+                </div>
+                <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-muted-foreground">
+                  “{t.text}”
+                </blockquote>
+                <figcaption className="mt-5 border-t border-border pt-4">
+                  <p className="font-medium">{t.name}</p>
+                  <p className="text-xs text-muted-foreground">{t.city}</p>
+                </figcaption>
+              </figure>
+            </Reveal>
+          ))}
+        </div>
+      </section>
+
+      {/* ---------------- About snippet ---------------- */}
+      <section className="container-px mx-auto max-w-7xl pb-20">
         <div className="grid items-center gap-12 md:grid-cols-2">
           <Reveal>
-            <div className="relative aspect-[5/4] overflow-hidden rounded-3xl bg-muted">
-              <Image
-                src="https://picsum.photos/seed/studio/1000/800"
-                alt="Our studio"
-                fill
-                sizes="(max-width:768px) 100vw, 50vw"
-                className="object-cover"
-              />
+            <div className="relative">
+              <div className="relative aspect-[5/4] overflow-hidden rounded-3xl bg-muted shadow-2xl">
+                <Image
+                  src="https://picsum.photos/seed/studio/1000/800"
+                  alt="Our studio"
+                  fill
+                  sizes="(max-width:768px) 100vw, 50vw"
+                  className="object-cover transition-transform duration-[1.2s] hover:scale-105"
+                />
+              </div>
+              <div className="animate-float absolute -bottom-6 -right-4 rounded-2xl border border-border bg-card px-5 py-4 shadow-xl md:-right-8">
+                <p className="font-serif text-3xl gold-text">100%</p>
+                <p className="text-xs uppercase tracking-wider text-muted-foreground">
+                  handmade
+                </p>
+              </div>
             </div>
           </Reveal>
           <Reveal delay={0.1}>
             <div>
-              <p className="text-xs uppercase tracking-widest text-muted-foreground">
+              <p className="text-xs uppercase tracking-widest gold-text">
                 Our story
               </p>
               <h2 className="mt-2 font-serif text-4xl leading-tight">
-                Little pieces of art, made to last.
+                Little pieces of art,{" "}
+                <em className="text-gold-shimmer italic">made to last.</em>
               </h2>
               <p className="mt-5 leading-relaxed text-muted-foreground">
                 {settings.aboutText}
@@ -241,18 +397,24 @@ export default async function HomePage() {
       {/* ---------------- CTA band ---------------- */}
       <section className="container-px mx-auto max-w-7xl pb-24">
         <Reveal>
-          <div className="relative overflow-hidden rounded-3xl bg-foreground px-8 py-16 text-center text-background">
-            <div className="pointer-events-none absolute -right-16 -top-16 h-64 w-64 rounded-full bg-accent/30 blur-3xl" />
-            <h2 className="font-serif text-3xl md:text-4xl">
-              Want something made just for you?
+          <div className="relative overflow-hidden rounded-[2.5rem] bg-foreground px-8 py-20 text-center text-background">
+            {/* Animated aurora blobs */}
+            <div className="animate-aurora pointer-events-none absolute -right-20 -top-24 h-80 w-80 rounded-full bg-accent/40 blur-3xl" />
+            <div className="animate-aurora-2 pointer-events-none absolute -bottom-28 -left-16 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-40 w-[560px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-accent/10 blur-3xl" />
+
+            <Sparkles className="mx-auto h-8 w-8 gold-text" />
+            <h2 className="mx-auto mt-4 max-w-2xl font-serif text-3xl md:text-5xl">
+              Want something{" "}
+              <em className="text-gold-shimmer italic">made just for you?</em>
             </h2>
-            <p className="mx-auto mt-3 max-w-lg text-background/70">
+            <p className="mx-auto mt-4 max-w-lg text-background/70">
               Custom name plates, keepsakes and wall art in your colours and
               size. Tell us your idea and we&apos;ll bring it to life.
             </p>
-            <div className="mt-7 flex justify-center">
+            <div className="mt-8 flex justify-center">
               <ButtonLink href="/contact" variant="gold" size="lg">
-                Request a custom piece
+                Request a custom piece <ArrowRight className="h-4 w-4" />
               </ButtonLink>
             </div>
           </div>
@@ -264,13 +426,15 @@ export default async function HomePage() {
 
 function HeroTile({ seed, ratio }: { seed: string; ratio: string }) {
   return (
-    <div className={`relative ${ratio} overflow-hidden rounded-2xl bg-muted`}>
+    <div
+      className={`relative ${ratio} overflow-hidden rounded-2xl bg-muted shadow-lg ring-1 ring-black/5`}
+    >
       <Image
         src={heroImg(seed)}
         alt="Resin art"
         fill
         sizes="(max-width:768px) 50vw, 25vw"
-        className="object-cover"
+        className="object-cover transition-transform duration-[1.4s] ease-out hover:scale-110"
       />
     </div>
   );

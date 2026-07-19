@@ -8,6 +8,7 @@ import {
   useCallback,
   useRef,
 } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
 import { MiniSignupModal } from "@/components/store/mini-signup-modal";
@@ -18,7 +19,11 @@ const LEAD_COOKIE = "artvelle_lead";
 const LEAD_MAX_AGE = 60 * 60 * 24 * 180; // 180 days
 
 export type LeadInfo = { name: string; phone: string };
-type PendingAdd = { item: Omit<CartItem, "quantity">; qty: number };
+type PendingAdd = {
+  item: Omit<CartItem, "quantity">;
+  qty: number;
+  checkout?: boolean; // Buy Now: continue straight to checkout after capture
+};
 
 type CartContextType = {
   items: CartItem[];
@@ -27,6 +32,7 @@ type CartContextType = {
   isOpen: boolean;
   setOpen: (open: boolean) => void;
   addItem: (item: Omit<CartItem, "quantity">, qty?: number) => void;
+  buyNow: (item: Omit<CartItem, "quantity">, qty?: number) => void;
   removeItem: (productId: string) => void;
   updateQty: (productId: string, qty: number) => void;
   clear: () => void;
@@ -83,6 +89,7 @@ function writeLeadCookie(info: LeadInfo) {
 }
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -142,7 +149,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Actually add to cart + record the lead (contact already known).
   const commitAdd = useCallback(
-    (item: Omit<CartItem, "quantity">, qty: number, contact: LeadInfo | null) => {
+    (
+      item: Omit<CartItem, "quantity">,
+      qty: number,
+      contact: LeadInfo | null,
+      opts: { drawer?: boolean } = {}
+    ) => {
       // Decide new-vs-existing from the live ref (reliable, sync).
       const isNew = !itemsRef.current.some((i) => i.productId === item.productId);
       setItems((prev) => {
@@ -158,8 +170,10 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       });
       // Only record a lead the first time a product is added.
       if (isNew) recordLead(item, qty, contact);
-      toast.success("Added to cart", { description: item.name });
-      setOpen(true);
+      if (opts.drawer !== false) {
+        toast.success("Added to cart", { description: item.name });
+        setOpen(true);
+      }
     },
     [recordLead]
   );
@@ -176,17 +190,33 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     [leadInfo, commitAdd]
   );
 
+  // Buy Now: put the item in the cart and continue straight to checkout.
+  const buyNow = useCallback(
+    (item: Omit<CartItem, "quantity">, qty = 1) => {
+      if (!leadInfo) {
+        setPendingAdd({ item, qty, checkout: true });
+        return;
+      }
+      commitAdd(item, qty, leadInfo, { drawer: false });
+      router.push("/checkout");
+    },
+    [leadInfo, commitAdd, router]
+  );
+
   // Called from the mini sign-up modal once name + phone are entered.
   const submitLead = useCallback(
     (info: LeadInfo) => {
       writeLeadCookie(info);
       setLeadInfo(info);
       if (pendingAdd) {
-        commitAdd(pendingAdd.item, pendingAdd.qty, info);
+        commitAdd(pendingAdd.item, pendingAdd.qty, info, {
+          drawer: !pendingAdd.checkout,
+        });
+        if (pendingAdd.checkout) router.push("/checkout");
         setPendingAdd(null);
       }
     },
-    [pendingAdd, commitAdd]
+    [pendingAdd, commitAdd, router]
   );
 
   const cancelLead = useCallback(() => setPendingAdd(null), []);
@@ -221,6 +251,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         isOpen,
         setOpen,
         addItem,
+        buyNow,
         removeItem,
         updateQty,
         clear,

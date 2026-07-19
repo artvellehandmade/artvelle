@@ -67,7 +67,9 @@ export function MiniSignupModal() {
                 <h2 className="mt-4 font-serif text-2xl">Almost there!</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {pendingAdd
-                    ? `Just your name & mobile to add “${pendingAdd.item.name}” to your cart.`
+                    ? pendingAdd.checkout
+                      ? `Just your name & mobile and we'll take you straight to checkout for “${pendingAdd.item.name}”.`
+                      : `Just your name & mobile to add “${pendingAdd.item.name}” to your cart.`
                     : "Just your name & mobile to save your cart."}
                 </p>
               </div>
@@ -107,7 +109,8 @@ export function MiniSignupModal() {
                 </label>
 
                 <Button type="submit" className="w-full" size="lg">
-                  <ShoppingBag className="h-4 w-4" /> Add to cart
+                  <ShoppingBag className="h-4 w-4" />
+                  {pendingAdd?.checkout ? "Continue to checkout" : "Add to cart"}
                 </Button>
               </form>
 

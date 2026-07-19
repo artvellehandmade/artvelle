@@ -168,3 +168,172 @@ select.input {
 .animate-fade-up {
   animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* ---------------- Premium motion & visual FX ---------------- */
+
+/* Gentle floating for hero imagery */
+@keyframes floatY {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+.animate-float {
+  animation: floatY 6s ease-in-out infinite;
+}
+.animate-float-slow {
+  animation: floatY 8s ease-in-out infinite;
+}
+.animate-float-delay {
+  animation: floatY 7s ease-in-out 1.2s infinite;
+}
+
+/* Infinite marquee band */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+/* Soft pulsing dot (live/attention indicator) */
+@keyframes pulseSoft {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.8);
+  }
+}
+.animate-pulse-soft {
+  animation: pulseSoft 2.2s ease-in-out infinite;
+}
+
+/* Slow aurora drift for CTA backgrounds */
+@keyframes aurora {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(60px, -40px) scale(1.15);
+  }
+  66% {
+    transform: translate(-50px, 30px) scale(0.95);
+  }
+}
+.animate-aurora {
+  animation: aurora 14s ease-in-out infinite;
+}
+.animate-aurora-2 {
+  animation: aurora 18s ease-in-out 2s infinite reverse;
+}
+
+/* Slow shimmer sweep across gold text */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+.text-gold-shimmer {
+  background: linear-gradient(
+    100deg,
+    var(--accent) 40%,
+    #f4e3bf 50%,
+    var(--accent) 60%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 5s linear infinite;
+}
+
+/* Button shine sweep on hover */
+.btn-shine {
+  position: relative;
+  overflow: hidden;
+}
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -80%;
+  height: 100%;
+  width: 50%;
+  transform: skewX(-20deg);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.35),
+    transparent
+  );
+  transition: left 0.6s ease;
+  pointer-events: none;
+}
+.btn-shine:hover::after {
+  left: 130%;
+}
+
+/* Card hover lift */
+.card-lift {
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.card-lift:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 24px 48px -20px color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+
+/* Elegant underline grow for nav links */
+.link-underline {
+  position: relative;
+}
+.link-underline::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  height: 1.5px;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.link-underline:hover::after,
+.link-underline[data-active="true"]::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-float-slow,
+  .animate-float-delay,
+  .animate-marquee,
+  .animate-aurora,
+  .animate-aurora-2,
+  .text-gold-shimmer,
+  .animate-pulse-soft {
+    animation: none;
+  }
+}

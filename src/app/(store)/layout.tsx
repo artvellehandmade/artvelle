@@ -3,6 +3,7 @@ import { Footer } from "@/components/store/footer";
 import { CartDrawer } from "@/components/store/cart-drawer";
 import { WhatsAppButton } from "@/components/store/whatsapp-button";
 import { AnnouncementBar } from "@/components/store/announcement-bar";
+import { BackToTop } from "@/components/store/back-to-top";
 import { getUserSession } from "@/lib/user-auth";
 
 export default async function StoreLayout({
@@ -21,6 +22,7 @@ export default async function StoreLayout({
       <Footer />
       <CartDrawer />
       <WhatsAppButton />
+      <BackToTop />
     </>
   );
 }
