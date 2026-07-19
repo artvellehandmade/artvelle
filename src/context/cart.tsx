@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
   useCallback,
+  useRef,
 } from "react";
 import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
@@ -88,6 +89,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null);
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
+  // Mirror the latest cart items into a ref so we can reliably tell whether a
+  // product is new WITHOUT depending on the async setItems updater timing.
+  const itemsRef = useRef<CartItem[]>([]);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   // Load cart + saved lead contact on mount
   useEffect(() => {
     try {
@@ -135,7 +143,8 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Actually add to cart + record the lead (contact already known).
   const commitAdd = useCallback(
     (item: Omit<CartItem, "quantity">, qty: number, contact: LeadInfo | null) => {
-      let isNew = false;
+      // Decide new-vs-existing from the live ref (reliable, sync).
+      const isNew = !itemsRef.current.some((i) => i.productId === item.productId);
       setItems((prev) => {
         const existing = prev.find((i) => i.productId === item.productId);
         if (existing) {
@@ -145,7 +154,6 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               : i
           );
         }
-        isNew = true;
         return [...prev, { ...item, quantity: qty }];
       });
       // Only record a lead the first time a product is added.
