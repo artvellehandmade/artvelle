@@ -5,7 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { sendOrderEmails } from "@/lib/email";
 import { getUserSession } from "@/lib/user-auth";
+import { priceWithOptions } from "@/lib/options";
 import { orderNumber } from "@/lib/utils";
+import type { ProductOption } from "@/lib/types";
 
 const inputSchema = z.object({
   customerName: z.string().min(2, "Please enter your name"),
@@ -24,6 +26,9 @@ const inputSchema = z.object({
         productId: z.string(),
         quantity: z.number().int().positive(),
         note: z.string().optional(),
+        options: z
+          .array(z.object({ name: z.string(), value: z.string() }))
+          .optional(),
       })
     )
     .min(1, "Your cart is empty"),
@@ -57,12 +62,22 @@ export async function placeOrder(input: PlaceOrderInput) {
   const lineItems = data.items.map((i) => {
     const p = products.find((pr) => pr.id === i.productId);
     if (!p) throw new Error("A product in your cart is no longer available.");
+    // Recompute the unit price from the product's real option deltas.
+    const productOptions = Array.isArray(p.options)
+      ? (p.options as unknown as ProductOption[])
+      : [];
+    const { unitPrice, clean } = priceWithOptions(
+      p.price,
+      productOptions,
+      i.options
+    );
     return {
       productId: p.id,
       name: p.name,
       image: p.images[0] ?? "",
-      price: p.price,
+      price: unitPrice,
       quantity: i.quantity,
+      options: clean,
       note: i.note ?? "",
     };
   });

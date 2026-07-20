@@ -32,7 +32,7 @@ export default function CartPage() {
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_360px]">
         <ul className="divide-y divide-border">
           {items.map((item) => (
-            <li key={item.productId} className="flex gap-4 py-5">
+            <li key={item.lineId} className="flex gap-4 py-5">
               <Link
                 href={`/product/${item.slug}`}
                 className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl bg-muted"
@@ -56,20 +56,25 @@ export default function CartPage() {
                     {item.name}
                   </Link>
                   <button
-                    onClick={() => removeItem(item.productId)}
+                    onClick={() => removeItem(item.lineId)}
                     className="text-muted-foreground hover:text-danger cursor-pointer"
                     aria-label="Remove"
                   >
                     <Trash2 className="h-5 w-5" />
                   </button>
                 </div>
+                {item.options && item.options.length > 0 && (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {item.options.map((o) => `${o.name}: ${o.value}`).join(" · ")}
+                  </p>
+                )}
                 <p className="mt-1 text-sm text-muted-foreground">
                   {formatINR(item.price)}
                 </p>
                 <div className="mt-auto flex items-center justify-between">
                   <div className="inline-flex items-center rounded-full border border-border">
                     <button
-                      onClick={() => updateQty(item.productId, item.quantity - 1)}
+                      onClick={() => updateQty(item.lineId, item.quantity - 1)}
                       className="grid h-9 w-9 place-items-center hover:bg-muted rounded-l-full cursor-pointer"
                       aria-label="Decrease"
                     >
@@ -79,7 +84,7 @@ export default function CartPage() {
                       {item.quantity}
                     </span>
                     <button
-                      onClick={() => updateQty(item.productId, item.quantity + 1)}
+                      onClick={() => updateQty(item.lineId, item.quantity + 1)}
                       className="grid h-9 w-9 place-items-center hover:bg-muted rounded-r-full cursor-pointer"
                       aria-label="Increase"
                     >

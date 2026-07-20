@@ -4,11 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2, Upload, X, LinkIcon, Star } from "lucide-react";
+import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CATEGORIES } from "@/lib/utils";
 import { createProduct, updateProduct } from "@/app/actions/admin";
-import type { ProductDTO } from "@/lib/types";
+import type { ProductDTO, ProductOption } from "@/lib/types";
 
 type Props = { product?: ProductDTO };
 
@@ -21,6 +21,7 @@ export function ProductForm({ product }: Props) {
   const [form, setForm] = useState({
     name: product?.name ?? "",
     category: product?.category ?? CATEGORIES[0],
+    secondaryCategory: product?.secondaryCategory ?? "",
     price: product?.price?.toString() ?? "",
     compareAtPrice: product?.compareAtPrice?.toString() ?? "",
     stock: product?.stock?.toString() ?? "0",
@@ -31,6 +32,61 @@ export function ProductForm({ product }: Props) {
   });
   const [images, setImages] = useState<string[]>(product?.images ?? []);
   const [urlInput, setUrlInput] = useState("");
+  const [options, setOptions] = useState<ProductOption[]>(
+    product?.options ?? []
+  );
+
+  // ---- Options CRUD ----
+  function addOptionGroup() {
+    setOptions((prev) => [
+      ...prev,
+      { name: "", choices: [{ label: "", priceDelta: 0 }] },
+    ]);
+  }
+  function removeOptionGroup(gi: number) {
+    setOptions((prev) => prev.filter((_, i) => i !== gi));
+  }
+  function setGroupName(gi: number, name: string) {
+    setOptions((prev) =>
+      prev.map((g, i) => (i === gi ? { ...g, name } : g))
+    );
+  }
+  function addChoice(gi: number) {
+    setOptions((prev) =>
+      prev.map((g, i) =>
+        i === gi
+          ? { ...g, choices: [...g.choices, { label: "", priceDelta: 0 }] }
+          : g
+      )
+    );
+  }
+  function removeChoice(gi: number, ci: number) {
+    setOptions((prev) =>
+      prev.map((g, i) =>
+        i === gi
+          ? { ...g, choices: g.choices.filter((_, j) => j !== ci) }
+          : g
+      )
+    );
+  }
+  function setChoice(
+    gi: number,
+    ci: number,
+    patch: Partial<{ label: string; priceDelta: number }>
+  ) {
+    setOptions((prev) =>
+      prev.map((g, i) =>
+        i === gi
+          ? {
+              ...g,
+              choices: g.choices.map((c, j) =>
+                j === ci ? { ...c, ...patch } : c
+              ),
+            }
+          : g
+      )
+    );
+  }
 
   function set<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -73,9 +129,24 @@ export function ProductForm({ product }: Props) {
     e.preventDefault();
     setSaving(true);
 
+    // Drop empty option groups / choices before saving.
+    const cleanOptions = options
+      .map((g) => ({
+        name: g.name.trim(),
+        choices: g.choices
+          .filter((c) => c.label.trim())
+          .map((c) => ({
+            label: c.label.trim(),
+            priceDelta: Number(c.priceDelta) || 0,
+          })),
+      }))
+      .filter((g) => g.name && g.choices.length > 0);
+
     const payload = {
       name: form.name,
       category: form.category,
+      secondaryCategory: form.secondaryCategory || null,
+      options: cleanOptions,
       price: Number(form.price || 0),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
       stock: Number(form.stock || 0),
@@ -215,6 +286,94 @@ export function ProductForm({ product }: Props) {
             configured; pasting an image URL always works.
           </p>
         </Card>
+
+        <Card title="Options & variants">
+          <p className="-mt-1 text-xs text-muted-foreground">
+            Let customers choose e.g. <b>Size</b> or <b>Type</b>. Each choice can
+            add to the price (leave 0 for no change). Different products can have
+            different options.
+          </p>
+
+          {options.map((group, gi) => (
+            <div
+              key={gi}
+              className="rounded-xl border border-border p-3.5"
+            >
+              <div className="flex items-center gap-2">
+                <GripVertical className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <input
+                  value={group.name}
+                  onChange={(e) => setGroupName(gi, e.target.value)}
+                  className="input h-9"
+                  placeholder="Option name (e.g. Size, Type, Shape)"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeOptionGroup(gi)}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger"
+                  title="Remove this option"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-2 pl-6">
+                {group.choices.map((choice, ci) => (
+                  <div key={ci} className="flex items-center gap-2">
+                    <input
+                      value={choice.label}
+                      onChange={(e) => setChoice(gi, ci, { label: e.target.value })}
+                      className="input h-9 flex-1"
+                      placeholder="Choice (e.g. Small)"
+                    />
+                    <div className="relative w-32 shrink-0">
+                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                        +₹
+                      </span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={choice.priceDelta || ""}
+                        onChange={(e) =>
+                          setChoice(gi, ci, {
+                            priceDelta: Number(e.target.value) || 0,
+                          })
+                        }
+                        className="input h-9 pl-8"
+                        placeholder="0"
+                        title="Extra price for this choice"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeChoice(gi, ci)}
+                      disabled={group.choices.length <= 1}
+                      className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted disabled:opacity-30"
+                      title="Remove choice"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => addChoice(gi)}
+                  className="inline-flex items-center gap-1.5 text-xs text-accent hover:underline"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add choice
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={addOptionGroup}
+            className="inline-flex items-center gap-2 rounded-full border border-dashed border-border px-4 py-2.5 text-sm hover:bg-muted"
+          >
+            <Plus className="h-4 w-4" /> Add an option (Size, Type…)
+          </button>
+        </Card>
       </div>
 
       {/* Sidebar */}
@@ -269,6 +428,25 @@ export function ProductForm({ product }: Props) {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block">
+            <span className="label">Secondary category (optional)</span>
+            <select
+              value={form.secondaryCategory}
+              onChange={(e) => set("secondaryCategory", e.target.value)}
+              className="input"
+            >
+              <option value="">None</option>
+              {CATEGORIES.filter((c) => c !== form.category).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Also list this piece under a second category (e.g. a gift item).
+            </span>
           </label>
 
           <Toggle

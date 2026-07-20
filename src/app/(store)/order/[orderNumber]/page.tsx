@@ -11,7 +11,12 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Order confirmed" };
 
-type Item = { name: string; quantity: number; price: number };
+type Item = {
+  name: string;
+  quantity: number;
+  price: number;
+  options?: { name: string; value: string }[];
+};
 
 export default async function OrderPage({
   params,
@@ -82,6 +87,11 @@ export default async function OrderPage({
             <li key={idx} className="flex justify-between py-3 text-sm">
               <span>
                 {i.name} <span className="text-muted-foreground">× {i.quantity}</span>
+                {i.options && i.options.length > 0 && (
+                  <span className="block text-xs text-muted-foreground">
+                    {i.options.map((o) => `${o.name}: ${o.value}`).join(" · ")}
+                  </span>
+                )}
               </span>
               <span className="font-medium">
                 {formatINR(i.price * i.quantity)}

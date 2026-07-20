@@ -5,8 +5,7 @@ import { Truck, ShieldCheck, HandHeart, ChevronRight } from "lucide-react";
 import { getProductBySlug, getRelated } from "@/lib/products";
 import { formatINR } from "@/lib/utils";
 import { ProductGallery } from "@/components/store/product-gallery";
-import { AddToCartButton } from "@/components/store/add-to-cart";
-import { WhatsAppProductButton } from "@/components/store/product-actions";
+import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductCard } from "@/components/store/product-card";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +33,12 @@ export default async function ProductPage({
   const product = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  const related = await getRelated(product.category, product.id);
+  const related = await getRelated(
+    product.category,
+    product.id,
+    4,
+    product.secondaryCategory
+  );
   const discount =
     product.compareAtPrice && product.compareAtPrice > product.price
       ? Math.round(
@@ -114,9 +118,8 @@ export default async function ProductPage({
             </div>
           )}
 
-          <div className="mt-8 space-y-3">
-            <AddToCartButton product={product} withQuantity />
-            <WhatsAppProductButton product={product} variant="full" />
+          <div className="mt-8">
+            <ProductPurchase product={product} />
           </div>
 
           <div className="mt-8 grid gap-4 rounded-2xl border border-border p-5 sm:grid-cols-3">

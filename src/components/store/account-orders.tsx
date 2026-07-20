@@ -18,7 +18,12 @@ export type AccountOrder = {
   courier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
-  items: { name: string; quantity: number; price: number }[];
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    options?: { name: string; value: string }[];
+  }[];
   statusHistory: StatusEntry[];
   address: string;
   city: string;
@@ -148,6 +153,13 @@ export function AccountOrders({ orders }: { orders: AccountOrder[] }) {
                         <li key={i} className="flex justify-between">
                           <span>
                             {it.name} × {it.quantity}
+                            {it.options && it.options.length > 0 && (
+                              <span className="block text-xs text-muted-foreground">
+                                {it.options
+                                  .map((op) => `${op.name}: ${op.value}`)
+                                  .join(" · ")}
+                              </span>
+                            )}
                           </span>
                           <span>{formatINR(it.price * it.quantity)}</span>
                         </li>

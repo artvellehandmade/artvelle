@@ -1,6 +1,17 @@
 import { prisma } from "./prisma";
-import type { Prisma } from "@prisma/client";
-import type { ProductDTO } from "./types";
+import type { Prisma, Product } from "@prisma/client";
+import type { ProductDTO, ProductOption } from "./types";
+import { searchProducts } from "./search";
+
+/** Normalise a Prisma product row into a ProductDTO (coerces the JSON options). */
+function toDTO(p: Product): ProductDTO {
+  return {
+    ...p,
+    options: Array.isArray(p.options)
+      ? (p.options as unknown as ProductOption[])
+      : [],
+  };
+}
 
 export type ShopQuery = {
   category?: string;
@@ -25,24 +36,50 @@ function orderBy(
 
 export async function getProducts(query: ShopQuery = {}): Promise<ProductDTO[]> {
   try {
-    const where: Prisma.ProductWhereInput = { isActive: true };
+    const and: Prisma.ProductWhereInput[] = [{ isActive: true }];
+    // A category page shows pieces whose primary OR secondary category matches.
     if (query.category && query.category !== "All") {
-      where.category = query.category;
+      and.push({
+        OR: [
+          { category: query.category },
+          { secondaryCategory: query.category },
+        ],
+      });
     }
-    if (query.q) {
-      where.OR = [
-        { name: { contains: query.q, mode: "insensitive" } },
-        { description: { contains: query.q, mode: "insensitive" } },
-        { tags: { has: query.q.toLowerCase() } },
-      ];
+
+    const products = (
+      await prisma.product.findMany({
+        where: { AND: and },
+        orderBy: orderBy(query.sort),
+      })
+    ).map(toDTO);
+
+    // Typo-tolerant fuzzy search (keeps the chosen sort when there's no query).
+    if (query.q && query.q.trim()) {
+      return searchProducts(products, query.q);
     }
-    const products = await prisma.product.findMany({
-      where,
-      orderBy: orderBy(query.sort),
-    });
-    return products as ProductDTO[];
+    return products;
   } catch (err) {
     console.error("[products] getProducts failed:", err);
+    return [];
+  }
+}
+
+/** Compact catalogue for the live search dropdown (typo-tolerant). */
+export async function searchCatalogue(
+  q: string,
+  limit = 6
+): Promise<ProductDTO[]> {
+  try {
+    const products = (
+      await prisma.product.findMany({
+        where: { isActive: true },
+        orderBy: { isFeatured: "desc" },
+      })
+    ).map(toDTO);
+    return searchProducts(products, q, limit);
+  } catch (err) {
+    console.error("[products] searchCatalogue failed:", err);
     return [];
   }
 }
@@ -55,13 +92,15 @@ export async function getFeatured(limit = 4): Promise<ProductDTO[]> {
       take: limit,
     });
     if (products.length === 0) {
-      return (await prisma.product.findMany({
-        where: { isActive: true },
-        orderBy: { createdAt: "desc" },
-        take: limit,
-      })) as ProductDTO[];
+      return (
+        await prisma.product.findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          take: limit,
+        })
+      ).map(toDTO);
     }
-    return products as ProductDTO[];
+    return products.map(toDTO);
   } catch (err) {
     console.error("[products] getFeatured failed:", err);
     return [];
@@ -73,7 +112,7 @@ export async function getProductBySlug(
 ): Promise<ProductDTO | null> {
   try {
     const product = await prisma.product.findUnique({ where: { slug } });
-    return product as ProductDTO | null;
+    return product ? toDTO(product) : null;
   } catch (err) {
     console.error("[products] getProductBySlug failed:", err);
     return null;
@@ -83,15 +122,24 @@ export async function getProductBySlug(
 export async function getRelated(
   category: string,
   excludeId: string,
-  limit = 4
+  limit = 4,
+  secondaryCategory?: string | null
 ): Promise<ProductDTO[]> {
   try {
+    const cats = [category, secondaryCategory].filter(Boolean) as string[];
     const products = await prisma.product.findMany({
-      where: { isActive: true, category, id: { not: excludeId } },
+      where: {
+        isActive: true,
+        id: { not: excludeId },
+        OR: [
+          { category: { in: cats } },
+          { secondaryCategory: { in: cats } },
+        ],
+      },
       take: limit,
       orderBy: { createdAt: "desc" },
     });
-    return products as ProductDTO[];
+    return products.map(toDTO);
   } catch {
     return [];
   }
@@ -101,14 +149,24 @@ export async function getCategoryCounts(): Promise<
   { category: string; count: number }[]
 > {
   try {
-    const grouped = await prisma.product.groupBy({
-      by: ["category"],
+    // Count a product under BOTH its primary and secondary category.
+    const products = await prisma.product.findMany({
       where: { isActive: true },
-      _count: { _all: true },
+      select: { category: true, secondaryCategory: true },
     });
-    return grouped.map((g) => ({
-      category: g.category,
-      count: g._count._all,
+    const tally = new Map<string, number>();
+    for (const p of products) {
+      tally.set(p.category, (tally.get(p.category) ?? 0) + 1);
+      if (p.secondaryCategory) {
+        tally.set(
+          p.secondaryCategory,
+          (tally.get(p.secondaryCategory) ?? 0) + 1
+        );
+      }
+    }
+    return [...tally.entries()].map(([category, count]) => ({
+      category,
+      count,
     }));
   } catch {
     return [];

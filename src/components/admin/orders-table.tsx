@@ -41,7 +41,12 @@ export type AdminOrder = {
   city: string;
   state: string;
   pincode: string;
-  items: { name: string; quantity: number; price: number }[];
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    options?: { name: string; value: string }[];
+  }[];
   subtotal: number;
   shipping: number;
   total: number;
@@ -137,6 +142,13 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         <li key={i} className="flex justify-between">
                           <span>
                             {it.name} × {it.quantity}
+                            {it.options && it.options.length > 0 && (
+                              <span className="block text-xs text-muted-foreground">
+                                {it.options
+                                  .map((op) => `${op.name}: ${op.value}`)
+                                  .join(" · ")}
+                              </span>
+                            )}
                           </span>
                           <span>{formatINR(it.price * it.quantity)}</span>
                         </li>

@@ -1,8 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Eye } from "lucide-react";
+import { Eye, SlidersHorizontal, ArrowRight } from "lucide-react";
 import { formatINR } from "@/lib/utils";
 import type { ProductDTO } from "@/lib/types";
+import { ButtonLink } from "@/components/ui/button";
 import { AddToCartButton } from "./add-to-cart";
 import { BuyNowButton, WhatsAppProductButton } from "./product-actions";
 
@@ -92,11 +93,28 @@ export function ProductCard({ product }: { product: ProductDTO }) {
           )}
         </div>
         <div className="mt-4 space-y-2">
-          <div className="flex gap-2">
-            <AddToCartButton product={product} className="flex-1" />
-            <WhatsAppProductButton product={product} variant="icon" />
-          </div>
-          <BuyNowButton product={product} className="w-full" />
+          {product.options.length > 0 ? (
+            // Has choices (Size/Type…) — send to the page to pick them.
+            <div className="flex gap-2">
+              <ButtonLink
+                href={`/product/${product.slug}`}
+                variant="outline"
+                className="flex-1"
+              >
+                <SlidersHorizontal className="h-4 w-4" /> Choose options
+                <ArrowRight className="h-4 w-4" />
+              </ButtonLink>
+              <WhatsAppProductButton product={product} variant="icon" />
+            </div>
+          ) : (
+            <>
+              <div className="flex gap-2">
+                <AddToCartButton product={product} className="flex-1" />
+                <WhatsAppProductButton product={product} variant="icon" />
+              </div>
+              <BuyNowButton product={product} className="w-full" />
+            </>
+          )}
         </div>
       </div>
     </div>

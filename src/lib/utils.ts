@@ -48,12 +48,14 @@ export function whatsappLink(phone: string, message: string): string {
 }
 
 export const CATEGORIES = [
-  "Resin Art",
-  "Coasters",
-  "Wall Art",
-  "Name Plates",
   "Home Decor",
-  "Keepsakes",
+  "Pooja & Spiritual",
+  "Wedding Preservation",
+  "Personalized Gifts",
+  "Kitchen & Dining",
+  "Fashion & Accessories",
+  "Car Accessories",
+  "Festival Collection",
 ] as const;
 
 export type Category = (typeof CATEGORIES)[number];

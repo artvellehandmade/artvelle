@@ -77,6 +77,7 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
         productId: i.productId,
         quantity: i.quantity,
         note: i.note,
+        options: i.options,
       })),
     });
 
@@ -234,6 +235,11 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
                 </div>
                 <div className="flex flex-1 flex-col text-sm">
                   <span className="line-clamp-1">{i.name}</span>
+                  {i.options && i.options.length > 0 && (
+                    <span className="text-xs text-muted-foreground">
+                      {i.options.map((o) => o.value).join(" · ")}
+                    </span>
+                  )}
                   <span className="text-muted-foreground">Qty {i.quantity}</span>
                 </div>
                 <span className="text-sm font-medium">

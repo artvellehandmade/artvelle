@@ -35,15 +35,29 @@ async function ensureUniqueSlug(name: string, ignoreId?: string) {
   }
 }
 
+const optionSchema = z.object({
+  name: z.string().trim().min(1),
+  choices: z
+    .array(
+      z.object({
+        label: z.string().trim().min(1),
+        priceDelta: z.coerce.number().int().default(0),
+      })
+    )
+    .min(1),
+});
+
 const productSchema = z.object({
   name: z.string().min(2),
   description: z.string().min(1),
   category: z.string().min(1),
+  secondaryCategory: z.string().nullable().optional(),
   price: z.coerce.number().int().nonnegative(),
   compareAtPrice: z.coerce.number().int().nonnegative().nullable().optional(),
   stock: z.coerce.number().int().nonnegative(),
   tags: z.array(z.string()).default([]),
   images: z.array(z.string()).default([]),
+  options: z.array(optionSchema).default([]),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
 });
@@ -62,7 +76,9 @@ export async function createProduct(input: ProductInput) {
   const product = await prisma.product.create({
     data: {
       ...data,
+      secondaryCategory: data.secondaryCategory || null,
       compareAtPrice: data.compareAtPrice || null,
+      options: data.options,
       slug,
     },
   });
@@ -83,7 +99,9 @@ export async function updateProduct(id: string, input: ProductInput) {
     where: { id },
     data: {
       ...data,
+      secondaryCategory: data.secondaryCategory || null,
       compareAtPrice: data.compareAtPrice || null,
+      options: data.options,
       slug,
     },
   });

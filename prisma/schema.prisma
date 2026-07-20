@@ -13,22 +13,27 @@ datasource db {
 
 // -------- Products --------
 model Product {
-  id             String   @id @default(cuid())
-  name           String
-  slug           String   @unique
-  description    String
-  category       String
-  tags           String[] @default([])
-  price          Int // whole rupees
-  compareAtPrice Int? // optional "was" price for showing a discount
-  images         String[] @default([])
-  stock          Int      @default(0)
-  isFeatured     Boolean  @default(false)
-  isActive       Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  description       String
+  category          String // primary category
+  secondaryCategory String? // optional — lets a piece appear under a second category
+  tags              String[] @default([])
+  // Per-product options/variants the customer chooses (Size, Type, Shape…).
+  // Shape: [{ name, choices: [{ label, priceDelta }] }]
+  options           Json     @default("[]")
+  price             Int // whole rupees
+  compareAtPrice    Int? // optional "was" price for showing a discount
+  images            String[] @default([])
+  stock             Int      @default(0)
+  isFeatured        Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   @@index([category])
+  @@index([secondaryCategory])
   @@index([isActive])
 }
 

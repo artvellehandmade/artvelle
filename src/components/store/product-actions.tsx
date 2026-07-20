@@ -6,7 +6,7 @@ import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { Button } from "@/components/ui/button";
 import { formatINR, whatsappLink, cn } from "@/lib/utils";
-import type { ProductDTO } from "@/lib/types";
+import type { ProductDTO, SelectedOption } from "@/lib/types";
 
 function WhatsAppIcon({ className }: { className?: string }) {
   return (
@@ -20,10 +20,12 @@ function WhatsAppIcon({ className }: { className?: string }) {
 export function WhatsAppProductButton({
   product,
   variant = "icon",
+  options,
   className,
 }: {
   product: ProductDTO;
   variant?: "icon" | "full";
+  options?: SelectedOption[];
   className?: string;
 }) {
   const settings = useSettings();
@@ -31,10 +33,12 @@ export function WhatsAppProductButton({
 
   const open = () => {
     const link = `${window.location.origin}/product/${product.slug}`;
+    const optLines = (options ?? []).map((o) => `${o.name}: ${o.value}`);
     const msg = [
       `Hi ${settings.brandName}! I'm interested in this piece:`,
       ``,
       `✨ *${product.name}*`,
+      ...optLines,
       `Price: ${formatINR(product.price)}`,
       `Category: ${product.category}`,
       link,

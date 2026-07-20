@@ -80,7 +80,12 @@ type OrderLike = {
   city: string;
   state: string;
   pincode: string;
-  items: { name: string; quantity: number; price: number }[];
+  items: {
+    name: string;
+    quantity: number;
+    price: number;
+    options?: { name: string; value: string }[];
+  }[];
   subtotal: number;
   shipping: number;
   total: number;
@@ -90,10 +95,13 @@ type OrderLike = {
 
 function itemsTable(items: OrderLike["items"]) {
   const rows = items
-    .map(
-      (i) =>
-        `<tr><td style="padding:8px 0;border-bottom:1px solid #f0f0f0">${i.name} × ${i.quantity}</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right">${formatINR(i.price * i.quantity)}</td></tr>`
-    )
+    .map((i) => {
+      const opts =
+        i.options && i.options.length > 0
+          ? `<br><span style="color:#999;font-size:12px">${i.options.map((o) => `${o.name}: ${o.value}`).join(" · ")}</span>`
+          : "";
+      return `<tr><td style="padding:8px 0;border-bottom:1px solid #f0f0f0">${i.name} × ${i.quantity}${opts}</td><td style="padding:8px 0;border-bottom:1px solid #f0f0f0;text-align:right;vertical-align:top">${formatINR(i.price * i.quantity)}</td></tr>`;
+    })
     .join("");
   return `<table style="width:100%;border-collapse:collapse;font-size:14px;margin:12px 0">${rows}</table>`;
 }

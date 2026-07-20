@@ -11,7 +11,10 @@ import {
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { CartItem } from "@/lib/types";
+import { makeLineId } from "@/lib/options";
 import { MiniSignupModal } from "@/components/store/mini-signup-modal";
+
+type NewCartItem = Omit<CartItem, "quantity" | "lineId">;
 
 const STORAGE_KEY = "artvelle_cart";
 const VISITOR_KEY = "artvelle_vid";
@@ -20,7 +23,7 @@ const LEAD_MAX_AGE = 60 * 60 * 24 * 180; // 180 days
 
 export type LeadInfo = { name: string; phone: string };
 type PendingAdd = {
-  item: Omit<CartItem, "quantity">;
+  item: NewCartItem;
   qty: number;
   checkout?: boolean; // Buy Now: continue straight to checkout after capture
 };
@@ -31,10 +34,10 @@ type CartContextType = {
   subtotal: number;
   isOpen: boolean;
   setOpen: (open: boolean) => void;
-  addItem: (item: Omit<CartItem, "quantity">, qty?: number) => void;
-  buyNow: (item: Omit<CartItem, "quantity">, qty?: number) => void;
-  removeItem: (productId: string) => void;
-  updateQty: (productId: string, qty: number) => void;
+  addItem: (item: NewCartItem, qty?: number) => void;
+  buyNow: (item: NewCartItem, qty?: number) => void;
+  removeItem: (lineId: string) => void;
+  updateQty: (lineId: string, qty: number) => void;
   clear: () => void;
   // Mini lead capture (name + phone) gate for add-to-cart
   leadInfo: LeadInfo | null;
@@ -107,7 +110,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) setItems(JSON.parse(raw));
+      if (raw) {
+        const parsed = JSON.parse(raw) as CartItem[];
+        // Backfill lineId for carts saved before options existed.
+        setItems(
+          parsed.map((i) => ({
+            ...i,
+            lineId: i.lineId || makeLineId(i.productId, i.options),
+          }))
+        );
+      }
     } catch {
       /* ignore */
     }
@@ -122,7 +134,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [items, hydrated]);
 
   const recordLead = useCallback(
-    (item: Omit<CartItem, "quantity">, qty: number, contact: LeadInfo | null) => {
+    (item: NewCartItem, qty: number, contact: LeadInfo | null) => {
       // Fire-and-forget: log an "interested customer" lead + notify admin.
       try {
         fetch("/api/leads", {
@@ -150,25 +162,26 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   // Actually add to cart + record the lead (contact already known).
   const commitAdd = useCallback(
     (
-      item: Omit<CartItem, "quantity">,
+      item: NewCartItem,
       qty: number,
       contact: LeadInfo | null,
       opts: { drawer?: boolean } = {}
     ) => {
+      const lineId = makeLineId(item.productId, item.options);
       // Decide new-vs-existing from the live ref (reliable, sync).
-      const isNew = !itemsRef.current.some((i) => i.productId === item.productId);
+      const isNew = !itemsRef.current.some((i) => i.lineId === lineId);
       setItems((prev) => {
-        const existing = prev.find((i) => i.productId === item.productId);
+        const existing = prev.find((i) => i.lineId === lineId);
         if (existing) {
           return prev.map((i) =>
-            i.productId === item.productId
+            i.lineId === lineId
               ? { ...i, quantity: Math.min(i.quantity + qty, i.stock || 99) }
               : i
           );
         }
-        return [...prev, { ...item, quantity: qty }];
+        return [...prev, { ...item, lineId, quantity: qty }];
       });
-      // Only record a lead the first time a product is added.
+      // Only record a lead the first time a product/variant is added.
       if (isNew) recordLead(item, qty, contact);
       if (opts.drawer !== false) {
         toast.success("Added to cart", { description: item.name });
@@ -179,7 +192,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addItem = useCallback(
-    (item: Omit<CartItem, "quantity">, qty = 1) => {
+    (item: NewCartItem, qty = 1) => {
       // Gate: first add ever needs a quick name + phone (mini sign-up).
       if (!leadInfo) {
         setPendingAdd({ item, qty });
@@ -192,7 +205,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   // Buy Now: put the item in the cart and continue straight to checkout.
   const buyNow = useCallback(
-    (item: Omit<CartItem, "quantity">, qty = 1) => {
+    (item: NewCartItem, qty = 1) => {
       if (!leadInfo) {
         setPendingAdd({ item, qty, checkout: true });
         return;
@@ -221,15 +234,15 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
   const cancelLead = useCallback(() => setPendingAdd(null), []);
 
-  const removeItem = useCallback((productId: string) => {
-    setItems((prev) => prev.filter((i) => i.productId !== productId));
+  const removeItem = useCallback((lineId: string) => {
+    setItems((prev) => prev.filter((i) => i.lineId !== lineId));
   }, []);
 
-  const updateQty = useCallback((productId: string, qty: number) => {
+  const updateQty = useCallback((lineId: string, qty: number) => {
     setItems((prev) =>
       prev
         .map((i) =>
-          i.productId === productId
+          i.lineId === lineId
             ? { ...i, quantity: Math.max(0, Math.min(qty, i.stock || 99)) }
             : i
         )

@@ -9,6 +9,7 @@ import { ShoppingBag, Menu, X, User } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { SearchBox } from "@/components/store/search-box";
 import { cn } from "@/lib/utils";
 
 const links = [
@@ -99,6 +100,9 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
 
         {/* Right: actions */}
         <div className="flex items-center gap-2">
+          <div className="hidden md:block">
+            <SearchBox variant="icon" />
+          </div>
           <ThemeToggle />
           <Link
             href="/account"
@@ -154,7 +158,10 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <ul className="mt-8 space-y-1">
+              <div className="mt-6">
+                <SearchBox variant="bar" onNavigate={() => setMenuOpen(false)} />
+              </div>
+              <ul className="mt-6 space-y-1">
                 {links.map((l) => (
                   <li key={l.href}>
                     <Link
