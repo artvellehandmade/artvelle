@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getProducts, type ShopQuery } from "@/lib/products";
 import { ProductCard } from "@/components/store/product-card";
+import { Reveal } from "@/components/store/reveal";
 import { ShopFilters } from "@/components/store/shop-filters";
 import { prisma } from "@/lib/prisma";
 
@@ -45,8 +46,10 @@ export default async function ShopPage({
 
       {products.length > 0 ? (
         <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
-          {products.map((p) => (
-            <ProductCard key={p.id} product={p} />
+          {products.map((p, i) => (
+            <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
+              <ProductCard product={p} />
+            </Reveal>
           ))}
         </div>
       ) : (
