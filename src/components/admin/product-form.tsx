@@ -1,18 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical } from "lucide-react";
+import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical, ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { CATEGORIES } from "@/lib/utils";
 import { createProduct, updateProduct } from "@/app/actions/admin";
+import { allCombinations, comboKey } from "@/lib/options";
+import { formatINR } from "@/lib/utils";
 import type { ProductDTO, ProductOption } from "@/lib/types";
 
-type Props = { product?: ProductDTO };
+type Props = { product?: ProductDTO; categories: string[] };
 
-export function ProductForm({ product }: Props) {
+export function ProductForm({ product, categories }: Props) {
   const router = useRouter();
   const editing = !!product;
   const [saving, setSaving] = useState(false);
@@ -20,7 +21,7 @@ export function ProductForm({ product }: Props) {
 
   const [form, setForm] = useState({
     name: product?.name ?? "",
-    category: product?.category ?? CATEGORIES[0],
+    category: product?.category ?? categories[0] ?? "",
     secondaryCategory: product?.secondaryCategory ?? "",
     price: product?.price?.toString() ?? "",
     compareAtPrice: product?.compareAtPrice?.toString() ?? "",
@@ -32,9 +33,79 @@ export function ProductForm({ product }: Props) {
   });
   const [images, setImages] = useState<string[]>(product?.images ?? []);
   const [urlInput, setUrlInput] = useState("");
+  // Index of the image currently being dragged (for reordering).
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [options, setOptions] = useState<ProductOption[]>(
     product?.options ?? []
   );
+
+  // ---- Variants (Flipkart-style: price / availability / photos per combo) ----
+  type VariantEntry = { available: boolean; price: string; images: string[] };
+  const [useVariants, setUseVariants] = useState<boolean>(
+    (product?.variants?.length ?? 0) > 0 ||
+      (product?.variantPrices?.length ?? 0) > 0
+  );
+  // Variant data keyed by combo signature.
+  const [variantMap, setVariantMap] = useState<Record<string, VariantEntry>>(
+    () => {
+      const map: Record<string, VariantEntry> = {};
+      if (product?.variants?.length) {
+        for (const v of product.variants) {
+          map[comboKey(v.combo)] = {
+            available: v.available,
+            price: String(v.price),
+            images: v.images ?? [],
+          };
+        }
+      } else if (product?.variantPrices?.length) {
+        // Migrate the older price-only matrix.
+        for (const v of product.variantPrices) {
+          map[comboKey(v.combo)] = {
+            available: true,
+            price: String(v.price),
+            images: [],
+          };
+        }
+      }
+      return map;
+    }
+  );
+
+  // All combinations of the current options (recomputed as options change).
+  // Trim to match how options are cleaned on save, so combo keys line up.
+  const combos = useMemo(
+    () =>
+      allCombinations(
+        options
+          .map((g) => ({
+            name: g.name.trim(),
+            choices: g.choices
+              .filter((c) => c.label.trim())
+              .map((c) => ({ ...c, label: c.label.trim() })),
+          }))
+          .filter((g) => g.name && g.choices.length > 0)
+      ),
+    [options]
+  );
+
+  function variantOf(key: string): VariantEntry {
+    return variantMap[key] ?? { available: true, price: "", images: [] };
+  }
+  function setVariantField(key: string, patch: Partial<VariantEntry>) {
+    setVariantMap((prev) => ({
+      ...prev,
+      [key]: { ...variantOf(key), ...patch },
+    }));
+  }
+  function toggleVariantImage(key: string, url: string) {
+    const cur = variantOf(key);
+    const has = cur.images.includes(url);
+    // Keep images in the product's image order for consistency.
+    const next = has
+      ? cur.images.filter((u) => u !== url)
+      : images.filter((u) => cur.images.includes(u) || u === url);
+    setVariantField(key, { images: next });
+  }
 
   // ---- Options CRUD ----
   function addOptionGroup() {
@@ -72,7 +143,7 @@ export function ProductForm({ product }: Props) {
   function setChoice(
     gi: number,
     ci: number,
-    patch: Partial<{ label: string; priceDelta: number }>
+    patch: Partial<{ label: string; priceDelta: number; image: string | null }>
   ) {
     setOptions((prev) =>
       prev.map((g, i) =>
@@ -125,6 +196,22 @@ export function ProductForm({ product }: Props) {
     setImages((prev) => prev.filter((_, idx) => idx !== i));
   }
 
+  // Move an image from one position to another (used by drag-drop and arrows).
+  function moveImage(from: number, to: number) {
+    setImages((prev) => {
+      if (to < 0 || to >= prev.length || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  }
+
+  function onImageDrop(target: number) {
+    if (dragIndex !== null) moveImage(dragIndex, target);
+    setDragIndex(null);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -142,11 +229,30 @@ export function ProductForm({ product }: Props) {
       }))
       .filter((g) => g.name && g.choices.length > 0);
 
+    // Build the variant matrix (only when the toggle is on). Each combination
+    // gets a price, availability and its own photos. Blank price → base price.
+    const base = Number(form.price || 0);
+    const variants =
+      useVariants && combos.length > 0
+        ? combos.map((combo) => {
+            const v = variantOf(comboKey(combo));
+            const price = v.price === "" ? base : Number(v.price) || 0;
+            return {
+              combo,
+              price,
+              available: v.available,
+              images: v.images,
+            };
+          })
+        : [];
+
     const payload = {
       name: form.name,
       category: form.category,
       secondaryCategory: form.secondaryCategory || null,
       options: cleanOptions,
+      variantPrices: [], // superseded by `variants`
+      variants,
       price: Number(form.price || 0),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
       stock: Number(form.stock || 0),
@@ -215,29 +321,70 @@ export function ProductForm({ product }: Props) {
             <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
               {images.map((img, i) => (
                 <div
-                  key={i}
-                  className="group relative aspect-square overflow-hidden rounded-xl border border-border bg-muted"
+                  key={`${img}-${i}`}
+                  draggable
+                  onDragStart={() => setDragIndex(i)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onImageDrop(i)}
+                  onDragEnd={() => setDragIndex(null)}
+                  className={`group relative aspect-square cursor-move overflow-hidden rounded-xl border bg-muted transition-all ${
+                    dragIndex === i
+                      ? "border-accent opacity-40 ring-2 ring-accent"
+                      : "border-border"
+                  }`}
                 >
                   <Image
                     src={img}
                     alt={`Image ${i + 1}`}
                     fill
                     sizes="120px"
-                    className="object-cover"
+                    className="pointer-events-none object-cover"
                   />
                   {i === 0 && (
                     <span className="absolute left-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground">
                       Cover
                     </span>
                   )}
-                  <button
-                    type="button"
-                    onClick={() => removeImage(i)}
-                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white opacity-0 transition-opacity group-hover:opacity-100"
-                    aria-label="Remove"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
+
+                  {/* Drag handle hint */}
+                  <span className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <GripVertical className="h-3.5 w-3.5" />
+                  </span>
+
+                  {/* Reorder + remove controls (touch-friendly fallback for drag) */}
+                  <div className="absolute inset-x-1 bottom-1 flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        onClick={() => moveImage(i, i - 1)}
+                        disabled={i === 0}
+                        className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white disabled:opacity-30"
+                        aria-label="Move left"
+                        title="Move left"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveImage(i, i + 1)}
+                        disabled={i === images.length - 1}
+                        className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white disabled:opacity-30"
+                        aria-label="Move right"
+                        title="Move right"
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(i)}
+                      className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white hover:bg-danger"
+                      aria-label="Remove"
+                      title="Remove"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -282,16 +429,23 @@ export function ProductForm({ product }: Props) {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            The first image is used as the cover. Upload needs Vercel Blob
-            configured; pasting an image URL always works.
+            Drag photos to reorder them (or use the arrows on hover). The first
+            image is used as the cover. Upload needs Vercel Blob configured;
+            pasting an image URL always works.
           </p>
         </Card>
 
         <Card title="Options & variants">
           <p className="-mt-1 text-xs text-muted-foreground">
-            Let customers choose e.g. <b>Size</b> or <b>Type</b>. Each choice can
-            add to the price (leave 0 for no change). Different products can have
-            different options.
+            Let customers choose e.g. <b>Size</b> or <b>Vatki</b>.{" "}
+            {useVariants ? (
+              <>
+                Prices, availability and photos come from the{" "}
+                <b>Variants</b> table below.
+              </>
+            ) : (
+              <>Each choice can add to the price (leave 0 for no change).</>
+            )}
           </p>
 
           {options.map((group, gi) => (
@@ -319,31 +473,33 @@ export function ProductForm({ product }: Props) {
 
               <div className="mt-3 space-y-2 pl-6">
                 {group.choices.map((choice, ci) => (
-                  <div key={ci} className="flex items-center gap-2">
+                  <div key={ci} className="flex flex-wrap items-center gap-2">
                     <input
                       value={choice.label}
                       onChange={(e) => setChoice(gi, ci, { label: e.target.value })}
-                      className="input h-9 flex-1"
-                      placeholder="Choice (e.g. Small)"
+                      className="input h-9 min-w-[8rem] flex-1"
+                      placeholder="Choice (e.g. 4 inch)"
                     />
-                    <div className="relative w-32 shrink-0">
-                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                        +₹
-                      </span>
-                      <input
-                        type="number"
-                        min={0}
-                        value={choice.priceDelta || ""}
-                        onChange={(e) =>
-                          setChoice(gi, ci, {
-                            priceDelta: Number(e.target.value) || 0,
-                          })
-                        }
-                        className="input h-9 pl-8"
-                        placeholder="0"
-                        title="Extra price for this choice"
-                      />
-                    </div>
+                    {!useVariants && (
+                      <div className="relative w-28 shrink-0">
+                        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                          +₹
+                        </span>
+                        <input
+                          type="number"
+                          min={0}
+                          value={choice.priceDelta || ""}
+                          onChange={(e) =>
+                            setChoice(gi, ci, {
+                              priceDelta: Number(e.target.value) || 0,
+                            })
+                          }
+                          className="input h-9 pl-8"
+                          placeholder="0"
+                          title="Extra price for this choice"
+                        />
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => removeChoice(gi, ci)}
@@ -374,6 +530,150 @@ export function ProductForm({ product }: Props) {
             <Plus className="h-4 w-4" /> Add an option (Size, Type…)
           </button>
         </Card>
+
+        {combos.length > 1 && (
+          <Card title="Variants (price · availability · photos)">
+            <div className="-mt-1 flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-md text-xs text-muted-foreground">
+                Give every combination (e.g. <b>4 inch</b> + <b>1 vatki</b>) its
+                own price, mark which ones you actually make, and pick the
+                photos that show for it. Unavailable combos are greyed out for
+                customers. Turn off for simple add-on pricing.
+              </p>
+              <Toggle
+                label={useVariants ? "On" : "Off"}
+                checked={useVariants}
+                onChange={setUseVariants}
+              />
+            </div>
+
+            {useVariants && (
+              <div className="space-y-3">
+                {images.length === 0 && (
+                  <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                    Upload photos above first — then you can assign them to each
+                    variant here.
+                  </p>
+                )}
+                <div className="overflow-x-auto rounded-xl border border-border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                        <th className="px-3 py-2.5 font-medium">Combination</th>
+                        <th className="w-20 px-3 py-2.5 text-center font-medium">
+                          Available
+                        </th>
+                        <th className="w-32 px-3 py-2.5 font-medium">Price (₹)</th>
+                        <th className="px-3 py-2.5 font-medium">Photos</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {combos.map((combo) => {
+                        const key = comboKey(combo);
+                        const v = variantOf(key);
+                        return (
+                          <tr key={key} className={v.available ? "" : "opacity-50"}>
+                            <td className="px-3 py-2 align-top">
+                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                                {Object.entries(combo).map(([name, value]) => (
+                                  <span
+                                    key={name}
+                                    className="rounded-full bg-muted px-2.5 py-0.5 text-xs"
+                                    title={name}
+                                  >
+                                    {value}
+                                  </span>
+                                ))}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-center align-top">
+                              <input
+                                type="checkbox"
+                                checked={v.available}
+                                onChange={(e) =>
+                                  setVariantField(key, {
+                                    available: e.target.checked,
+                                  })
+                                }
+                                className="mt-2 h-4 w-4 accent-[var(--accent)]"
+                                title="Do you make this combination?"
+                              />
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              <div className="relative">
+                                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                  ₹
+                                </span>
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={v.price}
+                                  onChange={(e) =>
+                                    setVariantField(key, { price: e.target.value })
+                                  }
+                                  className="input h-9 pl-6"
+                                  placeholder={form.price || "0"}
+                                  disabled={!v.available}
+                                />
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 align-top">
+                              {images.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">
+                                  —
+                                </span>
+                              ) : (
+                                <div className="flex flex-wrap gap-1.5 py-0.5">
+                                  {images.map((img, idx) => {
+                                    const on = v.images.includes(img);
+                                    return (
+                                      <button
+                                        key={img}
+                                        type="button"
+                                        onClick={() =>
+                                          toggleVariantImage(key, img)
+                                        }
+                                        className={`relative h-10 w-10 overflow-hidden rounded-md border-2 transition-all ${
+                                          on
+                                            ? "border-accent"
+                                            : "border-transparent opacity-50 hover:opacity-100"
+                                        }`}
+                                        title={`Photo ${idx + 1}${
+                                          on ? " (shown)" : ""
+                                        }`}
+                                      >
+                                        <Image
+                                          src={img}
+                                          alt={`Photo ${idx + 1}`}
+                                          fill
+                                          sizes="40px"
+                                          className="object-cover"
+                                        />
+                                        {on && (
+                                          <span className="absolute inset-0 grid place-items-center bg-accent/30">
+                                            <Check className="h-3.5 w-3.5 text-white drop-shadow" />
+                                          </span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Blank price → base price ({formatINR(Number(form.price || 0))}).
+                  No photos on a variant → the product’s main photos are shown.
+                </p>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
 
       {/* Sidebar */}
@@ -422,7 +722,7 @@ export function ProductForm({ product }: Props) {
               onChange={(e) => set("category", e.target.value)}
               className="input"
             >
-              {CATEGORIES.map((c) => (
+              {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
@@ -438,7 +738,7 @@ export function ProductForm({ product }: Props) {
               className="input"
             >
               <option value="">None</option>
-              {CATEGORIES.filter((c) => c !== form.category).map((c) => (
+              {categories.filter((c) => c !== form.category).map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>

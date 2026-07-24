@@ -4,7 +4,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Search } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CATEGORIES } from "@/lib/utils";
 
 const SORTS = [
   { value: "newest", label: "Newest" },
@@ -13,7 +12,7 @@ const SORTS = [
   { value: "price-desc", label: "Price: High to Low" },
 ];
 
-export function ShopFilters() {
+export function ShopFilters({ categories }: { categories: string[] }) {
   const router = useRouter();
   const params = useSearchParams();
   const activeCat = params.get("category") ?? "All";
@@ -69,7 +68,7 @@ export function ShopFilters() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {["All", ...CATEGORIES].map((cat) => (
+        {["All", ...categories].map((cat) => (
           <button
             key={cat}
             onClick={() => update({ category: cat })}

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getProducts, type ShopQuery } from "@/lib/products";
 import { ProductCard } from "@/components/store/product-card";
 import { ShopFilters } from "@/components/store/shop-filters";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,12 @@ export default async function ShopPage({
     q: sp.q,
     sort: (sp.sort as ShopQuery["sort"]) ?? "newest",
   };
-  const products = await getProducts(query);
+  
+  const [products, categoriesList] = await Promise.all([
+    getProducts(query),
+    prisma.category.findMany({ orderBy: { name: "asc" } }),
+  ]);
+  const categories = categoriesList.map((c) => c.name);
 
   return (
     <div className="container-px mx-auto max-w-7xl py-12">
@@ -34,7 +40,7 @@ export default async function ShopPage({
       </header>
 
       <Suspense fallback={<div className="h-24" />}>
-        <ShopFilters />
+        <ShopFilters categories={categories} />
       </Suspense>
 
       {products.length > 0 ? (

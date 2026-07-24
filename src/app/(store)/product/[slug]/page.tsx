@@ -7,6 +7,13 @@ import { formatINR } from "@/lib/utils";
 import { ProductGallery } from "@/components/store/product-gallery";
 import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductCard } from "@/components/store/product-card";
+import { ProductViewProvider } from "@/context/product-view";
+import {
+  normalizeVariants,
+  initialSelection,
+  imagesForSelection,
+  priceRange,
+} from "@/lib/variants";
 
 export const dynamic = "force-dynamic";
 
@@ -47,6 +54,14 @@ export default async function ProductPage({
         )
       : 0;
 
+  // Flipkart-style: seed the gallery with the default variant's photos, and
+  // show a price range in the header when variants differ in price.
+  const variants = normalizeVariants(product);
+  const startSelection = initialSelection(variants, product.options);
+  const startImages = imagesForSelection(product, startSelection);
+  const range = priceRange(product);
+  const hasRange = range.min !== range.max;
+
   return (
     <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
       {/* Breadcrumb */}
@@ -62,8 +77,9 @@ export default async function ProductPage({
         <span className="text-foreground">{product.name}</span>
       </nav>
 
+      <ProductViewProvider initialImages={startImages}>
       <div className="grid gap-10 md:grid-cols-2 lg:gap-16">
-        <ProductGallery images={product.images} name={product.name} />
+        <ProductGallery fallbackImages={product.images} name={product.name} />
 
         <div className="md:pt-4">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">
@@ -75,9 +91,11 @@ export default async function ProductPage({
 
           <div className="mt-4 flex items-center gap-3">
             <span className="text-2xl font-medium">
-              {formatINR(product.price)}
+              {hasRange
+                ? `${formatINR(range.min)} – ${formatINR(range.max)}`
+                : formatINR(range.min)}
             </span>
-            {discount > 0 && (
+            {!hasRange && discount > 0 && (
               <>
                 <span className="text-lg text-muted-foreground line-through">
                   {formatINR(product.compareAtPrice!)}
@@ -129,6 +147,7 @@ export default async function ProductPage({
           </div>
         </div>
       </div>
+      </ProductViewProvider>
 
       {related.length > 0 && (
         <section className="mt-24">

@@ -47,33 +47,7 @@ export function whatsappLink(phone: string, message: string): string {
   return `https://wa.me/${to}?text=${encodeURIComponent(message)}`;
 }
 
-export const CATEGORIES = [
-  "Home Decor",
-  "Pooja Essentials",
-  "Wedding Preservation",
-  "Personalised Gifts",
-  "Rakhi Collection",
-  "Tableware & Dining",
-  "Fashion Accessories",
-  "Car Accessories",
-  "Festive Decor",
-] as const;
-
-export type Category = (typeof CATEGORIES)[number];
-
 /** Encode a gallery path (folder names contain spaces → %20). */
 export const galleryImg = (path: string) =>
   encodeURI(`/products/gallery/${path}`);
 
-/** A representative real photo for each category (used on the homepage tiles). */
-export const CATEGORY_IMAGES: Record<string, string> = {
-  "Home Decor": galleryImg("Home Decor/Resin Name Plate/name-plate-1.jpg"),
-  "Pooja Essentials": galleryImg("Pooja Essentials/Resin Pooja Thali/pooja-thali-1.jpg"),
-  "Wedding Preservation": galleryImg("Wedding Preservation/Varmala and Flower Preservation/varmala-1.jpg"),
-  "Personalised Gifts": galleryImg("Personalised Gifts/Resin Photo Frame/photo-frame-1.jpg"),
-  "Rakhi Collection": galleryImg("Rakhi Collection/Rakhi Preservation Hamper/rakhi-hamper-1.jpg"),
-  "Tableware & Dining": galleryImg("Tableware and Dining/Ring Platter/ring-platter-1.jpg"),
-  "Fashion Accessories": galleryImg("Fashion Accessories/Resin Brooch/brooch-1.jpg"),
-  "Car Accessories": galleryImg("Car Accessories/Dashboard Idol/dashboard-idol-1.jpg"),
-  "Festive Decor": galleryImg("Festive Decor/Resin Toran/toran-1.jpg"),
-};

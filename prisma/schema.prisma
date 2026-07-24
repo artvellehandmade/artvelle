@@ -21,8 +21,16 @@ model Product {
   secondaryCategory String? // optional — lets a piece appear under a second category
   tags              String[] @default([])
   // Per-product options/variants the customer chooses (Size, Type, Shape…).
-  // Shape: [{ name, choices: [{ label, priceDelta }] }]
+  // Shape: [{ name, choices: [{ label, priceDelta, image? }] }]
+  // `image` (optional) lets a choice swap the displayed photo (e.g. Shape: Circle).
   options           Json     @default("[]")
+  // Optional exact price per full option-combination (overrides additive pricing).
+  // Shape: [{ combo: { "Size": "S", "Type": "A" }, price: 2000 }]  (legacy)
+  variantPrices     Json     @default("[]")
+  // Flipkart-style variant matrix. Each combination has its own price,
+  // availability and its own set of photos. Supersedes variantPrices when set.
+  // Shape: [{ combo: { "Size": "4 inch", "Vatki": "1" }, price, available, images: [] }]
+  variants          Json     @default("[]")
   price             Int // whole rupees
   compareAtPrice    Int? // optional "was" price for showing a discount
   images            String[] @default([])
@@ -150,3 +158,14 @@ model AdminUser {
   name         String?
   createdAt    DateTime @default(now())
 }
+
+// -------- Categories --------
+model Category {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+

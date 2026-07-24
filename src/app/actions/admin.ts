@@ -42,9 +42,22 @@ const optionSchema = z.object({
       z.object({
         label: z.string().trim().min(1),
         priceDelta: z.coerce.number().int().default(0),
+        image: z.string().trim().nullable().optional(),
       })
     )
     .min(1),
+});
+
+const variantPriceSchema = z.object({
+  combo: z.record(z.string(), z.string()),
+  price: z.coerce.number().int().nonnegative(),
+});
+
+const variantSchema = z.object({
+  combo: z.record(z.string(), z.string()),
+  price: z.coerce.number().int().nonnegative(),
+  available: z.boolean().default(true),
+  images: z.array(z.string()).default([]),
 });
 
 const productSchema = z.object({
@@ -58,6 +71,8 @@ const productSchema = z.object({
   tags: z.array(z.string()).default([]),
   images: z.array(z.string()).default([]),
   options: z.array(optionSchema).default([]),
+  variantPrices: z.array(variantPriceSchema).default([]),
+  variants: z.array(variantSchema).default([]),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
 });
@@ -79,6 +94,8 @@ export async function createProduct(input: ProductInput) {
       secondaryCategory: data.secondaryCategory || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options,
+      variantPrices: data.variantPrices,
+      variants: data.variants,
       slug,
     },
   });
@@ -102,6 +119,8 @@ export async function updateProduct(id: string, input: ProductInput) {
       secondaryCategory: data.secondaryCategory || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options,
+      variantPrices: data.variantPrices,
+      variants: data.variants,
       slug,
     },
   });
@@ -123,6 +142,90 @@ export async function setProductActive(id: string, isActive: boolean) {
   revalidateStore();
   return { ok: true as const };
 }
+
+// -------- Categories --------
+const categorySchema = z.object({
+  name: z.string().trim().min(1, "Name is required"),
+  imageUrl: z.string().trim().nullable().optional(),
+});
+
+export type CategoryInput = z.input<typeof categorySchema>;
+
+async function ensureUniqueCategorySlug(name: string, ignoreId?: string) {
+  const base = slugify(name) || "category";
+  let slug = base;
+  let n = 1;
+  while (true) {
+    const existing = await prisma.category.findUnique({ where: { slug } });
+    if (!existing || existing.id === ignoreId) return slug;
+    n += 1;
+    slug = `${base}-${n}`;
+  }
+}
+
+export async function createCategory(input: CategoryInput) {
+  await requireAdmin();
+  const parsed = categorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const { name, imageUrl } = parsed.data;
+  const slug = await ensureUniqueCategorySlug(name);
+
+  try {
+    const category = await prisma.category.create({
+      data: {
+        name,
+        slug,
+        imageUrl: imageUrl || null,
+      },
+    });
+    revalidateStore();
+    revalidatePath("/admin/categories");
+    return { ok: true as const, id: category.id };
+  } catch (err: any) {
+    return { ok: false as const, error: err.message || "Failed to create category" };
+  }
+}
+
+export async function updateCategory(id: string, input: CategoryInput) {
+  await requireAdmin();
+  const parsed = categorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const { name, imageUrl } = parsed.data;
+  const slug = await ensureUniqueCategorySlug(name, id);
+
+  try {
+    await prisma.category.update({
+      where: { id },
+      data: {
+        name,
+        slug,
+        imageUrl: imageUrl || null,
+      },
+    });
+    revalidateStore();
+    revalidatePath("/admin/categories");
+    return { ok: true as const };
+  } catch (err: any) {
+    return { ok: false as const, error: err.message || "Failed to update category" };
+  }
+}
+
+export async function deleteCategory(id: string) {
+  await requireAdmin();
+  try {
+    await prisma.category.delete({ where: { id } });
+    revalidateStore();
+    revalidatePath("/admin/categories");
+    return { ok: true as const };
+  } catch (err: any) {
+    return { ok: false as const, error: err.message || "Failed to delete category" };
+  }
+}
+
 
 // -------- Settings (branding + contact) --------
 const settingsSchema = z.object({

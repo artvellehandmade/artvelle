@@ -14,7 +14,8 @@ import { getSettings } from "@/lib/settings";
 import { ButtonLink } from "@/components/ui/button";
 import { ProductCard } from "@/components/store/product-card";
 import { Reveal } from "@/components/store/reveal";
-import { CATEGORIES, CATEGORY_IMAGES, galleryImg } from "@/lib/utils";
+import { galleryImg } from "@/lib/utils";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -66,10 +67,11 @@ const TESTIMONIALS = [
 ];
 
 export default async function HomePage() {
-  const [settings, featured, counts] = await Promise.all([
+  const [settings, featured, counts, categories] = await Promise.all([
     getSettings(),
     getFeatured(8),
     getCategoryCounts(),
+    prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
 
   const countFor = (c: string) =>
@@ -213,23 +215,23 @@ export default async function HomePage() {
           </div>
         </Reveal>
         <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
-          {CATEGORIES.map((cat, i) => (
-            <Reveal key={cat} delay={i * 0.05}>
+          {categories.map((cat, i) => (
+            <Reveal key={cat.id} delay={i * 0.05}>
               <Link
-                href={`/shop?category=${encodeURIComponent(cat)}`}
+                href={`/shop?category=${encodeURIComponent(cat.name)}`}
                 className="card-lift group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
-                  src={CATEGORY_IMAGES[cat] ?? HERO_IMAGES[0]}
-                  alt={cat}
+                  src={cat.imageUrl ?? HERO_IMAGES[0]}
+                  alt={cat.name}
                   fill
                   sizes="(max-width:768px) 50vw, 16vw"
                   className="object-cover transition-transform duration-700 group-hover:scale-110 group-hover:rotate-1"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent transition-opacity duration-500 group-hover:from-black/85" />
                 <div className="absolute inset-x-0 bottom-0 translate-y-1 p-3 text-white transition-transform duration-500 group-hover:translate-y-0">
-                  <p className="font-serif text-base leading-tight">{cat}</p>
-                  <p className="text-[11px] opacity-80">{countFor(cat)} pieces</p>
+                  <p className="font-serif text-base leading-tight">{cat.name}</p>
+                  <p className="text-[11px] opacity-80">{countFor(cat.name)} pieces</p>
                 </div>
                 <span className="absolute right-3 top-3 grid h-8 w-8 translate-y-1 place-items-center rounded-full bg-white/15 opacity-0 backdrop-blur transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100">
                   <ArrowRight className="h-4 w-4 text-white" />

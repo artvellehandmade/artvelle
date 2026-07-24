@@ -6,8 +6,13 @@ import { getSettings } from "@/lib/settings";
 import { sendOrderEmails } from "@/lib/email";
 import { getUserSession } from "@/lib/user-auth";
 import { priceWithOptions } from "@/lib/options";
+import {
+  normalizeVariants,
+  resolveVariant,
+  toSelection,
+} from "@/lib/variants";
 import { orderNumber } from "@/lib/utils";
-import type { ProductOption } from "@/lib/types";
+import type { ProductOption, VariantPrice, Variant } from "@/lib/types";
 
 const inputSchema = z.object({
   customerName: z.string().min(2, "Please enter your name"),
@@ -62,19 +67,39 @@ export async function placeOrder(input: PlaceOrderInput) {
   const lineItems = data.items.map((i) => {
     const p = products.find((pr) => pr.id === i.productId);
     if (!p) throw new Error("A product in your cart is no longer available.");
-    // Recompute the unit price from the product's real option deltas.
+    // Recompute the unit price from the product's real option prices.
     const productOptions = Array.isArray(p.options)
       ? (p.options as unknown as ProductOption[])
       : [];
-    const { unitPrice, clean } = priceWithOptions(
+    const variantPrices = Array.isArray(p.variantPrices)
+      ? (p.variantPrices as unknown as VariantPrice[])
+      : [];
+    const variants = Array.isArray(p.variants)
+      ? (p.variants as unknown as Variant[])
+      : [];
+
+    // Validate the client's option choices against the product's real deltas.
+    const { unitPrice: additivePrice, clean } = priceWithOptions(
       p.price,
       productOptions,
-      i.options
+      i.options,
+      variantPrices
     );
+
+    // Prefer the Flipkart-style variant matrix when the product uses one.
+    const source = { price: p.price, options: productOptions, variants, variantPrices, images: p.images };
+    const normalized = normalizeVariants(source);
+    const matched =
+      normalized.length && clean.length
+        ? resolveVariant(normalized, toSelection(clean))
+        : null;
+    const unitPrice = matched ? matched.price : additivePrice;
+    const image = matched?.images[0] ?? p.images[0] ?? "";
+
     return {
       productId: p.id,
       name: p.name,
-      image: p.images[0] ?? "",
+      image,
       price: unitPrice,
       quantity: i.quantity,
       options: clean,

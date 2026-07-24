@@ -1,54 +1,68 @@
 "use client";
 
-import { useState } from "react";
-import { toast } from "sonner";
+import { useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { ShoppingBag, Minus, Plus, Check, Zap, Loader2 } from "lucide-react";
 import { useCart } from "@/context/cart";
+import { useProductView } from "@/context/product-view";
 import { Button } from "@/components/ui/button";
 import { WhatsAppProductButton } from "@/components/store/product-actions";
 import { formatINR } from "@/lib/utils";
-import { priceWithOptions, defaultSelection } from "@/lib/options";
-import type { ProductDTO, SelectedOption } from "@/lib/types";
+import {
+  normalizeVariants,
+  initialSelection,
+  repairSelection,
+  isChoiceEnabled,
+  resolveVariant,
+  priceForSelection,
+  imagesForSelection,
+  toSelectedOptions,
+  type Selection,
+} from "@/lib/variants";
+import type { ProductDTO } from "@/lib/types";
 
 export function ProductPurchase({ product }: { product: ProductDTO }) {
   const { addItem, buyNow, leadInfo } = useCart();
-  const soldOut = product.stock <= 0;
+  const { setImages } = useProductView();
+
+  const variants = useMemo(() => normalizeVariants(product), [product]);
+  const [selected, setSelected] = useState<Selection>(() =>
+    initialSelection(variants, product.options)
+  );
+
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [buying, setBuying] = useState(false);
-  const [selected, setSelected] = useState<SelectedOption[]>(() =>
-    defaultSelection(product.options)
-  );
 
-  const { unitPrice } = priceWithOptions(
-    product.price,
-    product.options,
-    selected
-  );
-  const hasPriceDeltas = product.options.some((g) =>
-    g.choices.some((c) => c.priceDelta !== 0)
-  );
+  const unitPrice = priceForSelection(product, selected);
+  const hasOptions = product.options.length > 0;
+  const noVariantAvailable =
+    variants.length > 0 && !variants.some((v) => v.available);
+  const soldOut = product.stock <= 0 || noVariantAvailable;
 
   function choose(groupName: string, value: string) {
-    setSelected((prev) => {
-      const rest = prev.filter((o) => o.name !== groupName);
-      return [...rest, { name: groupName, value }];
+    if (!isChoiceEnabled(variants, product.options, groupName, value, selected))
+      return;
+    const next = repairSelection(variants, product.options, {
+      ...selected,
+      [groupName]: value,
     });
-  }
-
-  function valueFor(groupName: string) {
-    return selected.find((o) => o.name === groupName)?.value;
+    setSelected(next);
+    setImages(imagesForSelection(product, next));
   }
 
   function buildItem() {
+    const variant = resolveVariant(variants, selected);
     return {
       productId: product.id,
       slug: product.slug,
       name: product.name,
-      image: product.images[0] ?? "",
+      image: variant?.images[0] ?? product.images[0] ?? "",
       price: unitPrice,
       stock: product.stock,
-      options: selected.length ? selected : undefined,
+      options: Object.keys(selected).length
+        ? toSelectedOptions(selected)
+        : undefined,
     };
   }
 
@@ -70,59 +84,84 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
 
   return (
     <div className="space-y-6">
-      {/* Options */}
+      {/* Options — Flipkart-style boxes, one pick per attribute */}
       {product.options.map((group) => (
         <div key={group.name}>
           <p className="mb-2 text-sm font-medium">
             {group.name}
             <span className="ml-2 font-normal text-muted-foreground">
-              {valueFor(group.name)}
+              {selected[group.name]}
             </span>
           </p>
           <div className="flex flex-wrap gap-2">
             {group.choices.map((choice) => {
-              const active = valueFor(group.name) === choice.label;
+              const isActive = selected[group.name] === choice.label;
+              const enabled = isChoiceEnabled(
+                variants,
+                product.options,
+                group.name,
+                choice.label,
+                selected
+              );
               return (
-                <button
+                <motion.button
                   key={choice.label}
                   type="button"
+                  disabled={!enabled}
+                  whileTap={enabled ? { scale: 0.94 } : undefined}
                   onClick={() => choose(group.name, choice.label)}
-                  className={`rounded-full border px-4 py-2 text-sm transition-colors ${
-                    active
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-border hover:bg-muted"
+                  className={`relative flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm transition-colors ${
+                    isActive
+                      ? "border-accent bg-accent/10 text-foreground"
+                      : enabled
+                        ? "border-border hover:border-foreground/40"
+                        : "cursor-not-allowed border-dashed border-border text-muted-foreground/50"
                   }`}
+                  title={enabled ? undefined : "Not available in this combination"}
                 >
-                  {choice.label}
-                  {choice.priceDelta > 0 && (
-                    <span
-                      className={
-                        active ? "opacity-80" : "text-muted-foreground"
-                      }
-                    >
-                      {" "}
-                      +{formatINR(choice.priceDelta)}
-                    </span>
-                  )}
-                </button>
+                  {/* Checkbox indicator */}
+                  <span
+                    className={`grid h-4 w-4 place-items-center rounded border ${
+                      isActive
+                        ? "border-accent bg-accent text-accent-foreground"
+                        : "border-muted-foreground/40"
+                    }`}
+                  >
+                    {isActive && <Check className="h-3 w-3" />}
+                  </span>
+                  <span className={!enabled ? "line-through" : ""}>
+                    {choice.label}
+                  </span>
+                </motion.button>
               );
             })}
           </div>
         </div>
       ))}
 
-      {/* Live price for the current selection (when options change price) */}
-      {hasPriceDeltas && (
+      {/* Live price for the current selection */}
+      {hasOptions && (
         <div className="flex items-baseline gap-2">
           <span className="text-sm text-muted-foreground">Your selection:</span>
-          <span className="text-xl font-semibold">{formatINR(unitPrice)}</span>
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.span
+              key={unitPrice}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -6 }}
+              transition={{ duration: 0.2 }}
+              className="text-xl font-semibold"
+            >
+              {formatINR(unitPrice)}
+            </motion.span>
+          </AnimatePresence>
         </div>
       )}
 
       {/* Quantity + Add / Buy */}
       {soldOut ? (
         <Button variant="outline" disabled className="w-full" size="lg">
-          Sold out
+          {noVariantAvailable ? "Out of stock" : "Sold out"}
         </Button>
       ) : (
         <div className="space-y-3">
@@ -177,7 +216,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             <WhatsAppProductButton
               product={product}
               variant="full"
-              options={selected}
+              options={toSelectedOptions(selected)}
               className="flex-1"
             />
           </div>
