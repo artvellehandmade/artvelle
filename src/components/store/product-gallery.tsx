@@ -6,37 +6,46 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProductView } from "@/context/product-view";
+import { unionImages, variantForImage } from "@/lib/variants";
+import type { ProductDTO, Variant } from "@/lib/types";
 
 export function ProductGallery({
-  fallbackImages,
+  product,
+  variants,
   name,
 }: {
-  fallbackImages: string[];
+  product: ProductDTO;
+  variants: Variant[];
   name: string;
 }) {
-  const { images } = useProductView();
-  const list = (images.length ? images : fallbackImages).filter(Boolean);
+  const { selection, setSelection } = useProductView();
+
+  // Photos for the current (possibly partial) selection — a union across all
+  // still-matching variants, falling back to the product's own photos.
+  const list = unionImages(product, selection, product.images).filter(Boolean);
   const safe = list.length ? list : [""];
 
-  const [active, setActive] = useState(0);
+  // Track the shown photo by URL so it survives list changes (variant swaps).
+  const [activeUrl, setActiveUrl] = useState<string>(safe[0]);
   const [direction, setDirection] = useState(0);
-
-  // When the variant (image set) changes, snap back to the first photo.
-  const listKey = safe.join("|");
-  const [seenKey, setSeenKey] = useState(listKey);
-  if (listKey !== seenKey) {
-    setSeenKey(listKey);
-    setActive(0);
+  if (safe.length && !safe.includes(activeUrl)) {
+    setActiveUrl(safe[0]); // adjust-during-render when the photo set changes
     setDirection(0);
   }
+  const current = Math.max(0, safe.indexOf(activeUrl));
 
-  const current = Math.min(active, safe.length - 1);
+  function goTo(index: number, dir: number) {
+    const wrapped = (index + safe.length) % safe.length;
+    setDirection(dir);
+    setActiveUrl(safe[wrapped]);
+  }
 
-  function go(next: number) {
-    const count = safe.length;
-    const wrapped = (next + count) % count;
-    setDirection(next > current ? 1 : -1);
-    setActive(wrapped);
+  // Clicking a photo pins the variant it uniquely belongs to (image → options).
+  function pickPhoto(img: string, index: number) {
+    setDirection(index > current ? 1 : -1);
+    setActiveUrl(img);
+    const v = variantForImage(variants, img);
+    if (v) setSelection({ ...v.combo });
   }
 
   return (
@@ -48,10 +57,7 @@ export function ProductGallery({
             <button
               key={`${img}-${i}`}
               type="button"
-              onClick={() => {
-                setDirection(i > current ? 1 : -1);
-                setActive(i);
-              }}
+              onClick={() => pickPhoto(img, i)}
               className={cn(
                 "relative h-16 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition-all cursor-pointer md:h-20 md:w-20",
                 current === i
@@ -75,10 +81,10 @@ export function ProductGallery({
       )}
 
       {/* Main image */}
-      <div className="group relative aspect-square flex-1 overflow-hidden rounded-3xl bg-muted">
+      <div className="group relative aspect-square w-full flex-1 overflow-hidden rounded-3xl bg-muted ring-1 ring-border/70">
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
           <motion.div
-            key={`${listKey}#${current}`}
+            key={activeUrl || "empty"}
             custom={direction}
             initial={{ opacity: 0, x: direction * 60, scale: 0.98 }}
             animate={{ opacity: 1, x: 0, scale: 1 }}
@@ -108,7 +114,7 @@ export function ProductGallery({
           <>
             <button
               type="button"
-              onClick={() => go(current - 1)}
+              onClick={() => goTo(current - 1, -1)}
               aria-label="Previous photo"
               className="absolute left-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground opacity-0 shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background group-hover:opacity-100"
             >
@@ -116,7 +122,7 @@ export function ProductGallery({
             </button>
             <button
               type="button"
-              onClick={() => go(current + 1)}
+              onClick={() => goTo(current + 1, 1)}
               aria-label="Next photo"
               className="absolute right-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground opacity-0 shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background group-hover:opacity-100"
             >

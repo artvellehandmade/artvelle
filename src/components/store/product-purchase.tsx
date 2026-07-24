@@ -10,49 +10,57 @@ import { WhatsAppProductButton } from "@/components/store/product-actions";
 import { formatINR } from "@/lib/utils";
 import {
   normalizeVariants,
-  initialSelection,
-  repairSelection,
   isChoiceEnabled,
-  resolveVariant,
-  priceForSelection,
-  imagesForSelection,
+  pruneSelection,
+  effectiveVariant,
+  minMatchingPrice,
   toSelectedOptions,
-  type Selection,
 } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 
 export function ProductPurchase({ product }: { product: ProductDTO }) {
   const { addItem, buyNow, leadInfo } = useCart();
-  const { setImages } = useProductView();
+  const { selection, setSelection } = useProductView();
 
   const variants = useMemo(() => normalizeVariants(product), [product]);
-  const [selected, setSelected] = useState<Selection>(() =>
-    initialSelection(variants, product.options)
-  );
-
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [buying, setBuying] = useState(false);
 
-  const unitPrice = priceForSelection(product, selected);
   const hasOptions = product.options.length > 0;
+  const variant = effectiveVariant(product, selection);
+  const minPrice = minMatchingPrice(product, selection);
+  const unitPrice = variant ? variant.price : minPrice;
+
   const noVariantAvailable =
     variants.length > 0 && !variants.some((v) => v.available);
   const soldOut = product.stock <= 0 || noVariantAvailable;
+  // With variants, a specific one must be pinned down before ordering.
+  const needsChoice = variants.length > 0 && !variant;
+  const canOrder = !soldOut && !needsChoice;
 
-  function choose(groupName: string, value: string) {
-    if (!isChoiceEnabled(variants, product.options, groupName, value, selected))
+  function toggle(groupName: string, value: string) {
+    if (selection[groupName] === value) {
+      // Deselect — click the active box again to clear it.
+      const next = { ...selection };
+      delete next[groupName];
+      setSelection(next);
       return;
-    const next = repairSelection(variants, product.options, {
-      ...selected,
-      [groupName]: value,
-    });
-    setSelected(next);
-    setImages(imagesForSelection(product, next));
+    }
+    if (!isChoiceEnabled(variants, product.options, groupName, value, selection))
+      return;
+    // Set the choice, then drop any now-incompatible later options.
+    setSelection(
+      pruneSelection(variants, product.options, {
+        ...selection,
+        [groupName]: value,
+      })
+    );
   }
 
   function buildItem() {
-    const variant = resolveVariant(variants, selected);
+    // Prefer the pinned variant's exact combo/photo/price.
+    const combo = variant ? variant.combo : selection;
     return {
       productId: product.id,
       slug: product.slug,
@@ -60,14 +68,12 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
       image: variant?.images[0] ?? product.images[0] ?? "",
       price: unitPrice,
       stock: product.stock,
-      options: Object.keys(selected).length
-        ? toSelectedOptions(selected)
-        : undefined,
+      options: Object.keys(combo).length ? toSelectedOptions(combo) : undefined,
     };
   }
 
   function onAdd() {
-    if (soldOut) return;
+    if (!canOrder) return;
     const had = leadInfo !== null;
     addItem(buildItem(), qty);
     if (had) {
@@ -77,39 +83,41 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   }
 
   function onBuy() {
-    if (soldOut) return;
+    if (!canOrder) return;
     if (leadInfo) setBuying(true);
     buyNow(buildItem(), qty);
   }
 
   return (
     <div className="space-y-6">
-      {/* Options — Flipkart-style boxes, one pick per attribute */}
+      {/* Options — checkbox-style boxes; click again to deselect */}
       {product.options.map((group) => (
         <div key={group.name}>
           <p className="mb-2 text-sm font-medium">
             {group.name}
             <span className="ml-2 font-normal text-muted-foreground">
-              {selected[group.name]}
+              {selection[group.name] ?? "Any"}
             </span>
           </p>
           <div className="flex flex-wrap gap-2">
             {group.choices.map((choice) => {
-              const isActive = selected[group.name] === choice.label;
-              const enabled = isChoiceEnabled(
-                variants,
-                product.options,
-                group.name,
-                choice.label,
-                selected
-              );
+              const isActive = selection[group.name] === choice.label;
+              const enabled =
+                isActive ||
+                isChoiceEnabled(
+                  variants,
+                  product.options,
+                  group.name,
+                  choice.label,
+                  selection
+                );
               return (
                 <motion.button
                   key={choice.label}
                   type="button"
                   disabled={!enabled}
                   whileTap={enabled ? { scale: 0.94 } : undefined}
-                  onClick={() => choose(group.name, choice.label)}
+                  onClick={() => toggle(group.name, choice.label)}
                   className={`relative flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm transition-colors ${
                     isActive
                       ? "border-accent bg-accent/10 text-foreground"
@@ -117,9 +125,14 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                         ? "border-border hover:border-foreground/40"
                         : "cursor-not-allowed border-dashed border-border text-muted-foreground/50"
                   }`}
-                  title={enabled ? undefined : "Not available in this combination"}
+                  title={
+                    enabled
+                      ? isActive
+                        ? "Click again to deselect"
+                        : undefined
+                      : "Not available in this combination"
+                  }
                 >
-                  {/* Checkbox indicator */}
                   <span
                     className={`grid h-4 w-4 place-items-center rounded border ${
                       isActive
@@ -139,13 +152,15 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
         </div>
       ))}
 
-      {/* Live price for the current selection */}
+      {/* Live price — "From" until a single variant is pinned down */}
       {hasOptions && (
         <div className="flex items-baseline gap-2">
-          <span className="text-sm text-muted-foreground">Your selection:</span>
+          <span className="text-sm text-muted-foreground">
+            {variant ? "Your selection:" : "From"}
+          </span>
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
-              key={unitPrice}
+              key={`${unitPrice}-${!!variant}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
@@ -165,6 +180,11 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
         </Button>
       ) : (
         <div className="space-y-3">
+          {needsChoice && (
+            <p className="text-sm text-muted-foreground">
+              Please choose an option to continue.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-3">
             <div className="inline-flex h-12 items-center rounded-full border border-border">
               <button
@@ -185,7 +205,12 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                 <Plus className="h-4 w-4" />
               </button>
             </div>
-            <Button onClick={onAdd} size="lg" className="min-w-[10rem] flex-1">
+            <Button
+              onClick={onAdd}
+              size="lg"
+              className="min-w-[10rem] flex-1"
+              disabled={needsChoice}
+            >
               {added ? (
                 <>
                   <Check className="h-4 w-4" /> Added
@@ -203,7 +228,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
               onClick={onBuy}
               variant="gold"
               size="lg"
-              disabled={buying}
+              disabled={buying || needsChoice}
               className="flex-1"
             >
               {buying ? (
@@ -216,7 +241,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             <WhatsAppProductButton
               product={product}
               variant="full"
-              options={toSelectedOptions(selected)}
+              options={toSelectedOptions(variant ? variant.combo : selection)}
               className="flex-1"
             />
           </div>

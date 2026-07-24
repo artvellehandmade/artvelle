@@ -1,33 +1,33 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
+import type { Selection } from "@/lib/variants";
 
 type ProductViewValue = {
-  /** The set of images the gallery should currently show (the selected variant's). */
-  images: string[];
-  setImages: (images: string[]) => void;
+  /** The customer's (possibly partial or empty) variant selection. */
+  selection: Selection;
+  setSelection: (s: Selection) => void;
 };
 
 const ProductViewContext = createContext<ProductViewValue>({
-  images: [],
-  setImages: () => {},
+  selection: {},
+  setSelection: () => {},
 });
 
 /**
- * Shares the "currently shown images" between the option picker
- * (ProductPurchase) and the gallery, so choosing a variant swaps the whole
- * set of photos — not just one.
+ * Shares the variant selection between the option picker (ProductPurchase) and
+ * the gallery, so the two stay in sync both ways: picking an option filters the
+ * photos, and clicking a photo can pin the matching variant. Starts with
+ * nothing selected — the customer browses everything, then narrows down.
  */
 export function ProductViewProvider({
-  initialImages = [],
   children,
 }: {
-  initialImages?: string[];
   children: React.ReactNode;
 }) {
-  const [images, setImages] = useState<string[]>(initialImages);
+  const [selection, setSelection] = useState<Selection>({});
   return (
-    <ProductViewContext.Provider value={{ images, setImages }}>
+    <ProductViewContext.Provider value={{ selection, setSelection }}>
       {children}
     </ProductViewContext.Provider>
   );

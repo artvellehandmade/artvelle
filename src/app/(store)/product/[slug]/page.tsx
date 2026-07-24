@@ -8,12 +8,7 @@ import { ProductGallery } from "@/components/store/product-gallery";
 import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductCard } from "@/components/store/product-card";
 import { ProductViewProvider } from "@/context/product-view";
-import {
-  normalizeVariants,
-  initialSelection,
-  imagesForSelection,
-  priceRange,
-} from "@/lib/variants";
+import { normalizeVariants, priceRange } from "@/lib/variants";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +49,9 @@ export default async function ProductPage({
         )
       : 0;
 
-  // Flipkart-style: seed the gallery with the default variant's photos, and
-  // show a price range in the header when variants differ in price.
+  // Flipkart-style: nothing is pre-selected — the customer browses all photos
+  // and narrows down. Header shows a price range when variants differ.
   const variants = normalizeVariants(product);
-  const startSelection = initialSelection(variants, product.options);
-  const startImages = imagesForSelection(product, startSelection);
   const range = priceRange(product);
   const hasRange = range.min !== range.max;
 
@@ -77,9 +70,17 @@ export default async function ProductPage({
         <span className="text-foreground">{product.name}</span>
       </nav>
 
-      <ProductViewProvider initialImages={startImages}>
-      <div className="grid gap-10 md:grid-cols-2 lg:gap-16">
-        <ProductGallery fallbackImages={product.images} name={product.name} />
+      <ProductViewProvider>
+      <div className="grid items-start gap-10 md:grid-cols-2 lg:gap-16">
+        {/* Gallery: pinned to the top and sticky so a long description never
+            stretches or scrolls the square photo out of view. */}
+        <div className="md:sticky md:top-24 self-start">
+          <ProductGallery
+            product={product}
+            variants={variants}
+            name={product.name}
+          />
+        </div>
 
         <div className="md:pt-4">
           <p className="text-xs uppercase tracking-widest text-muted-foreground">

@@ -83,6 +83,10 @@ export function isChoiceEnabled(
   selected: Selection
 ): boolean {
   if (!variants.length) return true; // simple product, no constraints
+  // Hierarchical: the first option (e.g. Size) is primary and always
+  // selectable; later options (e.g. Vatki) are constrained only by the
+  // options listed BEFORE them. Switching a primary option never dead-ends —
+  // conflicting sub-selections are dropped instead (see pruneSelection).
   const order = options.map((o) => o.name);
   const gi = order.indexOf(groupName);
   const prior = order.slice(0, gi);
@@ -92,6 +96,97 @@ export function isChoiceEnabled(
       v.combo[groupName] === choice &&
       prior.every((g) => selected[g] == null || v.combo[g] === selected[g])
   );
+}
+
+/**
+ * Drop any selection that has become inconsistent with the options chosen
+ * before it (keeps earlier picks, removes conflicting later ones). Used after
+ * a change so switching e.g. Size clears an incompatible Vatki instead of
+ * blocking.
+ */
+export function pruneSelection(
+  variants: Variant[],
+  options: ProductOption[],
+  selected: Selection
+): Selection {
+  if (!variants.length) return { ...selected };
+  const order = options.map((o) => o.name);
+  const result: Selection = { ...selected };
+  for (let i = 0; i < order.length; i++) {
+    const g = order[i];
+    if (result[g] == null) continue;
+    const ok = variants.some(
+      (v) =>
+        v.available &&
+        v.combo[g] === result[g] &&
+        order
+          .slice(0, i)
+          .every((pg) => result[pg] == null || v.combo[pg] === result[pg])
+    );
+    if (!ok) delete result[g];
+  }
+  return result;
+}
+
+/** All created (available) variants consistent with a partial selection. */
+export function matchingVariants(
+  variants: Variant[],
+  selected: Selection
+): Variant[] {
+  return variants.filter(
+    (v) =>
+      v.available &&
+      Object.entries(selected).every(([g, val]) => v.combo[g] === val)
+  );
+}
+
+/**
+ * The single variant a selection points to, if it can be pinned down — either
+ * the selection names every attribute, or only one created variant is left.
+ */
+export function effectiveVariant(
+  p: VariantSource,
+  selected: Selection
+): Variant | null {
+  const variants = normalizeVariants(p);
+  if (!variants.length) return null;
+  const matched = matchingVariants(variants, selected);
+  if (matched.length === 1) return matched[0];
+  const full = p.options.every((o) => selected[o.name] != null);
+  return full ? resolveVariant(variants, selected) : null;
+}
+
+/** Lowest price among the variants a (partial) selection still allows. */
+export function minMatchingPrice(p: VariantSource, selected: Selection): number {
+  const variants = normalizeVariants(p);
+  const matched = matchingVariants(variants, selected);
+  if (!matched.length) return p.price;
+  return Math.min(...matched.map((v) => v.price));
+}
+
+/** Union of photos across the variants a (partial) selection allows. */
+export function unionImages(
+  p: VariantSource,
+  selected: Selection,
+  fallback: string[]
+): string[] {
+  const variants = normalizeVariants(p);
+  if (!variants.length) return fallback;
+  const matched = matchingVariants(variants, selected);
+  const out: string[] = [];
+  for (const v of matched) {
+    for (const img of v.images) if (!out.includes(img)) out.push(img);
+  }
+  return out.length ? out : fallback;
+}
+
+/** The one created variant a photo uniquely belongs to (null if 0 or many). */
+export function variantForImage(
+  variants: Variant[],
+  img: string
+): Variant | null {
+  const owners = variants.filter((v) => v.available && v.images.includes(img));
+  return owners.length === 1 ? owners[0] : null;
 }
 
 /**
