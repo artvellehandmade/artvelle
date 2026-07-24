@@ -3,8 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "picsum.photos" },
-      { protocol: "https", hostname: "images.unsplash.com" },
+      // Admin-uploaded product photos are stored on Vercel Blob.
       { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
     ],
   },

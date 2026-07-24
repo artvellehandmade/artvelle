@@ -3,10 +3,6 @@ import bcrypt from "bcryptjs";
 
 const prisma = new PrismaClient();
 
-// Placeholder imagery — replace with real photos later via the admin panel
-// (Upload with Vercel Blob, or paste an image URL).
-const img = (seed: string) => `https://picsum.photos/seed/${seed}/900/900`;
-
 function slugify(text: string) {
   return text
     .toLowerCase()
@@ -16,9 +12,10 @@ function slugify(text: string) {
 }
 
 // -------------------------------------------------------------------------
-// Artvelle real product catalogue (prices are sensible starting points —
-// edit any of them anytime from Admin → Products).
-// category = primary, secondaryCategory = also shows under this section.
+// Artvelle real product catalogue.
+// Prices/options are taken from the studio price notebook; edit any of them
+// anytime from Admin → Products.
+// category = primary section, secondaryCategory = also shows under this section.
 // -------------------------------------------------------------------------
 type SeedProduct = {
   name: string;
@@ -30,328 +27,452 @@ type SeedProduct = {
   tags: string[];
   stock: number;
   isFeatured?: boolean;
-  imgSeed: string;
-  images?: string[]; // real photos (in /public/products); falls back to placeholder
+  isActive?: boolean; // false = hidden from the storefront
+  images?: string[]; // real photos in /public/products/gallery
   options?: {
     name: string;
     choices: { label: string; priceDelta: number }[];
   }[];
 };
 
+// Real photos live in /public/products/gallery/<Category>/<Product>/.
+// encodeURI turns the spaces in the folder names into %20 so the URLs work.
+const g = (path: string) => encodeURI(`/products/gallery/${path}`);
+// Build [dir/base-1.jpg … dir/base-n.jpg]
+const many = (dir: string, base: string, n: number) =>
+  Array.from({ length: n }, (_, i) => g(`${dir}/${base}-${i + 1}.jpg`));
+
 const products: SeedProduct[] = [
+  // ------------------------- POOJA ESSENTIALS -------------------------
   {
     name: "Handcrafted Resin Pooja Thali",
-    category: "Pooja & Spiritual",
-    secondaryCategory: "Festival Collection",
-    price: 1499,
+    category: "Pooja Essentials",
+    secondaryCategory: "Festive Decor",
+    price: 599,
+    compareAtPrice: 799,
+    description:
+      "A handcrafted resin pooja thali (aarti thali) with intricate detailing and a glossy mirror finish — perfect for daily aarti, festivals and gifting. Choose your design and size; each thali is poured and finished by hand.",
+    tags: ["pooja thali", "aarti thali", "resin thali", "diwali", "festival", "gift", "handmade"],
+    stock: 25,
+    isFeatured: true,
+    images: many("Pooja Essentials/Resin Pooja Thali", "pooja-thali", 19),
+    options: [
+      {
+        name: "Design",
+        choices: [
+          { label: "Unique / White Marble", priceDelta: 0 },
+          { label: "Ram–Hanuman Photo", priceDelta: 50 },
+          { label: "Diya (Diveliya)", priceDelta: 150 },
+          { label: "Pink 3-Vatki", priceDelta: 150 },
+          { label: "Pichwai Art", priceDelta: 250 },
+        ],
+      },
+      {
+        name: "Size",
+        choices: [
+          { label: "6 inch", priceDelta: -150 },
+          { label: "8 inch", priceDelta: 0 },
+          { label: "10 inch", priceDelta: 150 },
+          { label: "12 inch", priceDelta: 650 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Panchmashi Resin Spiritual Wall Art",
+    category: "Pooja Essentials",
+    secondaryCategory: "Home Decor",
+    price: 199,
+    compareAtPrice: 299,
+    description:
+      "A sacred resin Panchmashi piece for your home temple, blending traditional motifs with a modern glossy finish. A meaningful spiritual accent and a thoughtful gift.",
+    tags: ["panchmashi", "pooja", "temple", "spiritual", "wall art", "gift"],
+    stock: 20,
+    images: many("Pooja Essentials/Panchmashi Wall Art", "panchmashi", 2),
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "Standard", priceDelta: 0 },
+          { label: "Large", priceDelta: 250 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Resin Mandir Backdrop",
+    category: "Pooja Essentials",
+    secondaryCategory: "Home Decor",
+    price: 450,
+    compareAtPrice: 599,
+    description:
+      "An elegant 3×2 ft resin mandir backdrop that catches the light beautifully behind your idols. Handmade to bring warmth and devotion to your sacred space.",
+    tags: ["mandir", "temple", "mandir backdrop", "pooja", "home", "spiritual"],
+    stock: 10,
+    images: [g("Pooja Essentials/Mandir Backdrop/mandir-1.jpg")],
+  },
+  {
+    name: "Resin Krishna Jhula for Laddu Gopal",
+    category: "Pooja Essentials",
+    secondaryCategory: "Home Decor",
+    price: 1800,
+    compareAtPrice: 2199,
+    description:
+      "A beautifully detailed resin Krishna Jhula (Kanha jhula) to cradle your Laddu Gopal, finished with gold accents. A heartfelt devotional piece for Janmashtami and everyday worship.",
+    tags: ["krishna jhula", "kanha jhula", "laddu gopal", "janmashtami", "mandir", "spiritual"],
+    stock: 8,
+    isFeatured: true,
+    images: many("Pooja Essentials/Krishna Jhula", "krishna-jhula", 2),
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "8 inch plate", priceDelta: 0 },
+          { label: "10 inch plate", priceDelta: 400 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Divine Resin God Photo Frame",
+    category: "Pooja Essentials",
+    secondaryCategory: "Home Decor",
+    price: 1500,
     compareAtPrice: 1899,
     description:
-      "A handcrafted resin pooja thali with intricate gold-leaf detailing and a glossy mirror finish — perfect for daily aarti, festivals and gifting. Lightweight, durable and easy to clean.",
-    tags: ["pooja thali", "spiritual", "diwali", "festival", "gift", "handmade"],
-    stock: 15,
+      "A divine resin-finished frame for your favourite deity photograph, with a luminous glossy coat. Perfect for your pooja room or as a spiritual gift. Available up to a large 2×3 ft premium fibre panel.",
+    tags: ["god frame", "god photo frame", "deity", "spiritual", "pooja", "gift"],
+    stock: 12,
     isFeatured: true,
-    imgSeed: "poojathali",
-    images: ["/products/pooja-thali-1.jpg"],
+    images: many("Pooja Essentials/God Photo Frame", "god-frame", 3),
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "9 × 11 inch", priceDelta: 0 },
+          { label: "2 × 3 feet (Premium Fibre)", priceDelta: 10500 },
+        ],
+      },
+    ],
+  },
+
+  // ------------------------- FESTIVE DECOR -------------------------
+  {
+    name: "Resin Shubh Labh Door Hanging",
+    category: "Festive Decor",
+    secondaryCategory: "Pooja Essentials",
+    price: 299,
+    compareAtPrice: 449,
+    description:
+      "Invite prosperity home with a handcrafted resin Shubh-Labh door hanging, gleaming with gold detail. A must-have for Diwali, housewarmings and your main door.",
+    tags: ["shubh labh", "diwali", "festival", "door hanging", "housewarming"],
+    stock: 30,
+    images: many("Festive Decor/Shubh Labh Door Hanging", "shubh-labh", 4),
     options: [
       {
         name: "Type",
         choices: [
-          { label: "Pichwai Art", priceDelta: 0 },
-          { label: "Meenakari", priceDelta: 300 },
-          { label: "Plain Marble", priceDelta: 0 },
+          { label: "Standard", priceDelta: 0 },
+          { label: "Deluxe", priceDelta: 100 },
+          { label: "Premium", priceDelta: 200 },
+          { label: "MDF Base", priceDelta: 300 },
         ],
       },
+    ],
+  },
+  {
+    name: "Handcrafted Resin Toran Door Hanging",
+    category: "Festive Decor",
+    secondaryCategory: "Home Decor",
+    price: 11999,
+    compareAtPrice: 13999,
+    description:
+      "A statement 3 ft handcrafted resin toran (patta + jhumcha) for your doorway, rich with traditional motifs and gold detailing. A premium festive centrepiece for Diwali and celebrations.",
+    tags: ["toran", "door hanging", "bandhanwar", "diwali", "festival", "premium"],
+    stock: 4,
+    images: [g("Festive Decor/Resin Toran/toran-1.jpg")],
+  },
+
+  // ------------------------- HOME DECOR -------------------------
+  {
+    name: "Custom Resin Name Plate",
+    category: "Home Decor",
+    secondaryCategory: "Personalised Gifts",
+    price: 1999,
+    compareAtPrice: 2499,
+    description:
+      "Announce your home in style with a custom resin name plate, hand-poured in your choice of colours with your family name in elegant lettering. Weather-resistant and made to order in MDF and premium finishes.",
+    tags: ["name plate", "nameplate", "personalised", "door", "custom", "housewarming"],
+    stock: 15,
+    isFeatured: true,
+    images: many("Home Decor/Resin Name Plate", "name-plate", 4),
+    options: [
       {
         name: "Size",
         choices: [
-          { label: "Small (8 inch)", priceDelta: 0 },
-          { label: "Medium (10 inch)", priceDelta: 250 },
-          { label: "Large (12 inch)", priceDelta: 600 },
+          { label: "9 × 11 inch", priceDelta: 0 },
+          { label: "12 inch", priceDelta: 500 },
+          { label: "12 × 18 inch (MDF)", priceDelta: 1500 },
+          { label: "18 inch", priceDelta: 3500 },
         ],
       },
     ],
   },
+
+  // ------------------------- PERSONALISED GIFTS -------------------------
   {
-    name: "Resin Tea Coaster Set (Set of 4)",
-    category: "Kitchen & Dining",
+    name: "Custom Resin Photo Frame",
+    category: "Personalised Gifts",
     secondaryCategory: "Home Decor",
-    price: 899,
-    compareAtPrice: 1199,
+    price: 499,
+    compareAtPrice: 699,
     description:
-      "A set of four handcrafted resin coasters that protect your table in style. Heat-resistant, sealed for daily use, each piece uniquely swirled — a lovely housewarming gift.",
-    tags: ["coaster", "tea", "kitchen", "set of 4", "marble", "housewarming"],
+      "Turn a favourite photo into a glossy resin-coated keepsake frame. A treasured gift for weddings, anniversaries and family memories — choose your size and a wooden or metal stand.",
+    tags: ["photo frame", "personalised", "memories", "anniversary", "custom", "gift"],
     stock: 30,
     isFeatured: true,
-    imgSeed: "teacoaster",
-  },
-  {
-    name: "Personalised Resin Keychain",
-    category: "Fashion & Accessories",
-    secondaryCategory: "Personalized Gifts",
-    price: 299,
-    compareAtPrice: 499,
-    description:
-      "A custom resin keychain with your name, initials or dried flowers set in crystal-clear resin. A charming little keepsake or return gift — personalise it your way.",
-    tags: ["keychain", "personalised", "return gift", "name", "accessory"],
-    stock: 60,
-    imgSeed: "keychain",
-  },
-  {
-    name: "Resin Panchmashi Spiritual Art",
-    category: "Pooja & Spiritual",
-    secondaryCategory: "Home Decor",
-    price: 1299,
-    compareAtPrice: null,
-    description:
-      "A sacred resin Panchmashi piece crafted for your home temple, blending traditional motifs with a modern glossy finish. A meaningful spiritual accent and a thoughtful gift.",
-    tags: ["panchmashi", "pooja", "temple", "spiritual", "gift"],
-    stock: 12,
-    imgSeed: "panchmashi",
-  },
-  {
-    name: "Personalised Resin Name Plate",
-    category: "Home Decor",
-    secondaryCategory: "Personalized Gifts",
-    price: 1899,
-    compareAtPrice: 2299,
-    description:
-      "Announce your home in style with a custom resin name plate hand-poured in your choice of colours, with your family name in elegant lettering. Weather-resistant and made to order.",
-    tags: ["name plate", "personalised", "door", "custom", "housewarming"],
-    stock: 20,
-    isFeatured: true,
-    imgSeed: "nameplate",
-  },
-  {
-    name: "Artisan Resin Wrist Watch",
-    category: "Fashion & Accessories",
-    secondaryCategory: "Personalized Gifts",
-    price: 1599,
-    compareAtPrice: 1999,
-    description:
-      "A statement wristwatch with a one-of-a-kind resin dial — swirls of colour and shimmer captured in glass-like resin. No two are ever alike.",
-    tags: ["watch", "resin", "accessory", "fashion", "gift"],
-    stock: 14,
-    imgSeed: "resinwatch",
-  },
-  {
-    name: "Resin Ring Platter & Trinket Tray",
-    category: "Kitchen & Dining",
-    secondaryCategory: "Home Decor",
-    price: 799,
-    compareAtPrice: 999,
-    description:
-      "An elegant resin ring platter to hold rings, trinkets and small treasures — a favourite for weddings and dressing tables. Glossy, sturdy and gift-ready.",
-    tags: ["ring platter", "tray", "trinket", "wedding", "gift"],
-    stock: 22,
-    imgSeed: "ringplatter",
-  },
-  {
-    name: "Resin Kanha Jhula (Krishna Swing)",
-    category: "Pooja & Spiritual",
-    secondaryCategory: "Home Decor",
-    price: 2199,
-    compareAtPrice: 2699,
-    description:
-      "A beautifully detailed resin Kanha Jhula to cradle your Laddu Gopal, finished with gold accents. A heartfelt devotional piece for Janmashtami and everyday worship.",
-    tags: ["kanha", "krishna", "jhula", "janmashtami", "spiritual", "gift"],
-    stock: 10,
-    isFeatured: true,
-    imgSeed: "kanhajhula",
-  },
-  {
-    name: "Resin Car Dashboard Decor",
-    category: "Car Accessories",
-    secondaryCategory: "Pooja & Spiritual",
-    price: 699,
-    compareAtPrice: null,
-    description:
-      "Bring calm to your drive with a compact resin dashboard decor — a serene deity or artful accent that sits securely on your car dashboard. A thoughtful gift for a new car.",
-    tags: ["car", "dashboard", "decor", "idol", "new car", "gift"],
-    stock: 25,
-    imgSeed: "cardash",
-  },
-  {
-    name: "Personalised Resin Photo Frame",
-    category: "Home Decor",
-    secondaryCategory: "Personalized Gifts",
-    price: 1199,
-    compareAtPrice: 1499,
-    description:
-      "Turn a favourite photo into a glossy resin-coated keepsake frame with dried flowers or a shimmer of your choice. A treasured gift for weddings, anniversaries and family memories.",
-    tags: ["photo frame", "personalised", "memories", "anniversary", "gift"],
-    stock: 18,
-    isFeatured: true,
-    imgSeed: "photoframe",
-    images: [
-      "/products/photo-frame-1.jpg",
-      "/products/photo-frame-2.jpg",
-      "/products/photo-frame-3.jpg",
-      "/products/photo-frame-4.jpg",
-    ],
+    images: many("Personalised Gifts/Resin Photo Frame", "photo-frame", 8),
     options: [
-      {
-        name: "Shape",
-        choices: [
-          { label: "Round", priceDelta: 0 },
-          { label: "Square", priceDelta: 0 },
-          { label: "Agate Slice", priceDelta: 200 },
-        ],
-      },
       {
         name: "Size",
         choices: [
           { label: "6 inch", priceDelta: 0 },
-          { label: "8 inch", priceDelta: 300 },
-          { label: "10 inch", priceDelta: 600 },
+          { label: "8 inch", priceDelta: 200 },
+          { label: "10 inch", priceDelta: 400 },
+          { label: "12 inch", priceDelta: 600 },
+        ],
+      },
+      {
+        name: "Stand",
+        choices: [
+          { label: "Wooden Stand", priceDelta: 0 },
+          { label: "Metal Stand", priceDelta: 100 },
         ],
       },
     ],
   },
   {
-    name: "Real Flower Preservation Resin Block",
-    category: "Wedding Preservation",
-    secondaryCategory: "Personalized Gifts",
-    price: 2499,
-    compareAtPrice: null,
-    description:
-      "Preserve your special-day blooms forever, encased in flawless clear resin. Send us your flowers and we'll transform them into a timeless keepsake block or frame.",
-    tags: ["flower preservation", "wedding", "keepsake", "memories", "custom", "pendant"],
-    stock: 8,
-    isFeatured: true,
-    imgSeed: "flowerpres",
-    images: ["/products/flower-preservation-1.jpg"],
-  },
-  {
-    name: "Varmala Preservation Frame",
-    category: "Wedding Preservation",
-    secondaryCategory: "Personalized Gifts",
-    price: 4999,
-    compareAtPrice: 5999,
-    description:
-      "Immortalise your wedding varmala in resin — petals from your garland preserved in a stunning frame. A once-in-a-lifetime memory you can keep and cherish forever.",
-    tags: ["varmala", "wedding", "preservation", "garland", "anniversary"],
-    stock: 6,
-    isFeatured: true,
-    imgSeed: "varmala",
-  },
-  {
-    name: "Resin Shubh-Labh Door Set",
-    category: "Pooja & Spiritual",
-    secondaryCategory: "Festival Collection",
-    price: 899,
-    compareAtPrice: 1199,
-    description:
-      "Invite prosperity home with a handcrafted resin Shubh-Labh set, gleaming with gold detail. A must-have for Diwali, housewarmings and your main door.",
-    tags: ["shubh labh", "diwali", "festival", "door", "housewarming"],
-    stock: 28,
-    imgSeed: "shubhlabh",
-    images: ["/products/shubh-labh-1.jpg", "/products/shubh-labh-2.jpg"],
-  },
-  {
-    name: "Resin Mandir Decoration Set",
-    category: "Pooja & Spiritual",
+    name: "Personalised Baby Footprint & Newborn Frame",
+    category: "Personalised Gifts",
     secondaryCategory: "Home Decor",
-    price: 1799,
-    compareAtPrice: null,
+    price: 1200,
+    compareAtPrice: 1499,
     description:
-      "Adorn your home mandir with elegant resin decoration accents that catch the light beautifully. Handmade to bring warmth and devotion to your sacred space.",
-    tags: ["mandir", "temple", "decoration", "spiritual", "home"],
-    stock: 12,
-    imgSeed: "mandir",
-  },
-  {
-    name: "Divine Resin God Photo Frame",
-    category: "Home Decor",
-    secondaryCategory: "Pooja & Spiritual",
-    price: 1399,
-    compareAtPrice: 1699,
-    description:
-      "A divine resin-finished frame for your favourite deity photograph, with gold-leaf accents and a luminous glossy coat. Perfect for your pooja room or as a spiritual gift.",
-    tags: ["god frame", "deity", "spiritual", "pooja", "gift"],
-    stock: 16,
-    isFeatured: true,
-    imgSeed: "godframe",
-  },
-  {
-    name: "Personalised Resin QR Code Frame",
-    category: "Personalized Gifts",
-    secondaryCategory: "Home Decor",
-    price: 999,
-    compareAtPrice: null,
-    description:
-      "A modern personalised resin frame featuring a custom QR code — link a wedding invite, a Spotify song or a video message. A unique, memorable keepsake gift.",
-    tags: ["qr code", "personalised", "wedding", "spotify", "modern", "gift"],
-    stock: 20,
-    imgSeed: "qrframe",
-    images: ["/products/qr-frame-1.jpg"],
-  },
-  {
-    name: "Handcrafted Resin Brooch",
-    category: "Fashion & Accessories",
-    secondaryCategory: "Personalized Gifts",
-    price: 399,
-    compareAtPrice: 599,
-    description:
-      "A dainty handcrafted resin brooch with dried florals or shimmer, adding a refined touch to sarees, blazers and dupattas. A lovely little gift for her.",
-    tags: ["brooch", "saree", "accessory", "floral", "gift"],
-    stock: 40,
-    imgSeed: "brooch",
-  },
-  {
-    name: "Resin Pagli Frame (Baby Footprint)",
-    category: "Home Decor",
-    secondaryCategory: "Personalized Gifts",
-    price: 1699,
-    compareAtPrice: null,
-    description:
-      "Capture your little one's first footprints in a beautiful resin Pagli frame — a heart-melting keepsake for newborns and a cherished gift for new parents.",
-    tags: ["pagli", "baby", "footprint", "newborn", "keepsake", "gift"],
-    stock: 12,
-    imgSeed: "pagliframe",
-  },
-  {
-    name: "Rakhi Preservation Hamper",
-    category: "Festival Collection",
-    secondaryCategory: "Personalized Gifts",
-    price: 1299,
-    compareAtPrice: null,
-    description:
-      "Preserve the love of Raksha Bandhan — a curated resin hamper that keeps your rakhi as a lasting keepsake. A thoughtful gift set for brothers and sisters.",
-    tags: ["rakhi", "hamper", "raksha bandhan", "brother", "gift"],
-    stock: 20,
-    imgSeed: "rakhihamper",
-    images: [
-      "/products/rakhi-hamper-1.jpg",
-      "/products/rakhi-hamper-2.jpg",
-      "/products/rakhi-hamper-3.jpg",
-      "/products/rakhi-hamper-4.jpg",
-      "/products/rakhi-threads-1.jpg",
+      "Capture your little one's first footprints or a newborn keepsake in a beautiful 9×11 inch resin frame (Pagli) — a heart-melting memory and a cherished gift for new parents.",
+    tags: ["baby footprint", "pagli", "newborn", "keepsake", "personalised", "gift"],
+    stock: 10,
+    images: many("Personalised Gifts/Baby Footprint Frame", "baby-footprint", 2),
+    options: [
+      {
+        name: "Type",
+        choices: [
+          { label: "Baby Footprint (Pagli)", priceDelta: 0 },
+          { label: "Newborn Baby", priceDelta: 0 },
+        ],
+      },
     ],
   },
   {
-    name: "Radiant Resin Toran (Door Hanging)",
-    category: "Festival Collection",
-    secondaryCategory: "Pooja & Spiritual",
-    price: 1099,
-    compareAtPrice: 1399,
+    name: "Personalised Flower Photo Frame",
+    category: "Personalised Gifts",
+    secondaryCategory: "Wedding Preservation",
+    price: 1200,
+    compareAtPrice: 1499,
     description:
-      "Welcome guests with a radiant handcrafted resin toran for your doorway, rich with traditional motifs and gold detailing. A festive statement for Diwali and celebrations.",
-    tags: ["toran", "door", "diwali", "festival", "bandhanwar", "home"],
-    stock: 18,
-    imgSeed: "toran",
+      "A personalised resin frame set with three preserved flowers around your photo, finished on a metal stand. A romantic keepsake for anniversaries and special days.",
+    tags: ["flower frame", "personalised", "preserved flowers", "anniversary", "gift"],
+    stock: 10,
+    images: [g("Personalised Gifts/Flower Photo Frame/flower-frame-1.jpg")],
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "10 inch", priceDelta: 0 },
+          { label: "12 inch", priceDelta: 300 },
+        ],
+      },
+    ],
   },
   {
-    name: "Ocean Wave Resin Tea Table Top",
-    category: "Home Decor",
-    secondaryCategory: "Kitchen & Dining",
-    price: 8999,
-    compareAtPrice: 10999,
+    name: "Custom Resin Name Keychain",
+    category: "Personalised Gifts",
+    secondaryCategory: "Fashion Accessories",
+    price: 199,
+    compareAtPrice: 349,
     description:
-      "A show-stopping resin tea table top with flowing ocean-like waves and metallic depth, sealed to a mirror finish. A functional centrepiece that turns heads.",
-    tags: ["tea table", "furniture", "centre table", "ocean", "statement"],
-    stock: 4,
+      "A custom resin keychain with your name, initials or dried flowers set in crystal-clear resin. A charming little keepsake or return gift — personalise it your way.",
+    tags: ["keychain", "name keychain", "personalised", "return gift", "accessory"],
+    stock: 60,
+    images: [
+      g("Personalised Gifts/Name Keychain/keychain-1.jpg"),
+      g("Personalised Gifts/Name Keychain/keychain-2.jpg"),
+      g("Personalised Gifts/Name Keychain/keychain-car-1.jpg"),
+    ],
+    options: [
+      {
+        name: "Type",
+        choices: [
+          { label: "Standard", priceDelta: 0 },
+          { label: "Premium", priceDelta: 100 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Custom Resin QR Code Frame",
+    category: "Personalised Gifts",
+    secondaryCategory: "Home Decor",
+    price: 1200,
+    compareAtPrice: 1499,
+    description:
+      "A modern personalised resin frame featuring a custom QR code with a light stand — link a wedding invite, a Spotify song or a video message. A unique, memorable keepsake gift.",
+    tags: ["qr code", "qr frame", "personalised", "wedding", "spotify", "gift"],
+    stock: 15,
+    images: [g("Personalised Gifts/QR Code Frame/qr-frame-1.jpg")],
+  },
+
+  // ------------------------- FASHION ACCESSORIES -------------------------
+  {
+    name: "Personalised Resin Brooch",
+    category: "Fashion Accessories",
+    secondaryCategory: "Personalised Gifts",
+    price: 199,
+    compareAtPrice: 349,
+    description:
+      "A dainty handcrafted resin brooch that adds a refined touch to sarees, blazers and dupattas. Available as a single piece, a cute pet design, or a 'Mom & Dad To Be' set of two.",
+    tags: ["brooch", "saree brooch", "accessory", "mom to be", "gift"],
+    stock: 40,
+    images: many("Fashion Accessories/Resin Brooch", "brooch", 2),
+    options: [
+      {
+        name: "Type",
+        choices: [
+          { label: "Single", priceDelta: 0 },
+          { label: "Pet / Dog Design", priceDelta: 0 },
+          { label: "Mom & Dad To Be (Set of 2)", priceDelta: 200 },
+        ],
+      },
+    ],
+  },
+
+  // ------------------------- WEDDING PRESERVATION -------------------------
+  {
+    name: "Wedding Varmala & Flower Preservation Frame",
+    category: "Wedding Preservation",
+    secondaryCategory: "Personalised Gifts",
+    price: 3000,
+    compareAtPrice: 3500,
+    description:
+      "Immortalise your wedding varmala and special-day blooms in resin — petals from your garland preserved in a stunning frame. Choose your size and full or half preservation. A once-in-a-lifetime memory to cherish forever.",
+    tags: ["varmala", "flower preservation", "wedding", "garland", "keepsake", "anniversary"],
+    stock: 6,
     isFeatured: true,
-    imgSeed: "teatable",
+    images: [
+      ...many("Wedding Preservation/Varmala and Flower Preservation", "varmala", 3),
+      g("Wedding Preservation/Varmala and Flower Preservation/flower-preservation-1.jpg"),
+    ],
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "8 inch (Thick)", priceDelta: 0 },
+          { label: "14 inch", priceDelta: 2000 },
+          { label: "16 × 20 inch", priceDelta: 5000 },
+        ],
+      },
+      {
+        name: "Preservation",
+        choices: [
+          { label: "Full Preservation", priceDelta: 0 },
+          { label: "Half Preservation", priceDelta: -1500 },
+        ],
+      },
+    ],
+  },
+
+  // ------------------------- RAKHI COLLECTION -------------------------
+  {
+    name: "Personalised Rakhi Preservation Hamper",
+    category: "Rakhi Collection",
+    secondaryCategory: "Personalised Gifts",
+    price: 149,
+    compareAtPrice: 249,
+    description:
+      "Preserve the love of Raksha Bandhan — a curated resin hamper that keeps your rakhi as a lasting keepsake. From a mini hamper to a deluxe set with a 12-inch resin thali.",
+    tags: ["rakhi hamper", "rakhi", "raksha bandhan", "brother", "gift set"],
+    stock: 25,
+    isFeatured: true,
+    images: many("Rakhi Collection/Rakhi Preservation Hamper", "rakhi-hamper", 3),
+    options: [
+      {
+        name: "Type",
+        choices: [
+          { label: "Mini Hamper", priceDelta: 0 },
+          { label: "Deluxe Hamper with Thali (12 inch)", priceDelta: 1250 },
+        ],
+      },
+    ],
+  },
+  {
+    name: "Handcrafted Resin Rakhi",
+    category: "Rakhi Collection",
+    secondaryCategory: "Personalised Gifts",
+    price: 120,
+    compareAtPrice: 199,
+    description:
+      "A handcrafted resin rakhi that lasts well beyond Raksha Bandhan — set with dried flowers and shimmer in crystal-clear resin. Choose from Evil-Eye, Hanumanji, Brother and Bhai-Bhabhi designs.",
+    tags: ["rakhi", "resin rakhi", "raksha bandhan", "keepsake", "gift"],
+    stock: 100,
+    images: many("Rakhi Collection/Resin Rakhi", "rakhi", 5),
+    options: [
+      {
+        name: "Design",
+        choices: [
+          { label: "Evil Eye", priceDelta: 0 },
+          { label: "Hanumanji", priceDelta: 0 },
+          { label: "Brother", priceDelta: 80 },
+          { label: "Bhai-Bhabhi Combo", priceDelta: 180 },
+        ],
+      },
+    ],
+  },
+
+  // ------------------------- TABLEWARE & DINING -------------------------
+  {
+    name: "Personalised Resin Ring Platter",
+    category: "Tableware & Dining",
+    secondaryCategory: "Wedding Preservation",
+    price: 799,
+    compareAtPrice: 999,
+    description:
+      "An elegant resin ring platter to hold rings, trinkets and small treasures — a favourite for weddings, engagements and dressing tables. Glossy, sturdy and gift-ready.",
+    tags: ["ring platter", "ring plate", "trinket tray", "wedding", "engagement", "gift"],
+    stock: 20,
+    isFeatured: true,
+    images: many("Tableware and Dining/Ring Platter", "ring-platter", 6),
+    options: [
+      {
+        name: "Size",
+        choices: [
+          { label: "8 inch", priceDelta: 0 },
+          { label: "10 inch", priceDelta: 500 },
+        ],
+      },
+    ],
+  },
+
+  // ------------------------- CAR ACCESSORIES -------------------------
+  {
+    name: "Resin Car Dashboard Idol (Ganesha)",
+    category: "Car Accessories",
+    secondaryCategory: "Pooja Essentials",
+    price: 199,
+    compareAtPrice: 299,
+    description:
+      "Bring calm to your drive with a compact resin Ganesha dashboard idol that sits securely on your car dashboard. A thoughtful gift for a new car.",
+    tags: ["car dashboard", "dashboard idol", "ganesha", "car accessory", "new car", "gift"],
+    stock: 40,
+    images: many("Car Accessories/Dashboard Idol", "dashboard-idol", 3),
   },
 ];
 
@@ -409,10 +530,11 @@ async function main() {
         tags: p.tags,
         price: p.price,
         compareAtPrice: p.compareAtPrice ?? null,
-        images: p.images ?? [img(p.imgSeed), img(`${p.imgSeed}-2`)],
+        images: p.images ?? [],
         options: p.options ?? [],
         stock: p.stock,
         isFeatured: p.isFeatured ?? false,
+        isActive: p.isActive ?? true,
       },
     });
   }

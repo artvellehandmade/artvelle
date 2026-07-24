@@ -2,6 +2,7 @@ import Image from "next/image";
 import { getSettings } from "@/lib/settings";
 import { ButtonLink } from "@/components/ui/button";
 import { Reveal } from "@/components/store/reveal";
+import { galleryImg } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "About" };
@@ -28,7 +29,7 @@ export default async function AboutPage() {
       <Reveal delay={0.1}>
         <div className="relative mt-12 aspect-[16/9] overflow-hidden rounded-3xl bg-muted">
           <Image
-            src="https://picsum.photos/seed/aboutbanner/1400/800"
+            src={galleryImg("Pooja Essentials/Resin Pooja Thali/pooja-thali-3.jpg")}
             alt={s.brandName}
             fill
             sizes="100vw"
@@ -54,13 +55,18 @@ export default async function AboutPage() {
         </Reveal>
         <Reveal delay={0.08}>
           <div className="grid grid-cols-2 gap-4">
-            {["v1", "v2", "v3", "v4"].map((seed) => (
+            {[
+              galleryImg("Pooja Essentials/God Photo Frame/god-frame-1.jpg"),
+              galleryImg("Tableware and Dining/Ring Platter/ring-platter-2.jpg"),
+              galleryImg("Pooja Essentials/Krishna Jhula/krishna-jhula-1.jpg"),
+              galleryImg("Personalised Gifts/Resin Photo Frame/photo-frame-2.jpg"),
+            ].map((src) => (
               <div
-                key={seed}
+                key={src}
                 className="relative aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
-                  src={`https://picsum.photos/seed/about-${seed}/500/500`}
+                  src={src}
                   alt="Studio"
                   fill
                   sizes="25vw"

@@ -43,3 +43,6 @@ next-env.d.ts
 
 # local-only project context / notes for AI + developer (not for the repo)
 PROJECT-CONTEXT.md
+
+.vercel
+.env*

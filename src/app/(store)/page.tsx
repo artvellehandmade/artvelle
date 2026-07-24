@@ -14,11 +14,17 @@ import { getSettings } from "@/lib/settings";
 import { ButtonLink } from "@/components/ui/button";
 import { ProductCard } from "@/components/store/product-card";
 import { Reveal } from "@/components/store/reveal";
-import { CATEGORIES } from "@/lib/utils";
+import { CATEGORIES, CATEGORY_IMAGES, galleryImg } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const heroImg = (s: string) => `https://picsum.photos/seed/${s}/800/1000`;
+// Real studio photos used in the hero collage.
+const HERO_IMAGES = [
+  galleryImg("Pooja Essentials/Resin Pooja Thali/pooja-thali-1.jpg"),
+  galleryImg("Personalised Gifts/Resin Photo Frame/photo-frame-1.jpg"),
+  galleryImg("Tableware and Dining/Ring Platter/ring-platter-1.jpg"),
+  galleryImg("Wedding Preservation/Varmala and Flower Preservation/varmala-1.jpg"),
+];
 
 /* Style the final word of the headline in shimmering gold italic */
 function FancyHeadline({ text }: { text: string }) {
@@ -128,18 +134,18 @@ export default async function HomePage() {
             <div className="relative grid grid-cols-2 gap-4">
               <div className="mt-10 space-y-4">
                 <div className="animate-float">
-                  <HeroTile seed="heroA" ratio="aspect-[4/5]" />
+                  <HeroTile src={HERO_IMAGES[0]} ratio="aspect-[4/5]" />
                 </div>
                 <div className="animate-float-delay">
-                  <HeroTile seed="heroB" ratio="aspect-square" />
+                  <HeroTile src={HERO_IMAGES[1]} ratio="aspect-square" />
                 </div>
               </div>
               <div className="space-y-4">
                 <div className="animate-float-slow">
-                  <HeroTile seed="heroC" ratio="aspect-square" />
+                  <HeroTile src={HERO_IMAGES[2]} ratio="aspect-square" />
                 </div>
                 <div className="animate-float">
-                  <HeroTile seed="heroD" ratio="aspect-[4/5]" />
+                  <HeroTile src={HERO_IMAGES[3]} ratio="aspect-[4/5]" />
                 </div>
               </div>
 
@@ -214,7 +220,7 @@ export default async function HomePage() {
                 className="card-lift group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
-                  src={heroImg(`cat-${cat}`)}
+                  src={CATEGORY_IMAGES[cat] ?? HERO_IMAGES[0]}
                   alt={cat}
                   fill
                   sizes="(max-width:768px) 50vw, 16vw"
@@ -357,7 +363,7 @@ export default async function HomePage() {
             <div className="relative">
               <div className="relative aspect-[5/4] overflow-hidden rounded-3xl bg-muted shadow-2xl">
                 <Image
-                  src="https://picsum.photos/seed/studio/1000/800"
+                  src={galleryImg("Home Decor/Resin Name Plate/name-plate-1.jpg")}
                   alt="Our studio"
                   fill
                   sizes="(max-width:768px) 100vw, 50vw"
@@ -424,13 +430,13 @@ export default async function HomePage() {
   );
 }
 
-function HeroTile({ seed, ratio }: { seed: string; ratio: string }) {
+function HeroTile({ src, ratio }: { src: string; ratio: string }) {
   return (
     <div
       className={`relative ${ratio} overflow-hidden rounded-2xl bg-muted shadow-lg ring-1 ring-black/5`}
     >
       <Image
-        src={heroImg(seed)}
+        src={src}
         alt="Resin art"
         fill
         sizes="(max-width:768px) 50vw, 25vw"
