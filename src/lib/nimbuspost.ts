@@ -22,7 +22,10 @@ function num(envVar: string | undefined, fallback: number): number {
 }
 
 export function isNimbusPostConfigured(): boolean {
-  return Boolean(process.env.NIMBUSPOST_EMAIL && process.env.NIMBUSPOST_PASSWORD);
+  return Boolean(
+    process.env.NIMBUSPOST_TOKEN ||
+      (process.env.NIMBUSPOST_EMAIL && process.env.NIMBUSPOST_PASSWORD)
+  );
 }
 
 // Simple in-memory token cache (best-effort across warm invocations).
@@ -30,6 +33,9 @@ let cachedToken: { token: string; at: number } | null = null;
 const TOKEN_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 async function login(): Promise<string> {
+  if (process.env.NIMBUSPOST_TOKEN) {
+    return process.env.NIMBUSPOST_TOKEN.trim();
+  }
   if (cachedToken && Date.now() - cachedToken.at < TOKEN_TTL_MS) {
     return cachedToken.token;
   }
@@ -44,7 +50,10 @@ async function login(): Promise<string> {
   });
   const data = await res.json().catch(() => ({}));
   if (!data?.status || !data?.data) {
-    throw new Error(data?.message || "NimbusPost login failed. Check NIMBUSPOST_EMAIL / NIMBUSPOST_PASSWORD.");
+    throw new Error(
+      data?.message ||
+        "NimbusPost login failed. Check NIMBUSPOST_EMAIL / NIMBUSPOST_PASSWORD or set NIMBUSPOST_TOKEN."
+    );
   }
   cachedToken = { token: String(data.data), at: Date.now() };
   return cachedToken.token;
