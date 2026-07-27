@@ -22,6 +22,8 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   shippingFee: 0,
   freeShippingThreshold: null,
   codEnabled: true,
+  razorpayEnabled: false,
+  nimbusEnabled: false,
   announcement: "Free shipping on all prepaid orders • Handmade in India",
 };
 
@@ -51,6 +53,8 @@ export const getSettings = cache(async (): Promise<SettingsDTO> => {
       shippingFee: row.shippingFee,
       freeShippingThreshold: row.freeShippingThreshold,
       codEnabled: row.codEnabled,
+      razorpayEnabled: row.razorpayEnabled,
+      nimbusEnabled: row.nimbusEnabled,
       announcement: row.announcement,
     };
   } catch {

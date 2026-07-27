@@ -264,7 +264,7 @@ export default async function HomePage() {
         </Reveal>
 
         {featured.length > 0 ? (
-          <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-12 md:grid-cols-3 lg:grid-cols-4">
+          <div className="mt-8 grid grid-cols-3 gap-x-3 gap-y-8 sm:gap-x-5 sm:gap-y-12 md:mt-10 md:grid-cols-3 lg:grid-cols-4">
             {featured.map((p, i) => (
               <Reveal key={p.id} delay={(i % 4) * 0.06}>
                 <ProductCard product={p} />

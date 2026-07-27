@@ -31,6 +31,20 @@ export function ProductForm({ product, categories }: Props) {
     isFeatured: product?.isFeatured ?? false,
     isActive: product?.isActive ?? true,
   });
+  // Which checkout modes this product allows.
+  const ALL_MODES = ["prepaid", "cod", "partial", "direct"] as const;
+  type Mode = (typeof ALL_MODES)[number];
+  const [paymentModes, setPaymentModes] = useState<Mode[]>(
+    (product?.paymentModes as Mode[]) ?? ["prepaid", "cod"]
+  );
+  const [advancePercent, setAdvancePercent] = useState(
+    product?.advancePercent?.toString() ?? ""
+  );
+  function toggleMode(m: Mode) {
+    setPaymentModes((prev) =>
+      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+    );
+  }
   const [images, setImages] = useState<string[]>(product?.images ?? []);
   const [urlInput, setUrlInput] = useState("");
   // Index of the image currently being dragged (for reordering).
@@ -264,6 +278,15 @@ export function ProductForm({ product, categories }: Props) {
       images,
       isFeatured: form.isFeatured,
       isActive: form.isActive,
+      paymentModes: (paymentModes.length ? paymentModes : ["prepaid", "cod"]) as (
+        | "prepaid"
+        | "cod"
+        | "partial"
+        | "direct"
+      )[],
+      advancePercent: paymentModes.includes("partial") && advancePercent
+        ? Number(advancePercent)
+        : null,
     };
 
     const res = editing
@@ -760,6 +783,43 @@ export function ProductForm({ product, categories }: Props) {
             checked={form.isActive}
             onChange={(v) => set("isActive", v)}
           />
+        </Card>
+
+        <Card title="Checkout modes">
+          <p className="text-xs text-muted-foreground">
+            Choose which payment options this product offers at checkout.
+            At least one must be selected.
+          </p>
+          {([
+            { mode: "prepaid" as Mode, label: "Prepaid (full online payment)" },
+            { mode: "cod" as Mode, label: "COD (cash on delivery)" },
+            { mode: "partial" as Mode, label: "Partial (advance online, rest COD)" },
+            { mode: "direct" as Mode, label: "Direct enquiry (no payment)" },
+          ] as { mode: Mode; label: string }[]).map(({ mode, label }) => (
+            <label key={mode} className="flex items-center gap-3 text-sm cursor-pointer">
+              <input
+                type="checkbox"
+                checked={paymentModes.includes(mode)}
+                onChange={() => toggleMode(mode)}
+                className="h-4 w-4 accent-[var(--accent)]"
+              />
+              {label}
+            </label>
+          ))}
+          {paymentModes.includes("partial") && (
+            <label className="block">
+              <span className="label">Advance % (for partial mode)</span>
+              <input
+                type="number"
+                min={1}
+                max={99}
+                value={advancePercent}
+                onChange={(e) => setAdvancePercent(e.target.value)}
+                className="input"
+                placeholder="e.g. 30  (30% online, 70% on delivery)"
+              />
+            </label>
+          )}
         </Card>
 
         <div className="flex gap-3">

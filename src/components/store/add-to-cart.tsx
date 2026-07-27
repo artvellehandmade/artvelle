@@ -11,10 +11,15 @@ export function AddToCartButton({
   product,
   className,
   withQuantity = false,
+  size = "md",
+  compact = false,
 }: {
   product: ProductDTO;
   className?: string;
   withQuantity?: boolean;
+  size?: "sm" | "md" | "lg";
+  /** Short label ("Add") for tight layouts like the mobile product grid. */
+  compact?: boolean;
 }) {
   const { addItem, leadInfo } = useCart();
   const [qty, setQty] = useState(1);
@@ -45,7 +50,7 @@ export function AddToCartButton({
 
   if (soldOut) {
     return (
-      <Button variant="outline" disabled className={className}>
+      <Button variant="outline" size={size} disabled className={className}>
         Sold out
       </Button>
     );
@@ -95,14 +100,14 @@ export function AddToCartButton({
   }
 
   return (
-    <Button onClick={add} className={className}>
+    <Button onClick={add} size={size} className={className}>
       {added ? (
         <>
           <Check className="h-4 w-4" /> Added
         </>
       ) : (
         <>
-          <ShoppingBag className="h-4 w-4" /> Add to cart
+          <ShoppingBag className="h-4 w-4" /> {compact ? "Add" : "Add to cart"}
         </>
       )}
     </Button>

@@ -35,6 +35,11 @@ model Product {
   compareAtPrice    Int? // optional "was" price for showing a discount
   images            String[] @default([])
   stock             Int      @default(0)
+  // Which checkout modes this product allows — subset of:
+  // "prepaid" (full online), "cod" (cash on delivery),
+  // "partial" (online advance + rest COD), "direct" (no payment, just placed).
+  paymentModes      String[] @default(["prepaid", "cod"])
+  advancePercent    Int? // % of line total taken online when "partial" is enabled
   isFeatured        Boolean  @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -62,13 +67,19 @@ model Order {
   subtotal      Int
   shipping      Int      @default(0)
   total         Int
-  paymentMethod String   @default("COD")
-  paymentStatus String   @default("pending") // pending | paid
+  paymentMethod String   @default("COD") // COD | Razorpay | Partial | Direct
+  paymentStatus String   @default("pending") // pending | paid | partial | failed
+  amountPaid    Int      @default(0) // collected online (advance or full)
+  balanceDue    Int      @default(0) // remaining to collect (COD / on delivery)
   status        String   @default("pending") // pending | confirmed | shipped | delivered | cancelled
+  // -------- Online payment (Razorpay) --------
+  razorpayOrderId   String? // Razorpay order id (order_...), set when an online payment is initiated
+  razorpayPaymentId String? // Razorpay payment id (pay_...), set after a verified payment
   // -------- Fulfilment / tracking (managed by admin) --------
-  courier        String? // e.g. Delhivery, BlueDart, India Post
-  trackingNumber String?
-  trackingUrl    String? // optional courier tracking link
+  courier         String? // e.g. Delhivery, BlueDart, India Post
+  trackingNumber  String? // AWB / tracking number
+  trackingUrl     String? // optional courier tracking link
+  nimbusShipmentId String? // NimbusPost shipment/order id, set when shipped via NimbusPost
   statusHistory  Json     @default("[]") // [{ status, note, at }] appended on each admin update
   note          String?
   createdAt     DateTime @default(now())
@@ -146,6 +157,8 @@ model SiteSettings {
   shippingFee           Int      @default(0)
   freeShippingThreshold Int? // free shipping above this order value
   codEnabled            Boolean  @default(true)
+  razorpayEnabled       Boolean  @default(false) // master switch for online payments
+  nimbusEnabled         Boolean  @default(false) // master switch for NimbusPost shipping
   announcement          String?  @default("Free shipping on all prepaid orders • Handmade in India")
   updatedAt             DateTime @updatedAt
 }

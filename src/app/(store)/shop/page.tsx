@@ -30,12 +30,12 @@ export default async function ShopPage({
   const categories = categoriesList.map((c) => c.name);
 
   return (
-    <div className="container-px mx-auto max-w-7xl py-12">
-      <header className="mb-8">
+    <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
+      <header className="mb-6 md:mb-8">
         <p className="text-xs uppercase tracking-widest text-muted-foreground">
           The collection
         </p>
-        <h1 className="mt-1 font-serif text-4xl">
+        <h1 className="mt-1 font-serif text-3xl md:text-4xl">
           {sp.category && sp.category !== "All" ? sp.category : "Shop all"}
         </h1>
       </header>
@@ -45,7 +45,7 @@ export default async function ShopPage({
       </Suspense>
 
       {products.length > 0 ? (
-        <div className="mt-10 grid grid-cols-2 gap-x-5 gap-y-10 md:grid-cols-3 lg:grid-cols-4">
+        <div className="mt-8 grid grid-cols-3 gap-x-3 gap-y-7 sm:gap-x-5 sm:gap-y-10 md:mt-10 md:grid-cols-3 lg:grid-cols-4">
           {products.map((p, i) => (
             <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
               <ProductCard product={p} />

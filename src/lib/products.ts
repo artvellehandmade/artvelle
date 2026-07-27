@@ -1,6 +1,12 @@
 import { prisma } from "./prisma";
 import type { Prisma, Product } from "@prisma/client";
-import type { ProductDTO, ProductOption, VariantPrice, Variant } from "./types";
+import type {
+  ProductDTO,
+  ProductOption,
+  VariantPrice,
+  Variant,
+  PaymentMode,
+} from "./types";
 import { searchProducts } from "./search";
 
 /** Normalise a Prisma product row into a ProductDTO (coerces the JSON columns). */
@@ -16,6 +22,9 @@ function toDTO(p: Product): ProductDTO {
     variants: Array.isArray(p.variants)
       ? (p.variants as unknown as Variant[])
       : [],
+    paymentModes: (Array.isArray(p.paymentModes)
+      ? p.paymentModes
+      : ["prepaid", "cod"]) as PaymentMode[],
   };
 }
 

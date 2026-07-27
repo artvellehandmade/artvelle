@@ -95,6 +95,8 @@ export default async function AdminOrders({
     subtotal: o.subtotal,
     shipping: o.shipping,
     total: o.total,
+    amountPaid: o.amountPaid,
+    balanceDue: o.balanceDue,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
     status: o.status,

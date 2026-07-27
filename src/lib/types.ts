@@ -22,6 +22,9 @@ export type Variant = {
 // A customer's picked option on a cart/order line, e.g. { name: "Size", value: "Large" }
 export type SelectedOption = { name: string; value: string };
 
+// Which checkout modes a product supports.
+export type PaymentMode = "prepaid" | "cod" | "partial" | "direct";
+
 export type CartItem = {
   lineId: string; // productId + selected options — unique per variant combination
   productId: string;
@@ -50,6 +53,8 @@ export type ProductDTO = {
   compareAtPrice: number | null;
   images: string[];
   stock: number;
+  paymentModes: PaymentMode[];
+  advancePercent: number | null;
   isFeatured: boolean;
   isActive: boolean;
 };
@@ -72,5 +77,7 @@ export type SettingsDTO = {
   shippingFee: number;
   freeShippingThreshold: number | null;
   codEnabled: boolean;
+  razorpayEnabled: boolean;
+  nimbusEnabled: boolean;
   announcement: string | null;
 };

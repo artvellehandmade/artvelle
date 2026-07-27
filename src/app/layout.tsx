@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
@@ -15,6 +15,14 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
   display: "swap",
 });
+
+// Ensures mobile browsers render at the device width instead of a zoomed-out
+// desktop layout. Without this the whole site looks "zoomed" on phones.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();

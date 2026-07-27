@@ -12,7 +12,46 @@ import {
   toSelection,
 } from "@/lib/variants";
 import { orderNumber } from "@/lib/utils";
-import type { ProductOption, VariantPrice, Variant } from "@/lib/types";
+import {
+  createRazorpayOrder,
+  isRazorpayConfigured,
+  razorpayPublicKey,
+  verifyRazorpaySignature,
+} from "@/lib/razorpay";
+import type {
+  ProductOption,
+  VariantPrice,
+  Variant,
+  PaymentMode,
+} from "@/lib/types";
+
+// Maps the stored paymentMethod label ↔ the product's PaymentMode.
+const METHOD_TO_MODE: Record<string, PaymentMode> = {
+  Razorpay: "prepaid",
+  COD: "cod",
+  Partial: "partial",
+  Direct: "direct",
+};
+
+/** Which modes are usable for this cart = intersection of products, then globals. */
+function resolveAllowedModes(
+  products: { paymentModes: string[] }[],
+  opts: { razorpayAvailable: boolean; codAvailable: boolean }
+): PaymentMode[] {
+  const all: PaymentMode[] = ["prepaid", "cod", "partial", "direct"];
+  let modes = all.filter((m) =>
+    products.every((p) =>
+      (p.paymentModes?.length ? p.paymentModes : ["prepaid", "cod"]).includes(m)
+    )
+  );
+  modes = modes.filter((m) => {
+    if (m === "prepaid" || m === "partial") return opts.razorpayAvailable;
+    if (m === "cod") return opts.codAvailable;
+    return true; // direct
+  });
+  // Never leave the cart with no way to check out.
+  return modes.length ? modes : ["direct"];
+}
 
 const inputSchema = z.object({
   customerName: z.string().min(2, "Please enter your name"),
@@ -23,7 +62,7 @@ const inputSchema = z.object({
   state: z.string().min(2, "Enter your state"),
   pincode: z.string().min(4, "Enter your pincode"),
   note: z.string().optional(),
-  paymentMethod: z.string().default("COD"),
+  paymentMethod: z.enum(["COD", "Razorpay", "Partial", "Direct"]).default("COD"),
   visitorId: z.string().optional(),
   items: z
     .array(
@@ -119,6 +158,43 @@ export async function placeOrder(input: PlaceOrderInput) {
   }
   const total = subtotal + shipping;
 
+  // ---- Resolve the chosen mode against the product rules + global toggles. ----
+  const razorpayAvailable = settings.razorpayEnabled && isRazorpayConfigured();
+  const codAvailable = settings.codEnabled;
+  const allowedModes = resolveAllowedModes(products, {
+    razorpayAvailable,
+    codAvailable,
+  });
+  const mode = METHOD_TO_MODE[data.paymentMethod] ?? "cod";
+  if (!allowedModes.includes(mode)) {
+    return {
+      ok: false as const,
+      error: "That payment option isn't available for these items. Please pick another.",
+    };
+  }
+
+  // Advance (partial) = sum of each line's advancePercent of its line total.
+  const productById = new Map(products.map((p) => [p.id, p]));
+  let advance = 0;
+  if (mode === "partial") {
+    for (const li of lineItems) {
+      const pct = productById.get(li.productId)?.advancePercent ?? 0;
+      advance += Math.round((li.price * li.quantity * pct) / 100);
+    }
+    advance = Math.min(Math.max(advance, 0), total);
+    if (advance <= 0) {
+      return {
+        ok: false as const,
+        error: "Partial payment isn't configured for these items. Please choose another option.",
+      };
+    }
+  }
+
+  // What we charge online now vs. what remains for delivery.
+  const onlineCharge = mode === "prepaid" ? total : mode === "partial" ? advance : 0;
+  const balanceDue = total - onlineCharge; // prepaid→0, partial→remainder, cod/direct→total
+  const needsPayment = onlineCharge > 0;
+
   const number = orderNumber();
 
   const order = await prisma.$transaction(async (tx) => {
@@ -134,18 +210,20 @@ export async function placeOrder(input: PlaceOrderInput) {
         state: data.state,
         pincode: data.pincode,
         note: data.note,
-        paymentMethod: data.paymentMethod || "COD",
+        paymentMethod: data.paymentMethod,
         items: lineItems,
         subtotal,
         shipping,
         total,
+        amountPaid: 0,
+        balanceDue,
         statusHistory: [
           { status: "pending", note: "Order placed", at: new Date().toISOString() },
         ],
       },
     });
 
-    // Reduce stock.
+    // Reduce stock (reserves it while an online payment is completed).
     for (const i of lineItems) {
       await tx.product.update({
         where: { id: i.productId },
@@ -166,7 +244,59 @@ export async function placeOrder(input: PlaceOrderInput) {
       .catch(() => {});
   }
 
-  // Emails: admin (new order) + customer (confirmation).
+  // ---- Online (prepaid / partial): create a Razorpay order for the browser. ----
+  // Confirmation emails are deferred until the payment is verified.
+  if (needsPayment) {
+    try {
+      const rzp = await createRazorpayOrder({
+        amountInRupees: onlineCharge,
+        receipt: order.orderNumber,
+        notes: { orderNumber: order.orderNumber, mode },
+      });
+      await prisma.order.update({
+        where: { id: order.id },
+        data: { razorpayOrderId: rzp.id },
+      });
+      return {
+        ok: true as const,
+        orderNumber: order.orderNumber,
+        payment: {
+          provider: "razorpay" as const,
+          orderId: rzp.id,
+          amount: rzp.amount, // paise
+          currency: rzp.currency,
+          keyId: razorpayPublicKey(),
+          name: settings.brandName,
+          prefill: {
+            name: order.customerName,
+            email: order.email,
+            contact: order.phone,
+          },
+        },
+      };
+    } catch (err) {
+      console.error("[orders] razorpay order failed:", err);
+      // Roll the reserved stock back and remove the just-created order so we
+      // don't leave a dangling unpaid order with depleted stock.
+      await prisma
+        .$transaction(async (tx) => {
+          for (const i of lineItems) {
+            await tx.product.update({
+              where: { id: i.productId },
+              data: { stock: { increment: i.quantity } },
+            });
+          }
+          await tx.order.delete({ where: { id: order.id } });
+        })
+        .catch(() => {});
+      return {
+        ok: false as const,
+        error: "Could not start the payment. Please try again or use another option.",
+      };
+    }
+  }
+
+  // ---- COD / Direct: confirm immediately + email. ----
   try {
     await sendOrderEmails(settings, {
       orderNumber: order.orderNumber,
@@ -186,6 +316,134 @@ export async function placeOrder(input: PlaceOrderInput) {
     });
   } catch (err) {
     console.error("[orders] email failed:", err);
+  }
+
+  return { ok: true as const, orderNumber: order.orderNumber };
+}
+
+// ---------------------------------------------------------------------------
+// Checkout context: the payment options + advance rules for a cart, resolved
+// against product settings and the global toggles. Called by the checkout page.
+// ---------------------------------------------------------------------------
+export async function getCheckoutContext(productIds: string[]) {
+  const ids = Array.from(new Set(productIds)).filter(Boolean);
+  const [settings, products] = await Promise.all([
+    getSettings(),
+    ids.length
+      ? prisma.product.findMany({
+          where: { id: { in: ids } },
+          select: { id: true, paymentModes: true, advancePercent: true },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    razorpayAvailable: settings.razorpayEnabled && isRazorpayConfigured(),
+    codAvailable: settings.codEnabled,
+    products: products.map((p) => ({
+      id: p.id,
+      paymentModes: (p.paymentModes?.length
+        ? p.paymentModes
+        : ["prepaid", "cod"]) as PaymentMode[],
+      advancePercent: p.advancePercent,
+    })),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Verify a Razorpay payment after Checkout returns success in the browser.
+// This is the authoritative step: we only mark an order paid here, server-side,
+// after the signature checks out — never trust the client's word alone.
+// ---------------------------------------------------------------------------
+const verifySchema = z.object({
+  orderNumber: z.string().min(3),
+  razorpayOrderId: z.string().min(3),
+  razorpayPaymentId: z.string().min(3),
+  razorpaySignature: z.string().min(3),
+});
+
+export type VerifyPaymentInput = z.input<typeof verifySchema>;
+
+export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
+  const user = await getUserSession();
+  if (!user) {
+    return { ok: false as const, error: "Please log in again." };
+  }
+
+  const parsed = verifySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const data = parsed.data;
+
+  const order = await prisma.order.findUnique({
+    where: { orderNumber: data.orderNumber },
+  });
+  if (!order || order.userId !== user.id) {
+    return { ok: false as const, error: "Order not found." };
+  }
+  if (order.paymentStatus === "paid") {
+    return { ok: true as const, orderNumber: order.orderNumber };
+  }
+  if (order.razorpayOrderId !== data.razorpayOrderId) {
+    return { ok: false as const, error: "Payment does not match this order." };
+  }
+
+  const valid = verifyRazorpaySignature({
+    orderId: data.razorpayOrderId,
+    paymentId: data.razorpayPaymentId,
+    signature: data.razorpaySignature,
+  });
+  if (!valid) {
+    await prisma.order
+      .update({ where: { id: order.id }, data: { paymentStatus: "failed" } })
+      .catch(() => {});
+    return { ok: false as const, error: "Payment verification failed." };
+  }
+
+  const history = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as unknown as { status: string; note?: string; at: string }[])
+    : [];
+  history.push({
+    status: "pending",
+    note: "Payment received (Razorpay)",
+    at: new Date().toISOString(),
+  });
+
+  await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      paymentStatus: "paid",
+      razorpayPaymentId: data.razorpayPaymentId,
+      statusHistory: history as unknown as object[],
+    },
+  });
+
+  // Now that the order is paid, send the confirmation emails.
+  try {
+    const settings = await getSettings();
+    await sendOrderEmails(settings, {
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      email: order.email,
+      phone: order.phone,
+      address: order.address,
+      city: order.city,
+      state: order.state,
+      pincode: order.pincode,
+      items: order.items as unknown as {
+        name: string;
+        quantity: number;
+        price: number;
+      }[],
+      subtotal: order.subtotal,
+      shipping: order.shipping,
+      total: order.total,
+      paymentMethod: order.paymentMethod,
+      note: order.note,
+    });
+  } catch (err) {
+    console.error("[orders] paid-email failed:", err);
   }
 
   return { ok: true as const, orderNumber: order.orderNumber };

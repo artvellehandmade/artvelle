@@ -3,12 +3,14 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Loader2, Truck, MessageCircle } from "lucide-react";
+import { ChevronDown, Loader2, Truck, MessageCircle, XCircle } from "lucide-react";
 import { formatINR, whatsappLink } from "@/lib/utils";
 import {
   updateOrderStatus,
   updatePaymentStatus,
   updateOrderTracking,
+  shipOrderViaNimbus,
+  cancelAndRestoreStock,
 } from "@/app/actions/admin";
 
 function orderWhatsAppMessage(o: AdminOrder): string {
@@ -50,6 +52,8 @@ export type AdminOrder = {
   subtotal: number;
   shipping: number;
   total: number;
+  amountPaid: number;
+  balanceDue: number;
   paymentMethod: string;
   paymentStatus: string;
   status: string;
@@ -89,6 +93,17 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
     start(async () => {
       await updatePaymentStatus(id, current === "paid" ? "pending" : "paid");
       router.refresh();
+    });
+  }
+
+  function cancelOrder(id: string) {
+    if (!confirm("Cancel this order and restore stock? This cannot be undone.")) return;
+    start(async () => {
+      const res = await cancelAndRestoreStock(id);
+      if (res.ok) {
+        toast.success("Order cancelled — stock restored");
+        router.refresh();
+      } else toast.error(res.error || "Failed to cancel");
     });
   }
 
@@ -169,6 +184,19 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         <span>Total</span>
                         <span>{formatINR(o.total)}</span>
                       </div>
+                      {/* Show advance paid / balance due for partial or pending online orders */}
+                      {o.amountPaid > 0 && (
+                        <div className="flex justify-between text-green-600">
+                          <span>Paid online</span>
+                          <span>{formatINR(o.amountPaid)}</span>
+                        </div>
+                      )}
+                      {o.balanceDue > 0 && (
+                        <div className="flex justify-between text-orange-500">
+                          <span>Balance due (COD)</span>
+                          <span>{formatINR(o.balanceDue)}</span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -229,6 +257,19 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         <MessageCircle className="h-3.5 w-3.5" />
                         WhatsApp customer
                       </a>
+
+                      {/* Cancel & restore stock — for abandoned online-payment orders */}
+                      {o.status !== "cancelled" && o.paymentStatus !== "paid" && (
+                        <button
+                          onClick={() => cancelOrder(o.id)}
+                          disabled={pending}
+                          className="inline-flex items-center gap-1.5 rounded-full bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/20 disabled:opacity-50"
+                          title="Cancel this order and immediately return reserved stock"
+                        >
+                          <XCircle className="h-3.5 w-3.5" />
+                          Cancel &amp; restore stock
+                        </button>
+                      )}
                     </div>
 
                     <TrackingEditor order={o} />
@@ -246,6 +287,7 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
 function TrackingEditor({ order }: { order: AdminOrder }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [shipping, startShip] = useTransition();
   const [courier, setCourier] = useState(order.courier ?? "");
   const [trackingNumber, setTrackingNumber] = useState(
     order.trackingNumber ?? ""
@@ -266,6 +308,18 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
     });
   }
 
+  function shipViaNimbus() {
+    startShip(async () => {
+      const res = await shipOrderViaNimbus(order.id);
+      if (res.ok) {
+        toast.success(
+          `Shipment created — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
+        );
+        router.refresh();
+      } else toast.error(res.error || "Could not create shipment", { duration: 6000 });
+    });
+  }
+
   return (
     <div className="mt-5 rounded-xl border border-border p-4">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -273,9 +327,27 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
         Shipment tracking
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Add courier &amp; tracking so the customer can follow their order. Saved
-        details show in their account.
+        Create a NimbusPost shipment for a courier + AWB automatically, or enter
+        tracking manually. Saved details show in the customer&apos;s account.
       </p>
+
+      {!order.trackingNumber && (
+        <button
+          onClick={shipViaNimbus}
+          disabled={shipping}
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground disabled:opacity-50"
+        >
+          {shipping ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating shipment…
+            </>
+          ) : (
+            <>
+              <Truck className="h-3.5 w-3.5" /> Ship via NimbusPost (auto AWB)
+            </>
+          )}
+        </button>
+      )}
       <div className="mt-3 grid gap-3 sm:grid-cols-3">
         <label className="block">
           <span className="mb-1 block text-xs text-muted-foreground">

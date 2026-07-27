@@ -26,6 +26,8 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
     instagram: initial.instagram ?? "",
     facebook: initial.facebook ?? "",
     announcement: initial.announcement ?? "",
+    razorpayEnabled: initial.razorpayEnabled ?? false,
+    nimbusEnabled: initial.nimbusEnabled ?? false,
   });
 
   function set<K extends keyof typeof f>(key: K, value: (typeof f)[K]) {
@@ -72,6 +74,8 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
         ? Number(f.freeShippingThreshold)
         : null,
       codEnabled: f.codEnabled,
+      razorpayEnabled: f.razorpayEnabled,
+      nimbusEnabled: f.nimbusEnabled,
       announcement: f.announcement || null,
     });
     setSaving(false);
@@ -225,6 +229,26 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
         </label>
       </Card>
 
+      <Card title="Integrations">
+        <p className="text-sm text-muted-foreground">
+          Use the toggles below to enable online payment (Razorpay) and
+          automated shipping (NimbusPost) site-wide. You also control which
+          products support each feature per-product in the product editor.
+        </p>
+        <Toggle
+          label="Razorpay online payments"
+          description="Enable prepaid & partial payment at checkout. Requires Razorpay keys in env."
+          checked={f.razorpayEnabled}
+          onChange={(v) => set("razorpayEnabled", v)}
+        />
+        <Toggle
+          label="NimbusPost automated shipping"
+          description="Let admin create shipments directly from order cards. Requires NimbusPost credentials in env."
+          checked={f.nimbusEnabled}
+          onChange={(v) => set("nimbusEnabled", v)}
+        />
+      </Card>
+
       <div className="sticky bottom-4 flex justify-end">
         <Button type="submit" disabled={saving} size="lg" className="shadow-lg">
           {saving ? (
@@ -292,5 +316,45 @@ function Area({
         className="input resize-none"
       />
     </label>
+  );
+}
+
+function Toggle({
+  label,
+  description,
+  checked,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex w-full items-center justify-between rounded-xl border border-border px-4 py-3 text-sm text-left"
+    >
+      <span>
+        <span className="block font-medium">{label}</span>
+        {description && (
+          <span className="block text-xs text-muted-foreground mt-0.5">
+            {description}
+          </span>
+        )}
+      </span>
+      <span
+        className={`relative ml-4 h-6 w-11 shrink-0 rounded-full transition-colors ${
+          checked ? "bg-accent" : "bg-muted-foreground/30"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+            checked ? "left-0.5 translate-x-5" : "left-0.5"
+          }`}
+        />
+      </span>
+    </button>
   );
 }

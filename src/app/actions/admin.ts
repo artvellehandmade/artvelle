@@ -8,6 +8,7 @@ import { getSettings } from "@/lib/settings";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { isLeadStatus } from "@/lib/leads";
 import { slugify } from "@/lib/utils";
+import { createShipment, isNimbusPostConfigured } from "@/lib/nimbuspost";
 
 async function requireAdmin() {
   const session = await getAdminSession();
@@ -60,6 +61,8 @@ const variantSchema = z.object({
   images: z.array(z.string()).default([]),
 });
 
+const PAYMENT_MODES = ["prepaid", "cod", "partial", "direct"] as const;
+
 const productSchema = z.object({
   name: z.string().min(2),
   description: z.string().min(1),
@@ -75,6 +78,13 @@ const productSchema = z.object({
   variants: z.array(variantSchema).default([]),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
+  // Which checkout modes this product supports (subset of the 4 modes).
+  paymentModes: z
+    .array(z.enum(PAYMENT_MODES))
+    .min(1, "Select at least one checkout mode")
+    .default(["prepaid", "cod"]),
+  // Advance % taken online when "partial" is chosen. Required when partial is enabled.
+  advancePercent: z.coerce.number().int().min(1).max(99).nullable().optional(),
 });
 
 export type ProductInput = z.input<typeof productSchema>;
@@ -96,6 +106,8 @@ export async function createProduct(input: ProductInput) {
       options: data.options,
       variantPrices: data.variantPrices,
       variants: data.variants,
+      paymentModes: data.paymentModes,
+      advancePercent: data.advancePercent ?? null,
       slug,
     },
   });
@@ -121,6 +133,8 @@ export async function updateProduct(id: string, input: ProductInput) {
       options: data.options,
       variantPrices: data.variantPrices,
       variants: data.variants,
+      paymentModes: data.paymentModes,
+      advancePercent: data.advancePercent ?? null,
       slug,
     },
   });
@@ -251,6 +265,9 @@ const settingsSchema = z.object({
     .nullable()
     .optional(),
   codEnabled: z.boolean().default(true),
+  // Integration master switches.
+  razorpayEnabled: z.boolean().default(false),
+  nimbusEnabled: z.boolean().default(false),
   announcement: z.string().nullable().optional(),
 });
 
@@ -269,11 +286,15 @@ export async function updateSettings(input: SettingsInput) {
     update: {
       ...data,
       freeShippingThreshold: data.freeShippingThreshold ?? null,
+      razorpayEnabled: data.razorpayEnabled ?? false,
+      nimbusEnabled: data.nimbusEnabled ?? false,
     },
     create: {
       id: "main",
       ...data,
       freeShippingThreshold: data.freeShippingThreshold ?? null,
+      razorpayEnabled: data.razorpayEnabled ?? false,
+      nimbusEnabled: data.nimbusEnabled ?? false,
     },
   });
 
@@ -376,6 +397,165 @@ export async function updatePaymentStatus(id: string, paymentStatus: string) {
   await requireAdmin();
   await prisma.order.update({ where: { id }, data: { paymentStatus } });
   revalidatePath("/admin/orders");
+  return { ok: true as const };
+}
+
+// -------- Shipping (NimbusPost) --------
+export async function shipOrderViaNimbus(id: string) {
+  await requireAdmin();
+
+  if (!isNimbusPostConfigured()) {
+    return {
+      ok: false as const,
+      error:
+        "NimbusPost isn't set up yet. Add NIMBUSPOST_EMAIL, NIMBUSPOST_PASSWORD and NIMBUSPOST_WAREHOUSE_NAME to your environment.",
+    };
+  }
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return { ok: false as const, error: "Order not found" };
+  if (order.trackingNumber) {
+    return {
+      ok: false as const,
+      error: `This order already has an AWB (${order.trackingNumber}).`,
+    };
+  }
+
+  const items = Array.isArray(order.items)
+    ? (order.items as unknown as { name: string; quantity: number; price: number }[])
+    : [];
+
+  try {
+    const result = await createShipment({
+      orderNumber: order.orderNumber,
+      // COD only when it's a cash order that hasn't been prepaid online.
+      paymentType:
+        order.paymentMethod === "COD" && order.paymentStatus !== "paid"
+          ? "cod"
+          : "prepaid",
+      orderAmount: order.total,
+      consignee: {
+        name: order.customerName,
+        address: order.address,
+        city: order.city,
+        state: order.state,
+        pincode: order.pincode,
+        phone: order.phone,
+      },
+      items: items.map((i) => ({
+        name: i.name,
+        qty: i.quantity,
+        price: i.price,
+      })),
+    });
+
+    const history = Array.isArray(order.statusHistory)
+      ? (order.statusHistory as unknown as StatusEntry[])
+      : [];
+    history.push({
+      status: "shipped",
+      note: `Shipped via NimbusPost${
+        result.courierName ? ` (${result.courierName})` : ""
+      } — AWB ${result.awb}`,
+      at: new Date().toISOString(),
+    });
+
+    await prisma.order.update({
+      where: { id },
+      data: {
+        status: "shipped",
+        courier: result.courierName,
+        trackingNumber: result.awb,
+        trackingUrl: result.trackingUrl,
+        nimbusShipmentId: result.shipmentId,
+        statusHistory: history as unknown as object[],
+      },
+    });
+
+    // Notify the customer their order has shipped (with tracking).
+    try {
+      const settings = await getSettings();
+      await sendOrderStatusEmail(settings, {
+        orderNumber: order.orderNumber,
+        customerName: order.customerName,
+        email: order.email,
+        status: "shipped",
+        courier: result.courierName,
+        trackingNumber: result.awb,
+        trackingUrl: result.trackingUrl,
+      });
+    } catch (err) {
+      console.error("[admin] ship email failed:", err);
+    }
+
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
+    return {
+      ok: true as const,
+      awb: result.awb,
+      courier: result.courierName,
+    };
+  } catch (err) {
+    console.error("[admin] nimbuspost ship failed:", err);
+    return {
+      ok: false as const,
+      error: err instanceof Error ? err.message : "Failed to create shipment.",
+    };
+  }
+}
+
+// -------- Cancel abandoned order & restore stock --------
+export async function cancelAndRestoreStock(id: string) {
+  await requireAdmin();
+
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return { ok: false as const, error: "Order not found" };
+  if (order.status === "cancelled") {
+    return { ok: false as const, error: "Order is already cancelled" };
+  }
+  if (order.paymentStatus === "paid") {
+    return {
+      ok: false as const,
+      error: "Cannot cancel a fully paid order here. Change status manually.",
+    };
+  }
+
+  const items = Array.isArray(order.items)
+    ? (order.items as unknown as { productId: string; quantity: number }[])
+    : [];
+
+  const history = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as unknown as StatusEntry[])
+    : [];
+  history.push({
+    status: "cancelled",
+    note: "Cancelled by admin — stock restored",
+    at: new Date().toISOString(),
+  });
+
+  await prisma.$transaction(async (tx) => {
+    // Restore each product's stock.
+    for (const item of items) {
+      if (item.productId && item.quantity > 0) {
+        await tx.product
+          .update({
+            where: { id: item.productId },
+            data: { stock: { increment: item.quantity } },
+          })
+          .catch(() => {}); // ignore if product was deleted
+      }
+    }
+    await tx.order.update({
+      where: { id },
+      data: {
+        status: "cancelled",
+        statusHistory: history as unknown as object[],
+      },
+    });
+  });
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
   return { ok: true as const };
 }
 

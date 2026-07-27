@@ -119,6 +119,15 @@ body {
   color: var(--accent);
 }
 
+/* Hide scrollbars on horizontal scroll rows (mobile nav, filter chips) */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Form inputs (shared across storefront + admin) */
 .input {
   width: 100%;
