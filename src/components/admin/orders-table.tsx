@@ -3,7 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Loader2, Truck, MessageCircle, XCircle, CheckCircle2 } from "lucide-react";
+import {
+  ChevronDown,
+  Loader2,
+  Truck,
+  MessageCircle,
+  XCircle,
+  CheckCircle2,
+  MessageSquare,
+} from "lucide-react";
 import { formatINR, whatsappLink } from "@/lib/utils";
 import {
   updateOrderStatus,
@@ -12,6 +20,7 @@ import {
   shipOrderViaNimbus,
   cancelAndRestoreStock,
   confirmOrder,
+  addOrderNote,
 } from "@/app/actions/admin";
 
 function orderWhatsAppMessage(o: AdminOrder): string {
@@ -66,7 +75,14 @@ export type AdminOrder = {
   createdAt: string;
 };
 
-const STATUSES = ["pending", "confirmed", "shipped", "delivered", "cancelled"];
+const STATUSES = [
+  "pending",
+  "confirmed",
+  "shipped",
+  "delivered",
+  "cancelled",
+  "payment_failed",
+];
 
 const statusColor: Record<string, string> = {
   pending: "bg-accent/15 text-accent",
@@ -74,6 +90,7 @@ const statusColor: Record<string, string> = {
   shipped: "bg-purple-500/15 text-purple-500",
   delivered: "bg-success/15 text-success",
   cancelled: "bg-danger/15 text-danger",
+  payment_failed: "bg-rose-500/15 text-rose-500 border border-rose-500/30",
 };
 
 // A short payment badge shown next to the order status.
@@ -104,9 +121,10 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
     });
   }
 
-  function togglePaid(id: string, current: string) {
+  function changePaymentStatus(id: string, newPaymentStatus: string) {
     start(async () => {
-      await updatePaymentStatus(id, current === "paid" ? "pending" : "paid");
+      await updatePaymentStatus(id, newPaymentStatus);
+      toast.success(`Payment status updated to “${newPaymentStatus}”`);
       router.refresh();
     });
   }
@@ -162,7 +180,7 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                       statusColor[o.status] ?? "bg-muted"
                     }`}
                   >
-                    {o.status}
+                    {o.status.replace("_", " ")}
                   </span>
                   {(() => {
                     const b = paymentBadge(o);
@@ -181,20 +199,21 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                 {formatINR(o.total)}
               </span>
               <ChevronDown
-                className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                className={`h-4 w-4 text-muted-foreground transition-transform ${
                   open ? "rotate-180" : ""
                 }`}
               />
             </button>
 
             {open && (
-              <div className="border-t border-border px-5 py-4">
+              <div className="border-t border-border px-5 py-5 text-sm">
                 <div className="grid gap-6 md:grid-cols-2">
+                  {/* Items list */}
                   <div>
-                    <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Items
-                    </h4>
-                    <ul className="mt-2 space-y-1 text-sm">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Items ({o.items.length})
+                    </p>
+                    <ul className="mt-2 space-y-1.5">
                       {o.items.map((it, i) => (
                         <li key={i} className="flex justify-between">
                           <span>
@@ -207,11 +226,13 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                               </span>
                             )}
                           </span>
-                          <span>{formatINR(it.price * it.quantity)}</span>
+                          <span className="font-medium">
+                            {formatINR(it.price * it.quantity)}
+                          </span>
                         </li>
                       ))}
                     </ul>
-                    <div className="mt-3 space-y-1 border-t border-border pt-2 text-sm">
+                    <div className="mt-3 space-y-1 border-t border-border pt-2 text-xs">
                       <div className="flex justify-between text-muted-foreground">
                         <span>Subtotal</span>
                         <span>{formatINR(o.subtotal)}</span>
@@ -222,42 +243,37 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                           {o.shipping === 0 ? "Free" : formatINR(o.shipping)}
                         </span>
                       </div>
-                      <div className="flex justify-between font-medium">
+                      <div className="flex justify-between font-medium text-foreground text-sm">
                         <span>Total</span>
                         <span>{formatINR(o.total)}</span>
                       </div>
-                      {/* Show advance paid / balance due for partial or pending online orders */}
                       {o.amountPaid > 0 && (
-                        <div className="flex justify-between text-green-600">
+                        <div className="flex justify-between text-success">
                           <span>Paid online</span>
                           <span>{formatINR(o.amountPaid)}</span>
                         </div>
                       )}
                       {o.balanceDue > 0 && (
-                        <div className="flex justify-between text-orange-500">
-                          <span>Balance due (COD)</span>
+                        <div className="flex justify-between font-medium text-accent">
+                          <span>COD / Balance due</span>
                           <span>{formatINR(o.balanceDue)}</span>
                         </div>
                       )}
                     </div>
                   </div>
 
+                  {/* Customer & Actions */}
                   <div>
-                    <h4 className="text-xs uppercase tracking-wider text-muted-foreground">
-                      Customer
-                    </h4>
-                    <div className="mt-2 text-sm text-muted-foreground">
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      Customer &amp; Delivery
+                    </p>
+                    <div className="mt-2 text-xs text-muted-foreground">
                       <p className="text-foreground">{o.customerName}</p>
                       <p>{o.email}</p>
                       <p>{o.phone}</p>
                       <p className="mt-1">
                         {o.address}, {o.city}, {o.state} - {o.pincode}
                       </p>
-                      {o.note && (
-                        <p className="mt-2 rounded-lg bg-muted p-2 text-foreground">
-                          Note: {o.note}
-                        </p>
-                      )}
                     </div>
 
                     {/* Accept a pending (COD/Direct) order before fulfilment. */}
@@ -279,33 +295,38 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                     )}
 
                     <div className="mt-4 flex flex-wrap items-center gap-3">
+                      {/* Order status dropdown */}
                       <label className="flex items-center gap-2 text-sm">
                         Status
                         <select
                           value={o.status}
                           disabled={pending}
                           onChange={(e) => changeStatus(o.id, e.target.value)}
-                          className="input h-9 w-auto"
+                          className="input h-9 w-auto capitalize"
                         >
                           {STATUSES.map((s) => (
                             <option key={s} value={s}>
-                              {s}
+                              {s.replace("_", " ")}
                             </option>
                           ))}
                         </select>
                       </label>
-                      <button
-                        onClick={() => togglePaid(o.id, o.paymentStatus)}
-                        disabled={pending}
-                        className={`rounded-full px-3 py-1.5 text-xs ${
-                          o.paymentStatus === "paid"
-                            ? "bg-success/15 text-success"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {o.paymentMethod} ·{" "}
-                        {o.paymentStatus === "paid" ? "Paid" : "Mark paid"}
-                      </button>
+
+                      {/* Payment status dropdown */}
+                      <label className="flex items-center gap-2 text-sm">
+                        Payment
+                        <select
+                          value={o.paymentStatus}
+                          disabled={pending}
+                          onChange={(e) => changePaymentStatus(o.id, e.target.value)}
+                          className="input h-9 w-auto capitalize"
+                        >
+                          <option value="pending">Pending</option>
+                          <option value="paid">Paid</option>
+                          <option value="partial">Partial</option>
+                          <option value="failed">Payment Failed</option>
+                        </select>
+                      </label>
 
                       <a
                         href={whatsappLink(o.phone, orderWhatsAppMessage(o))}
@@ -318,7 +339,7 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         WhatsApp customer
                       </a>
 
-                      {/* Cancel & restore stock — for abandoned online-payment orders */}
+                      {/* Cancel & restore stock */}
                       {o.status !== "cancelled" && o.paymentStatus !== "paid" && (
                         <button
                           onClick={() => cancelOrder(o.id)}
@@ -332,6 +353,10 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                       )}
                     </div>
 
+                    {/* Admin Note / Comment Editor */}
+                    <AdminNoteEditor order={o} />
+
+                    {/* Tracking details */}
                     <TrackingEditor order={o} />
                   </div>
                 </div>
@@ -340,6 +365,57 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function AdminNoteEditor({ order }: { order: AdminOrder }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [noteText, setNoteText] = useState(order.note ?? "");
+
+  function saveNote() {
+    start(async () => {
+      const res = await addOrderNote(order.id, noteText);
+      if (res.ok) {
+        toast.success("Order note saved — visible to customer");
+        router.refresh();
+      } else {
+        toast.error(res.error || "Failed to save note");
+      }
+    });
+  }
+
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-muted/20 p-3.5">
+      <label className="block">
+        <span className="mb-1.5 flex items-center justify-between text-xs font-medium">
+          <span className="flex items-center gap-1.5">
+            <MessageSquare className="h-3.5 w-3.5 text-accent" />
+            Admin Note / Comment for Customer
+          </span>
+          <span className="text-[11px] font-normal text-muted-foreground">
+            Visible on customer order status
+          </span>
+        </span>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="e.g. Payment failed on online gateway, customisation update..."
+            className="input h-9 text-xs flex-1"
+          />
+          <button
+            type="button"
+            onClick={saveNote}
+            disabled={pending}
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-accent px-3.5 text-xs font-medium text-accent-foreground hover:bg-accent/90 disabled:opacity-50 cursor-pointer"
+          >
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save note"}
+          </button>
+        </div>
+      </label>
     </div>
   );
 }
@@ -376,14 +452,14 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
           `Dispatched — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
         );
         router.refresh();
-      } else toast.error(res.error || "Could not dispatch", { duration: 6000 });
+      } else toast.error(res.error || "Could not dispatch", { duration: 10000 });
     });
   }
 
   const staged = Boolean(order.nimbusShipmentId);
 
   return (
-    <div className="mt-5 rounded-xl border border-border p-4">
+    <div className="mt-4 rounded-xl border border-border p-4">
       <div className="flex items-center gap-2 text-sm font-medium">
         <Truck className="h-4 w-4 text-muted-foreground" />
         Shipment tracking
@@ -399,7 +475,7 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
         <button
           onClick={shipViaNimbus}
           disabled={shipping}
-          className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground disabled:opacity-50"
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-accent px-4 py-2 text-xs font-medium text-accent-foreground disabled:opacity-50 cursor-pointer"
         >
           {shipping ? (
             <>
@@ -448,19 +524,15 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
           />
         </label>
       </div>
-      <button
-        onClick={save}
-        disabled={pending}
-        className="mt-3 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-xs font-medium text-background disabled:opacity-50"
-      >
-        {pending ? (
-          <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Saving…
-          </>
-        ) : (
-          "Save tracking"
-        )}
-      </button>
+      <div className="mt-3 text-right">
+        <button
+          onClick={save}
+          disabled={pending}
+          className="rounded-full border border-border px-4 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50 cursor-pointer"
+        >
+          Save tracking details
+        </button>
+      </div>
     </div>
   );
 }

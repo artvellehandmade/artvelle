@@ -326,6 +326,7 @@ const ORDER_STATUSES = [
   "shipped",
   "delivered",
   "cancelled",
+  "payment_failed",
 ] as const;
 
 type StatusEntry = { status: string; note?: string; at: string };
@@ -353,7 +354,11 @@ export async function updateOrderStatus(
 
   await prisma.order.update({
     where: { id },
-    data: { status, statusHistory: history as unknown as object[] },
+    data: {
+      status,
+      statusHistory: history as unknown as object[],
+      ...(trimmed ? { note: trimmed } : {}),
+    },
   });
 
   // Notify the customer of the new status.
@@ -414,6 +419,36 @@ export async function updatePaymentStatus(id: string, paymentStatus: string) {
   await requireAdmin();
   await prisma.order.update({ where: { id }, data: { paymentStatus } });
   revalidatePath("/admin/orders");
+  return { ok: true as const };
+}
+
+export async function addOrderNote(id: string, note: string) {
+  await requireAdmin();
+  const trimmed = note.trim();
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return { ok: false as const, error: "Order not found" };
+
+  const history = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as unknown as StatusEntry[])
+    : [];
+  if (trimmed) {
+    history.push({
+      status: order.status,
+      note: `Note: ${trimmed}`,
+      at: new Date().toISOString(),
+    });
+  }
+
+  await prisma.order.update({
+    where: { id },
+    data: {
+      note: trimmed || null,
+      statusHistory: history as unknown as object[],
+    },
+  });
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
   return { ok: true as const };
 }
 

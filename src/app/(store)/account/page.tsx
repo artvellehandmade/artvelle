@@ -50,6 +50,7 @@ export default async function AccountPage() {
     city: o.city,
     state: o.state,
     pincode: o.pincode,
+    note: o.note,
   }));
 
   // Reviews — approved for portfolio display

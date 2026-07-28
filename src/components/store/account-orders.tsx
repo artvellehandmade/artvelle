@@ -30,6 +30,7 @@ export type AccountOrder = {
   city: string;
   state: string;
   pincode: string;
+  note?: string | null;
 };
 
 const statusColor: Record<string, string> = {
@@ -38,6 +39,7 @@ const statusColor: Record<string, string> = {
   shipped: "bg-purple-500/15 text-purple-500",
   delivered: "bg-success/15 text-success",
   cancelled: "bg-danger/15 text-danger",
+  payment_failed: "bg-rose-500/15 text-rose-500 border border-rose-500/30",
 };
 
 export function AccountOrders({ orders }: { orders: AccountOrder[] }) {
@@ -110,6 +112,7 @@ export function AccountOrders({ orders }: { orders: AccountOrder[] }) {
                       status={o.status}
                       history={o.statusHistory}
                       deliveryStatus={o.deliveryStatus}
+                      note={o.note}
                     />
                     {(o.courier || o.trackingNumber || o.trackingUrl) && (
                       <div className="mt-4 rounded-xl bg-muted p-4 text-sm">

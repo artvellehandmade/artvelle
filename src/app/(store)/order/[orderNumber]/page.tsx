@@ -151,6 +151,7 @@ export default async function OrderPage({
             status={order.status}
             history={history}
             deliveryStatus={order.deliveryStatus}
+            note={order.note}
           />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
