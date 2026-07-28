@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { ShoppingBag, Minus, Plus, Check, Zap, Loader2 } from "lucide-react";
 import { useCart } from "@/context/cart";
@@ -15,6 +15,7 @@ import {
   effectiveVariant,
   minMatchingPrice,
   toSelectedOptions,
+  getDefaultSelection,
 } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 
@@ -26,6 +27,14 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
   const [buying, setBuying] = useState(false);
+
+  // Auto-set the first choice of each option group as default
+  useEffect(() => {
+    if (product.options && product.options.length > 0) {
+      const def = getDefaultSelection(product.options, variants);
+      setSelection(def);
+    }
+  }, [product, variants, setSelection]);
 
   const hasOptions = product.options.length > 0;
   const variant = effectiveVariant(product, selection);

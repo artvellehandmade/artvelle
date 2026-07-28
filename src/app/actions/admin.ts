@@ -471,12 +471,16 @@ export async function confirmOrder(id: string) {
 // -------- Shipping (NimbusPost) --------
 // One-click dispatch: generate the AWB (uses the staged draft if present).
 export async function shipOrderViaNimbus(id: string) {
+  console.log(`[STEP 1 & 2] Server Action shipOrderViaNimbus invoked for orderId: ${id}`);
   await requireAdmin();
+  console.log("[STEP 3 & 4] Admin Auth Check Passed.");
 
   const result = await dispatchOrder(id);
   if (!result.ok) {
+    console.error("[STEP-FAIL] dispatchOrder failed:", result.error);
     return { ok: false as const, error: result.error || "Failed to create shipment." };
   }
+  console.log("[STEP 8] Shipment success! AWB:", result.awb);
 
   // Notify the customer their order has shipped (with tracking).
   try {

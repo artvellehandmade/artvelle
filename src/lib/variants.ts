@@ -29,6 +29,32 @@ export function toSelectedOptions(sel: Selection): SelectedOption[] {
 }
 
 /**
+ * Return default selection for a product: pre-selects the first choice of each option group.
+ */
+export function getDefaultSelection(
+  options: ProductOption[],
+  variants?: Variant[]
+): Selection {
+  const selection: Selection = {};
+  if (!options || !options.length) return selection;
+
+  for (const group of options) {
+    if (!group.name || !group.choices || !group.choices.length) continue;
+    const norm = variants ?? [];
+    const firstChoice = group.choices.find((c) =>
+      norm.length
+        ? isChoiceEnabled(norm, options, group.name, c.label, selection)
+        : true
+    ) ?? group.choices[0];
+
+    if (firstChoice) {
+      selection[group.name] = firstChoice.label;
+    }
+  }
+  return selection;
+}
+
+/**
  * Return the product's variant matrix, synthesising one for older products
  * (from options + legacy variantPrices + per-choice images) so every product
  * behaves the same. Returns [] when the product has no options at all.

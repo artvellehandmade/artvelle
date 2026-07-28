@@ -1,20 +1,13 @@
 /**
  * NimbusPost (delivery) helper — server only.
  *
- * IMPORTANT: NimbusPost's API authenticates with your ACCOUNT email + password
- * (the same login used at ship.nimbuspost.com) via POST /users/login, which
- * returns a Bearer token. The "API key/secret" shown in the dashboard are NOT
- * accepted by this API — verified against the live endpoints. So set
- * NIMBUSPOST_EMAIL and NIMBUSPOST_PASSWORD in .env to enable shipping.
- *
- * Endpoints (base https://api.nimbuspost.com/v1/), mirrored from NimbusPost's
- * official SDK/Postman docs:
- *   POST  users/login              → { status, data: <token> }
- *   POST  shipments                → create shipment (auto-assigns courier + AWB)
- *   GET   shipments/track/{awb}    → tracking
+ * Supports both:
+ * 1. NimbusPost v2 API (https://api-v2.nimbuspost.com) via NIMBUSPOST_TOKEN
+ * 2. NimbusPost v1 API (https://api.nimbuspost.com/v1) via EMAIL + PASSWORD
  */
 
-const BASE = "https://api.nimbuspost.com/v1";
+const BASE_V1 = "https://api.nimbuspost.com/v1";
+const BASE_V2 = "https://api-v2.nimbuspost.com";
 
 function num(envVar: string | undefined, fallback: number): number {
   const n = Number(envVar);
@@ -33,26 +26,30 @@ let cachedToken: { token: string; at: number } | null = null;
 const TOKEN_TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 async function login(): Promise<string> {
-  if (process.env.NIMBUSPOST_TOKEN) {
+  if (process.env.NIMBUSPOST_TOKEN?.trim()) {
     return process.env.NIMBUSPOST_TOKEN.trim();
   }
   if (cachedToken && Date.now() - cachedToken.at < TOKEN_TTL_MS) {
     return cachedToken.token;
   }
-  const res = await fetch(`${BASE}/users/login`, {
+  const email = process.env.NIMBUSPOST_EMAIL?.trim();
+  const password = process.env.NIMBUSPOST_PASSWORD?.trim();
+  if (!email || !password) {
+    throw new Error(
+      "NimbusPost credentials missing in .env. Please set NIMBUSPOST_TOKEN or NIMBUSPOST_EMAIL & NIMBUSPOST_PASSWORD."
+    );
+  }
+
+  const res = await fetch(`${BASE_V1}/users/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: process.env.NIMBUSPOST_EMAIL,
-      password: process.env.NIMBUSPOST_PASSWORD,
-    }),
+    body: JSON.stringify({ email, password }),
     cache: "no-store",
   });
   const data = await res.json().catch(() => ({}));
   if (!data?.status || !data?.data) {
     throw new Error(
-      data?.message ||
-        "NimbusPost login failed. Check NIMBUSPOST_EMAIL / NIMBUSPOST_PASSWORD or set NIMBUSPOST_TOKEN."
+      `NimbusPost login failed (${data?.message?.trim() || "Invalid email/password"}).`
     );
   }
   cachedToken = { token: String(data.data), at: Date.now() };
@@ -61,11 +58,22 @@ async function login(): Promise<string> {
 
 async function authed(path: string, init?: RequestInit) {
   const token = await login();
-  const res = await fetch(`${BASE}/${path}`, {
+  const authHeader = token.toLowerCase().startsWith("bearer ")
+    ? token
+    : `Bearer ${token}`;
+  
+  // Use v2 API endpoint if token is a v2 JWT token or when calling v2 orders endpoint
+  const url = path.startsWith("http")
+    ? path
+    : path.startsWith("orders/api/v1")
+    ? `${BASE_V2}/${path}`
+    : `${BASE_V1}/${path}`;
+
+  const res = await fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      Authorization: authHeader,
       ...(init?.headers ?? {}),
     },
     cache: "no-store",
@@ -86,12 +94,46 @@ export type ShipmentInput = {
     phone: string;
   };
   items: { name: string; qty: number; price: number }[];
-  // Optional parcel size; falls back to NIMBUSPOST_DEFAULT_* when omitted.
   parcel?: { weight?: number; length?: number; breadth?: number; height?: number };
 };
 
-/** Build the NimbusPost order/shipment request body from an order. */
-function buildPayload(input: ShipmentInput, warehouseName: string) {
+/** Build NimbusPost v2 order payload. */
+function buildV2Payload(input: ShipmentInput) {
+  const p = input.parcel ?? {};
+  const pincodeNum = Number(input.consignee.pincode.replace(/\D/g, "")) || 380001;
+  const rawPhone = input.consignee.phone.replace(/\D/g, "");
+  const phone = rawPhone.length >= 10 ? rawPhone.slice(-10) : "9999999999";
+
+  const weightKg = (p.weight && p.weight > 0 ? p.weight : num(process.env.NIMBUSPOST_DEFAULT_WEIGHT, 500)) / 1000;
+
+  return {
+    order_number: input.orderNumber,
+    order_type: "b2c",
+    payment_mode: input.paymentType === "cod" ? "cod" : "prepaid",
+    items: input.items.map((i) => ({
+      name: i.name,
+      qty: Number(i.qty) || 1,
+      price: Number(i.price) || 0,
+    })),
+    package: {
+      weight: weightKg,
+      length: p.length && p.length > 0 ? p.length : num(process.env.NIMBUSPOST_DEFAULT_LENGTH, 15),
+      width: p.breadth && p.breadth > 0 ? p.breadth : num(process.env.NIMBUSPOST_DEFAULT_BREADTH, 15),
+      height: p.height && p.height > 0 ? p.height : num(process.env.NIMBUSPOST_DEFAULT_HEIGHT, 10),
+    },
+    shipping_address: {
+      name: input.consignee.name,
+      address: input.consignee.address,
+      city: input.consignee.city,
+      state: input.consignee.state,
+      pincode: pincodeNum,
+      phone: phone,
+    },
+  };
+}
+
+/** Build NimbusPost v1 order payload. */
+function buildV1Payload(input: ShipmentInput, warehouseName: string) {
   const p = input.parcel ?? {};
   return {
     order_number: input.orderNumber,
@@ -129,27 +171,49 @@ function requireWarehouse(): string {
   return warehouseName;
 }
 
+export type ShipmentResult = {
+  awb: string;
+  courierName: string | null;
+  shipmentId: string | null;
+  trackingUrl: string | null;
+};
+
 function readShipmentResult(data: Record<string, unknown>): ShipmentResult {
   const d = ((data.data as Record<string, unknown>) ?? data) as Record<string, unknown>;
   const awb = String(d.awb_number ?? d.awb ?? "");
-  if (!awb) throw new Error("NimbusPost did not return an AWB number.");
   return {
     awb,
     courierName: (d.courier_name as string) ?? (d.courier as string) ?? null,
-    shipmentId: d.shipment_id != null ? String(d.shipment_id) : null,
-    trackingUrl: (d.tracking_url as string) ?? `https://ship.nimbuspost.com/track/${awb}`,
+    shipmentId: d.order_id != null ? String(d.order_id) : (d.shipment_id != null ? String(d.shipment_id) : null),
+    trackingUrl: (d.tracking_url as string) ?? (awb ? `https://ship.nimbuspost.com/track/${awb}` : null),
   };
 }
 
 /**
- * Create a DRAFT order in NimbusPost (no courier/AWB yet) so admin can review
- * it and dispatch in one click. Returns the NimbusPost order id.
+ * Create a DRAFT order in NimbusPost. Supports both v2 and v1 APIs.
  */
 export async function createDraftOrder(input: ShipmentInput): Promise<string> {
   if (!isNimbusPostConfigured()) {
-    throw new Error("NimbusPost is not configured (set NIMBUSPOST_EMAIL / NIMBUSPOST_PASSWORD).");
+    throw new Error("NimbusPost is not configured (set NIMBUSPOST_TOKEN or NIMBUSPOST_EMAIL).");
   }
-  const payload = buildPayload(input, requireWarehouse());
+
+  // Try v2 API if NIMBUSPOST_TOKEN is present
+  if (process.env.NIMBUSPOST_TOKEN?.trim()) {
+    const v2Payload = buildV2Payload(input);
+    const data = await authed("orders/api/v1/orders", {
+      method: "POST",
+      body: JSON.stringify(v2Payload),
+    });
+    if (data?.success && data?.data?.order_id) {
+      return String(data.data.order_id);
+    }
+    if (data?.error?.detail) {
+      throw new Error(`NimbusPost v2: ${data.error.detail}`);
+    }
+  }
+
+  // Fallback to v1 API
+  const payload = buildV1Payload(input, requireWarehouse());
   const data = await authed("orders/create", {
     method: "POST",
     body: JSON.stringify(payload),
@@ -175,25 +239,31 @@ export async function shipDraft(nimbusOrderId: string): Promise<ShipmentResult> 
   return readShipmentResult(data);
 }
 
-export type ShipmentResult = {
-  awb: string;
-  courierName: string | null;
-  shipmentId: string | null;
-  trackingUrl: string | null;
-};
-
-/**
- * Create a forward shipment. NimbusPost auto-assigns the cheapest serviceable
- * courier and returns an AWB. The pickup location must already exist in your
- * NimbusPost dashboard; its name goes in NIMBUSPOST_WAREHOUSE_NAME.
- */
+/** Create a forward shipment. */
 export async function createShipment(
   input: ShipmentInput
 ): Promise<ShipmentResult> {
   if (!isNimbusPostConfigured()) {
-    throw new Error("NimbusPost is not configured (set NIMBUSPOST_EMAIL / NIMBUSPOST_PASSWORD).");
+    throw new Error("NimbusPost is not configured.");
   }
-  const payload = buildPayload(input, requireWarehouse());
+
+  // Try v2 API if NIMBUSPOST_TOKEN is present
+  if (process.env.NIMBUSPOST_TOKEN?.trim()) {
+    const v2Payload = buildV2Payload(input);
+    const data = await authed("orders/api/v1/orders", {
+      method: "POST",
+      body: JSON.stringify(v2Payload),
+    });
+    if (data?.success && data?.data) {
+      return readShipmentResult(data);
+    }
+    if (data?.error?.detail) {
+      throw new Error(`NimbusPost v2: ${data.error.detail}`);
+    }
+  }
+
+  // Fallback to v1 API
+  const payload = buildV1Payload(input, requireWarehouse());
   const data = await authed("shipments", {
     method: "POST",
     body: JSON.stringify(payload),
