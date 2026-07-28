@@ -3,11 +3,8 @@ import { LogOut } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/user-auth";
 import { logout } from "@/app/actions/account";
-import { AccountProfile } from "@/components/store/account-profile";
-import {
-  AccountOrders,
-  type AccountOrder,
-} from "@/components/store/account-orders";
+import { AccountView } from "@/components/store/account-view";
+import type { AccountOrder } from "@/components/store/account-orders";
 import type { StatusEntry } from "@/components/store/order-timeline";
 
 export const dynamic = "force-dynamic";
@@ -21,12 +18,9 @@ export default async function AccountPage() {
     .findUnique({ where: { id: session.id } })
     .catch(() => null);
 
-  if (!user) {
-    // Session valid but user row gone — force re-login.
-    redirect("/account/login");
-  }
+  if (!user) redirect("/account/login");
 
-  // Orders linked by account id OR matching email (covers guest→account merges).
+  // Orders
   const raw = await prisma.order
     .findMany({
       where: { OR: [{ userId: user.id }, { email: user.email }] },
@@ -58,50 +52,47 @@ export default async function AccountPage() {
     pincode: o.pincode,
   }));
 
+  // Reviews — approved for portfolio display
+  const reviewModel = (prisma as unknown as Record<string, any>).review;
+  const rawReviews = reviewModel
+    ? await reviewModel
+        .findMany({
+          where: { approved: true },
+          orderBy: [{ featured: "desc" }, { createdAt: "desc" }],
+          take: 50,
+        })
+        .catch(() => [])
+    : [];
+
+  const reviews = (rawReviews || []).map((r: Record<string, any>) => ({
+    ...r,
+    createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
+  }));
+
   return (
-    <div className="container-px mx-auto max-w-6xl py-12">
+    <div className="container-px mx-auto max-w-6xl py-8 md:py-12">
+      {/* ── Header ── */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-serif text-4xl">Hello, {user.name.split(" ")[0]}</h1>
-          <p className="mt-1 text-muted-foreground">
-            Track your orders and manage your details
+          <h1 className="font-serif text-3xl md:text-4xl">
+            Hello, {user.name.split(" ")[0]} 👋
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Manage your profile, view orders, and explore our portfolio
           </p>
         </div>
         <form action={logout}>
           <button
             type="submit"
-            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
           >
             <LogOut className="h-4 w-4" /> Log out
           </button>
         </form>
       </div>
 
-      <div className="mt-10 grid gap-8 lg:grid-cols-[320px_1fr]">
-        <aside className="lg:sticky lg:top-24 lg:h-fit">
-          <AccountProfile
-            name={user.name}
-            email={user.email}
-            phone={user.phone}
-            address={user.address}
-            city={user.city}
-            state={user.state}
-            pincode={user.pincode}
-          />
-        </aside>
-
-        <section>
-          <h2 className="font-serif text-2xl">
-            My orders
-            <span className="ml-2 text-base text-muted-foreground">
-              ({orders.length})
-            </span>
-          </h2>
-          <div className="mt-5">
-            <AccountOrders orders={orders} />
-          </div>
-        </section>
-      </div>
+      {/* ── Tabbed View ── */}
+      <AccountView user={user} orders={orders} reviews={reviews} />
     </div>
   );
 }

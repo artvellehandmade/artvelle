@@ -197,3 +197,20 @@ model Category {
   updatedAt DateTime @updatedAt
 }
 
+// -------- Customer Reviews --------
+model Review {
+  id        String   @id @default(cuid())
+  productId String
+  userId    String?  // null = guest / manually added
+  name      String   // reviewer display name
+  rating    Int      // 1–5 stars
+  title     String?  // short headline
+  body      String   // review text
+  approved  Boolean  @default(false) // admin must approve before public display
+  featured  Boolean  @default(false) // show on Portfolio section
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([approved])
+  @@index([featured])
+}

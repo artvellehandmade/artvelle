@@ -18,7 +18,7 @@ export default async function StoreLayout({
     <>
       <AnnouncementBar />
       <Navbar account={account} />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 mobile-bottom-pad">{children}</main>
       <Footer />
       <CartDrawer />
       <WhatsAppButton />

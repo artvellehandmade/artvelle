@@ -128,6 +128,18 @@ body {
   display: none;
 }
 
+/* Bottom safe area for devices with home indicator (iPhones) */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Extra bottom padding on mobile so content doesn't hide behind the fixed tab bar */
+@media (max-width: 767px) {
+  .mobile-bottom-pad {
+    padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 /* Form inputs (shared across storefront + admin) */
 .input {
   width: 100%;

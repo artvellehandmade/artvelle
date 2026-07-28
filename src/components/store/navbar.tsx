@@ -4,18 +4,25 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { ShoppingBag, User, Search } from "lucide-react";
+import { ShoppingBag, User, Search, Home, Store } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SearchBox } from "@/components/store/search-box";
 import { cn } from "@/lib/utils";
 
-const links = [
+// Desktop nav links (all pages)
+const desktopLinks = [
   { href: "/", label: "Home" },
   { href: "/shop", label: "Shop" },
   { href: "/about", label: "About" },
   { href: "/contact", label: "Contact" },
+];
+
+// Mobile bottom bar: only core 4 tabs
+const mobileLinks = [
+  { href: "/", label: "Home", Icon: Home },
+  { href: "/shop", label: "Shop", Icon: Store },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -36,117 +43,174 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
   }, []);
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-40 transition-colors duration-300",
-        scrolled
-          ? "border-b border-border bg-background/80 backdrop-blur-md"
-          : "border-b border-transparent bg-background/0"
-      )}
-    >
-      <nav className="container-px mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 md:h-20">
-        {/* Logo — left on all sizes */}
-        <Link href="/" className="flex shrink-0 items-center gap-2">
-          {settings.logoUrl ? (
-            <Image
-              src={settings.logoUrl}
-              alt={settings.brandName}
-              width={130}
-              height={36}
-              className="h-7 w-auto object-contain md:h-8"
-            />
-          ) : (
-            <span className="font-serif text-xl tracking-tight md:text-2xl">
-              {settings.brandName}
-            </span>
-          )}
-        </Link>
-
-        {/* Center: desktop links */}
-        <ul className="hidden md:flex items-center gap-8">
-          {links.map((l) => {
-            const active = isActive(pathname, l.href);
-            return (
-              <li key={l.href}>
-                <Link
-                  href={l.href}
-                  data-active={active}
-                  className={cn(
-                    "link-underline text-sm tracking-wide transition-colors hover:text-accent",
-                    active ? "text-accent" : "text-foreground"
-                  )}
-                >
-                  {l.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-
-        {/* Right: actions */}
-        <div className="flex items-center gap-1.5 md:gap-2">
-          <div className="hidden md:block">
-            <SearchBox variant="icon" />
-          </div>
-          {/* Mobile: quick link to search on the shop page */}
-          <Link
-            href="/shop"
-            className="grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer md:hidden"
-            aria-label="Search"
-          >
-            <Search className="h-[18px] w-[18px]" />
-          </Link>
-          <ThemeToggle />
-          <Link
-            href="/account"
-            className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
-            aria-label={account ? "My account" : "Log in"}
-            title={account ? `Hi, ${account.name.split(" ")[0]}` : "Log in"}
-          >
-            <User className="h-[18px] w-[18px]" />
-            {account && (
-              <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-background" />
-            )}
-          </Link>
-          <button
-            onClick={() => setOpen(true)}
-            className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
-            aria-label="Open cart"
-          >
-            <ShoppingBag className="h-[18px] w-[18px]" />
-            {count > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-medium text-accent-foreground">
-                {count}
+    <>
+      {/* ── Top header (all sizes) ── */}
+      <header
+        className={cn(
+          "sticky top-0 z-40 transition-colors duration-300",
+          scrolled
+            ? "border-b border-border bg-background/80 backdrop-blur-md"
+            : "border-b border-transparent bg-background/0"
+        )}
+      >
+        <nav className="container-px mx-auto flex h-14 max-w-7xl items-center justify-between gap-3 md:h-20">
+          {/* Logo */}
+          <Link href="/" className="flex shrink-0 items-center gap-2">
+            {settings.logoUrl ? (
+              <Image
+                src={settings.logoUrl}
+                alt={settings.brandName}
+                width={130}
+                height={36}
+                className="h-7 w-auto object-contain md:h-8"
+              />
+            ) : (
+              <span className="font-serif text-xl tracking-tight md:text-2xl">
+                {settings.brandName}
               </span>
             )}
-          </button>
-        </div>
-      </nav>
+          </Link>
 
-      {/* Mobile navigation bar — replaces the old hamburger drawer */}
-      <div className="border-t border-border/60 bg-background/80 backdrop-blur-md md:hidden">
-        <ul className="no-scrollbar container-px mx-auto flex max-w-7xl items-center gap-1 overflow-x-auto py-1.5">
-          {links.map((l) => {
-            const active = isActive(pathname, l.href);
+          {/* Center: desktop links only */}
+          <ul className="hidden md:flex items-center gap-8">
+            {desktopLinks.map(({ href, label }) => {
+              const active = isActive(pathname, href);
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    data-active={active}
+                    className={cn(
+                      "link-underline text-sm tracking-wide transition-colors hover:text-accent",
+                      active ? "text-accent" : "text-foreground"
+                    )}
+                  >
+                    {label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Right: action icons */}
+          <div className="flex items-center gap-1.5 md:gap-2">
+            {/* Desktop search icon */}
+            <div className="hidden md:block">
+              <SearchBox variant="icon" />
+            </div>
+            {/* Mobile: quick link to search / shop */}
+            <Link
+              href="/shop"
+              className="grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer md:hidden"
+              aria-label="Search"
+            >
+              <Search className="h-[18px] w-[18px]" />
+            </Link>
+            <ThemeToggle />
+            {/* Account — desktop only (mobile uses bottom bar) */}
+            <Link
+              href="/account"
+              className="relative hidden md:grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
+              aria-label={account ? "My account" : "Log in"}
+              title={account ? `Hi, ${account.name.split(" ")[0]}` : "Log in"}
+            >
+              <User className="h-[18px] w-[18px]" />
+              {account && (
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-success ring-2 ring-background" />
+              )}
+            </Link>
+            <button
+              onClick={() => setOpen(true)}
+              className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
+              aria-label="Open cart"
+            >
+              <ShoppingBag className="h-[18px] w-[18px]" />
+              {count > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-medium text-accent-foreground">
+                  {count}
+                </span>
+              )}
+            </button>
+          </div>
+        </nav>
+      </header>
+
+      {/* ── Mobile bottom tab bar (hidden on md+) ── */}
+      <nav
+        aria-label="Mobile navigation"
+        className={cn(
+          "fixed bottom-0 inset-x-0 z-50 md:hidden",
+          "border-t border-border bg-background/95 backdrop-blur-xl",
+          "pb-safe" // respects iPhone home-indicator
+        )}
+      >
+        <ul className="flex items-stretch">
+          {mobileLinks.map(({ href, label, Icon }) => {
+            const active = isActive(pathname, href);
             return (
-              <li key={l.href} className="shrink-0">
+              <li key={href} className="flex-1">
                 <Link
-                  href={l.href}
-                  data-active={active}
+                  href={href}
                   className={cn(
-                    "block rounded-full px-4 py-1.5 text-sm font-medium tracking-wide transition-colors",
-                    active
-                      ? "bg-foreground text-background"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    "flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium tracking-wide transition-colors",
+                    active ? "text-accent" : "text-muted-foreground"
                   )}
+                  aria-current={active ? "page" : undefined}
                 >
-                  {l.label}
+                  <Icon
+                    className={cn(
+                      "h-5 w-5 transition-transform",
+                      active && "scale-110"
+                    )}
+                    strokeWidth={active ? 2.2 : 1.6}
+                  />
+                  {label}
                 </Link>
               </li>
             );
           })}
+          {/* Cart tab */}
+          <li className="flex-1">
+            <button
+              onClick={() => setOpen(true)}
+              className={cn(
+                "relative flex w-full flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium tracking-wide transition-colors",
+                "text-muted-foreground"
+              )}
+              aria-label="Open cart"
+            >
+              <span className="relative">
+                <ShoppingBag className="h-5 w-5" strokeWidth={1.6} />
+                {count > 0 && (
+                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-accent-foreground">
+                    {count}
+                  </span>
+                )}
+              </span>
+              Cart
+            </button>
+          </li>
+          {/* Account tab */}
+          <li className="flex-1">
+            <Link
+              href="/account"
+              className={cn(
+                "relative flex flex-col items-center justify-center gap-0.5 py-2.5 text-[10px] font-medium tracking-wide transition-colors",
+                pathname.startsWith("/account") ? "text-accent" : "text-muted-foreground"
+              )}
+              aria-label={account ? "My account" : "Log in"}
+            >
+              <span className="relative">
+                <User className="h-5 w-5" strokeWidth={1.6} />
+                {account && (
+                  <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-success ring-1 ring-background" />
+                )}
+              </span>
+              {account ? "Account" : "Login"}
+            </Link>
+          </li>
         </ul>
-      </div>
-    </header>
+      </nav>
+    </>
   );
 }

@@ -40,13 +40,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   const canOrder = !soldOut && !needsChoice;
 
   function toggle(groupName: string, value: string) {
-    if (selection[groupName] === value) {
-      // Deselect — click the active box again to clear it.
-      const next = { ...selection };
-      delete next[groupName];
-      setSelection(next);
-      return;
-    }
+    // Already selected — do nothing (no deselection allowed).
+    if (selection[groupName] === value) return;
     if (!isChoiceEnabled(variants, product.options, groupName, value, selection))
       return;
     // Set the choice, then drop any now-incompatible later options.
@@ -90,7 +85,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
 
   return (
     <div className="space-y-6">
-      {/* Options — checkbox-style boxes; click again to deselect */}
+      {/* Options — checkbox-style boxes */}
       {product.options.map((group) => (
         <div key={group.name}>
           <p className="mb-2 text-sm font-medium">
@@ -126,11 +121,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                         : "cursor-not-allowed border-dashed border-border text-muted-foreground/50"
                   }`}
                   title={
-                    enabled
-                      ? isActive
-                        ? "Click again to deselect"
-                        : undefined
-                      : "Not available in this combination"
+                    !enabled ? "Not available in this combination" : undefined
                   }
                 >
                   <span
@@ -223,13 +214,14 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             </Button>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          {/* Buy now + WhatsApp — always a single row */}
+          <div className="flex items-center gap-2.5">
             <Button
               onClick={onBuy}
               variant="gold"
               size="lg"
               disabled={buying || needsChoice}
-              className="flex-1"
+              className="flex-1 min-w-0"
             >
               {buying ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -240,9 +232,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             </Button>
             <WhatsAppProductButton
               product={product}
-              variant="full"
+              variant="compact"
               options={toSelectedOptions(variant ? variant.combo : selection)}
-              className="flex-1"
             />
           </div>
         </div>

@@ -56,9 +56,9 @@ export default async function ProductPage({
   const hasRange = range.min !== range.max;
 
   return (
-    <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
+    <div className="container-px mx-auto max-w-7xl py-4 md:py-12">
       {/* Breadcrumb */}
-      <nav className="mb-6 flex items-center gap-1 text-sm text-muted-foreground">
+      <nav className="mb-2 md:mb-6 flex items-center gap-1 text-sm text-muted-foreground">
         <Link href="/" className="hover:text-accent">
           Home
         </Link>
@@ -86,7 +86,7 @@ export default async function ProductPage({
           <p className="text-xs uppercase tracking-widest text-muted-foreground">
             {product.category}
           </p>
-          <h1 className="mt-2 font-serif text-4xl leading-tight">
+          <h1 className="mt-2 font-serif text-2xl leading-tight md:text-4xl">
             {product.name}
           </h1>
 

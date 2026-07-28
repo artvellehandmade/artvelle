@@ -24,7 +24,7 @@ export function WhatsAppProductButton({
   className,
 }: {
   product: ProductDTO;
-  variant?: "icon" | "full";
+  variant?: "icon" | "full" | "compact";
   options?: SelectedOption[];
   className?: string;
 }) {
@@ -61,6 +61,26 @@ export function WhatsAppProductButton({
         )}
       >
         <WhatsAppIcon className="h-[18px] w-[18px]" />
+      </button>
+    );
+  }
+
+  // compact — slim outlined pill; designed to sit beside Buy Now in one row
+  if (variant === "compact") {
+    return (
+      <button
+        type="button"
+        onClick={open}
+        aria-label={`Ask about ${product.name} on WhatsApp`}
+        className={cn(
+          "inline-flex h-12 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border border-[#25D366]/50 px-5 text-sm font-medium text-[#1da851] transition-all duration-200",
+          "hover:border-[#25D366] hover:bg-[#25D366]/8 hover:shadow-sm hover:-translate-y-0.5",
+          "active:scale-[0.97]",
+          className
+        )}
+      >
+        <WhatsAppIcon className="h-4 w-4 shrink-0" />
+        <span>WhatsApp</span>
       </button>
     );
   }
