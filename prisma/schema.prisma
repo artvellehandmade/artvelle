@@ -40,6 +40,11 @@ model Product {
   // "partial" (online advance + rest COD), "direct" (no payment, just placed).
   paymentModes      String[] @default(["prepaid", "cod"])
   advancePercent    Int? // % of line total taken online when "partial" is enabled
+  // Optional parcel size for shipping (overrides NIMBUSPOST_DEFAULT_* when set).
+  weightGrams       Int? // per-unit weight in grams
+  lengthCm          Int?
+  breadthCm         Int?
+  heightCm          Int?
   isFeatured        Boolean  @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -80,6 +85,7 @@ model Order {
   trackingNumber  String? // AWB / tracking number
   trackingUrl     String? // optional courier tracking link
   nimbusShipmentId String? // NimbusPost shipment/order id, set when shipped via NimbusPost
+  deliveryStatus  String? // latest raw courier status from NimbusPost webhook (e.g. "In Transit")
   statusHistory  Json     @default("[]") // [{ status, note, at }] appended on each admin update
   note          String?
   createdAt     DateTime @default(now())
@@ -96,6 +102,11 @@ model User {
   passwordHash     String
   name             String
   phone            String?
+  // Saved default shipping address (prefilled at checkout, remembered per order).
+  address          String?
+  city             String?
+  state            String?
+  pincode          String?
   resetToken       String?   @unique
   resetTokenExpiry DateTime?
   orders           Order[]
@@ -156,9 +167,13 @@ model SiteSettings {
   currency              String   @default("INR")
   shippingFee           Int      @default(0)
   freeShippingThreshold Int? // free shipping above this order value
-  codEnabled            Boolean  @default(true)
   razorpayEnabled       Boolean  @default(false) // master switch for online payments
   nimbusEnabled         Boolean  @default(false) // master switch for NimbusPost shipping
+  // Per-method availability (each shown at checkout only when ON + product allows it).
+  codEnabled            Boolean  @default(true)  // Cash on Delivery
+  prepaidEnabled        Boolean  @default(true)  // Prepaid (full online) — needs Razorpay
+  partialEnabled        Boolean  @default(true)  // Advance + COD — needs Razorpay
+  directEnabled         Boolean  @default(true)  // Customised order (pay to owner)
   announcement          String?  @default("Free shipping on all prepaid orders • Handmade in India")
   updatedAt             DateTime @updatedAt
 }

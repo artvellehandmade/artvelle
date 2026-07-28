@@ -68,9 +68,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Webhook not configured" }, { status: 403 });
   }
 
-  // NimbusPost sends the secret in one of these headers (check all variants).
+  // The secret can arrive as a ?secret= query param (easiest — you register the
+  // full URL incl. the query in NimbusPost) or in a header.
   const receivedSecret =
+    req.nextUrl.searchParams.get("secret") ??
     req.headers.get("x-nimbuspost-webhook-secret") ??
+    req.headers.get("x-webhook-secret") ??
     req.headers.get("x-nimbuspost-token") ??
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
 
@@ -148,6 +151,8 @@ export async function POST(req: NextRequest) {
       data: {
         // Only change status if we have a recognised mapping.
         ...(newStatus ? { status: newStatus } : {}),
+        // Always record the raw courier status for live display.
+        deliveryStatus: nimbusStatusRaw || order.deliveryStatus,
         statusHistory: history as unknown as object[],
       },
     })
@@ -184,4 +189,13 @@ export async function POST(req: NextRequest) {
   );
 
   return NextResponse.json({ received: true, status: newStatus ?? "recorded" });
+}
+
+// Open this URL in a browser to confirm the endpoint is live (no secret needed).
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    endpoint: "nimbuspost-webhook",
+    configured: Boolean(process.env.NIMBUSPOST_WEBHOOK_SECRET),
+  });
 }

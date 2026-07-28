@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronDown, Loader2, Truck, MessageCircle, XCircle } from "lucide-react";
+import { ChevronDown, Loader2, Truck, MessageCircle, XCircle, CheckCircle2 } from "lucide-react";
 import { formatINR, whatsappLink } from "@/lib/utils";
 import {
   updateOrderStatus,
@@ -11,6 +11,7 @@ import {
   updateOrderTracking,
   shipOrderViaNimbus,
   cancelAndRestoreStock,
+  confirmOrder,
 } from "@/app/actions/admin";
 
 function orderWhatsAppMessage(o: AdminOrder): string {
@@ -60,6 +61,7 @@ export type AdminOrder = {
   courier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  nimbusShipmentId: string | null;
   note: string | null;
   createdAt: string;
 };
@@ -73,6 +75,19 @@ const statusColor: Record<string, string> = {
   delivered: "bg-success/15 text-success",
   cancelled: "bg-danger/15 text-danger",
 };
+
+// A short payment badge shown next to the order status.
+function paymentBadge(o: AdminOrder): { text: string; cls: string } {
+  if (o.paymentStatus === "paid")
+    return { text: "Paid", cls: "bg-success/15 text-success" };
+  if (o.paymentStatus === "partial")
+    return { text: "Part-paid", cls: "bg-blue-500/15 text-blue-500" };
+  if (o.paymentStatus === "failed")
+    return { text: "Payment failed", cls: "bg-danger/15 text-danger" };
+  if (o.paymentMethod === "Direct")
+    return { text: "Customised", cls: "bg-muted text-muted-foreground" };
+  return { text: "COD due", cls: "bg-orange-500/15 text-orange-500" };
+}
 
 export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
   const router = useRouter();
@@ -107,6 +122,25 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
     });
   }
 
+  function acceptOrder(id: string) {
+    start(async () => {
+      const res = await confirmOrder(id);
+      if (res.ok) {
+        const draft = res.draft;
+        if (draft && draft.ok && !draft.skipped) {
+          toast.success("Order confirmed — draft shipment created in NimbusPost");
+        } else if (draft && !draft.ok && draft.error) {
+          toast.success("Order confirmed", {
+            description: `Customer emailed. Shipment draft skipped: ${draft.error}`,
+          });
+        } else {
+          toast.success("Order confirmed — customer notified");
+        }
+        router.refresh();
+      } else toast.error(res.error || "Failed to confirm");
+    });
+  }
+
   return (
     <div className="space-y-3">
       {orders.map((o) => {
@@ -121,7 +155,7 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
               className="flex w-full items-center gap-4 px-5 py-4 text-left"
             >
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{o.customerName}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-xs capitalize ${
@@ -130,6 +164,14 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                   >
                     {o.status}
                   </span>
+                  {(() => {
+                    const b = paymentBadge(o);
+                    return (
+                      <span className={`rounded-full px-2 py-0.5 text-xs ${b.cls}`}>
+                        {b.text}
+                      </span>
+                    );
+                  })()}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {o.orderNumber} · {new Date(o.createdAt).toLocaleString("en-IN")}
@@ -217,6 +259,24 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                         </p>
                       )}
                     </div>
+
+                    {/* Accept a pending (COD/Direct) order before fulfilment. */}
+                    {o.status === "pending" && (
+                      <div className="mt-4 rounded-xl border border-accent/40 bg-accent/5 p-3">
+                        <p className="text-xs text-muted-foreground">
+                          {o.paymentStatus === "paid"
+                            ? "Paid online — auto-confirmed."
+                            : "This order is awaiting your acceptance before it can be dispatched."}
+                        </p>
+                        <button
+                          onClick={() => acceptOrder(o.id)}
+                          disabled={pending}
+                          className="mt-2 inline-flex items-center gap-2 rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
+                        >
+                          <CheckCircle2 className="h-4 w-4" /> Confirm order
+                        </button>
+                      </div>
+                    )}
 
                     <div className="mt-4 flex flex-wrap items-center gap-3">
                       <label className="flex items-center gap-2 text-sm">
@@ -313,12 +373,14 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
       const res = await shipOrderViaNimbus(order.id);
       if (res.ok) {
         toast.success(
-          `Shipment created — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
+          `Dispatched — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
         );
         router.refresh();
-      } else toast.error(res.error || "Could not create shipment", { duration: 6000 });
+      } else toast.error(res.error || "Could not dispatch", { duration: 6000 });
     });
   }
+
+  const staged = Boolean(order.nimbusShipmentId);
 
   return (
     <div className="mt-5 rounded-xl border border-border p-4">
@@ -327,8 +389,10 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
         Shipment tracking
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Create a NimbusPost shipment for a courier + AWB automatically, or enter
-        tracking manually. Saved details show in the customer&apos;s account.
+        {staged
+          ? "A draft shipment is staged in NimbusPost — one click generates the AWB."
+          : "Generate a courier + AWB via NimbusPost, or enter tracking manually."}{" "}
+        Saved details show in the customer&apos;s account.
       </p>
 
       {!order.trackingNumber && (
@@ -339,11 +403,12 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
         >
           {shipping ? (
             <>
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Creating shipment…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Dispatching…
             </>
           ) : (
             <>
-              <Truck className="h-3.5 w-3.5" /> Ship via NimbusPost (auto AWB)
+              <Truck className="h-3.5 w-3.5" />{" "}
+              {staged ? "Dispatch (generate AWB)" : "Dispatch via NimbusPost"}
             </>
           )}
         </button>

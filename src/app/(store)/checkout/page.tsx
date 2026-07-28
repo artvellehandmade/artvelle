@@ -19,7 +19,15 @@ export default async function CheckoutPage() {
 
   return (
     <CheckoutClient
-      user={{ name: user.name, email: user.email, phone: user.phone }}
+      user={{
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+        city: user.city,
+        state: user.state,
+        pincode: user.pincode,
+      }}
     />
   );
 }

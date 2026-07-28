@@ -8,7 +8,7 @@ import { getSettings } from "@/lib/settings";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { isLeadStatus } from "@/lib/leads";
 import { slugify } from "@/lib/utils";
-import { createShipment, isNimbusPostConfigured } from "@/lib/nimbuspost";
+import { createDraftForOrder, dispatchOrder } from "@/lib/fulfilment";
 
 async function requireAdmin() {
   const session = await getAdminSession();
@@ -85,6 +85,11 @@ const productSchema = z.object({
     .default(["prepaid", "cod"]),
   // Advance % taken online when "partial" is chosen. Required when partial is enabled.
   advancePercent: z.coerce.number().int().min(1).max(99).nullable().optional(),
+  // Optional parcel size for shipping (grams / cm) — overrides env defaults.
+  weightGrams: z.coerce.number().int().positive().nullable().optional(),
+  lengthCm: z.coerce.number().int().positive().nullable().optional(),
+  breadthCm: z.coerce.number().int().positive().nullable().optional(),
+  heightCm: z.coerce.number().int().positive().nullable().optional(),
 });
 
 export type ProductInput = z.input<typeof productSchema>;
@@ -108,6 +113,10 @@ export async function createProduct(input: ProductInput) {
       variants: data.variants,
       paymentModes: data.paymentModes,
       advancePercent: data.advancePercent ?? null,
+      weightGrams: data.weightGrams ?? null,
+      lengthCm: data.lengthCm ?? null,
+      breadthCm: data.breadthCm ?? null,
+      heightCm: data.heightCm ?? null,
       slug,
     },
   });
@@ -135,6 +144,10 @@ export async function updateProduct(id: string, input: ProductInput) {
       variants: data.variants,
       paymentModes: data.paymentModes,
       advancePercent: data.advancePercent ?? null,
+      weightGrams: data.weightGrams ?? null,
+      lengthCm: data.lengthCm ?? null,
+      breadthCm: data.breadthCm ?? null,
+      heightCm: data.heightCm ?? null,
       slug,
     },
   });
@@ -264,7 +277,11 @@ const settingsSchema = z.object({
     .nonnegative()
     .nullable()
     .optional(),
+  // Per-method availability.
   codEnabled: z.boolean().default(true),
+  prepaidEnabled: z.boolean().default(true),
+  partialEnabled: z.boolean().default(true),
+  directEnabled: z.boolean().default(true),
   // Integration master switches.
   razorpayEnabled: z.boolean().default(false),
   nimbusEnabled: z.boolean().default(false),
@@ -400,108 +417,91 @@ export async function updatePaymentStatus(id: string, paymentStatus: string) {
   return { ok: true as const };
 }
 
+// Admin accepts a (COD/Direct) order: move pending → confirmed, email the
+// customer, and stage a NimbusPost draft shipment for one-click dispatch.
+export async function confirmOrder(id: string) {
+  await requireAdmin();
+  const order = await prisma.order.findUnique({ where: { id } });
+  if (!order) return { ok: false as const, error: "Order not found" };
+  if (order.status !== "pending") {
+    return { ok: false as const, error: `Order is already ${order.status}.` };
+  }
+
+  const history = Array.isArray(order.statusHistory)
+    ? (order.statusHistory as unknown as StatusEntry[])
+    : [];
+  history.push({
+    status: "confirmed",
+    note: "Order accepted by admin",
+    at: new Date().toISOString(),
+  });
+
+  await prisma.order.update({
+    where: { id },
+    data: { status: "confirmed", statusHistory: history as unknown as object[] },
+  });
+
+  // Notify the customer.
+  try {
+    const settings = await getSettings();
+    await sendOrderStatusEmail(settings, {
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      email: order.email,
+      status: "confirmed",
+      courier: order.courier,
+      trackingNumber: order.trackingNumber,
+      trackingUrl: order.trackingUrl,
+    });
+  } catch (err) {
+    console.error("[admin] confirm email failed:", err);
+  }
+
+  // Stage a draft shipment (best-effort; needs NimbusPost configured).
+  const draft = await createDraftForOrder(id).catch((err) => {
+    console.error("[admin] draft shipment failed:", err);
+    return { ok: false as const, error: String(err?.message ?? err) };
+  });
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return { ok: true as const, draft };
+}
+
 // -------- Shipping (NimbusPost) --------
+// One-click dispatch: generate the AWB (uses the staged draft if present).
 export async function shipOrderViaNimbus(id: string) {
   await requireAdmin();
 
-  if (!isNimbusPostConfigured()) {
-    return {
-      ok: false as const,
-      error:
-        "NimbusPost isn't set up yet. Add NIMBUSPOST_EMAIL, NIMBUSPOST_PASSWORD and NIMBUSPOST_WAREHOUSE_NAME to your environment.",
-    };
+  const result = await dispatchOrder(id);
+  if (!result.ok) {
+    return { ok: false as const, error: result.error || "Failed to create shipment." };
   }
 
-  const order = await prisma.order.findUnique({ where: { id } });
-  if (!order) return { ok: false as const, error: "Order not found" };
-  if (order.trackingNumber) {
-    return {
-      ok: false as const,
-      error: `This order already has an AWB (${order.trackingNumber}).`,
-    };
-  }
-
-  const items = Array.isArray(order.items)
-    ? (order.items as unknown as { name: string; quantity: number; price: number }[])
-    : [];
-
+  // Notify the customer their order has shipped (with tracking).
   try {
-    const result = await createShipment({
-      orderNumber: order.orderNumber,
-      // COD only when it's a cash order that hasn't been prepaid online.
-      paymentType:
-        order.paymentMethod === "COD" && order.paymentStatus !== "paid"
-          ? "cod"
-          : "prepaid",
-      orderAmount: order.total,
-      consignee: {
-        name: order.customerName,
-        address: order.address,
-        city: order.city,
-        state: order.state,
-        pincode: order.pincode,
-        phone: order.phone,
-      },
-      items: items.map((i) => ({
-        name: i.name,
-        qty: i.quantity,
-        price: i.price,
-      })),
-    });
-
-    const history = Array.isArray(order.statusHistory)
-      ? (order.statusHistory as unknown as StatusEntry[])
-      : [];
-    history.push({
-      status: "shipped",
-      note: `Shipped via NimbusPost${
-        result.courierName ? ` (${result.courierName})` : ""
-      } — AWB ${result.awb}`,
-      at: new Date().toISOString(),
-    });
-
-    await prisma.order.update({
-      where: { id },
-      data: {
-        status: "shipped",
-        courier: result.courierName,
-        trackingNumber: result.awb,
-        trackingUrl: result.trackingUrl,
-        nimbusShipmentId: result.shipmentId,
-        statusHistory: history as unknown as object[],
-      },
-    });
-
-    // Notify the customer their order has shipped (with tracking).
-    try {
-      const settings = await getSettings();
+    const [settings, order] = await Promise.all([
+      getSettings(),
+      prisma.order.findUnique({ where: { id } }),
+    ]);
+    if (order) {
       await sendOrderStatusEmail(settings, {
         orderNumber: order.orderNumber,
         customerName: order.customerName,
         email: order.email,
         status: "shipped",
-        courier: result.courierName,
-        trackingNumber: result.awb,
-        trackingUrl: result.trackingUrl,
+        courier: order.courier,
+        trackingNumber: order.trackingNumber,
+        trackingUrl: order.trackingUrl,
       });
-    } catch (err) {
-      console.error("[admin] ship email failed:", err);
     }
-
-    revalidatePath("/admin/orders");
-    revalidatePath("/admin");
-    return {
-      ok: true as const,
-      awb: result.awb,
-      courier: result.courierName,
-    };
   } catch (err) {
-    console.error("[admin] nimbuspost ship failed:", err);
-    return {
-      ok: false as const,
-      error: err instanceof Error ? err.message : "Failed to create shipment.",
-    };
+    console.error("[admin] ship email failed:", err);
   }
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return { ok: true as const, awb: result.awb, courier: result.courier };
 }
 
 // -------- Cancel abandoned order & restore stock --------

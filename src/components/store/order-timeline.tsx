@@ -12,9 +12,11 @@ export type StatusEntry = { status: string; note?: string; at: string };
 export function OrderTimeline({
   status,
   history,
+  deliveryStatus,
 }: {
   status: string;
   history?: StatusEntry[];
+  deliveryStatus?: string | null;
 }) {
   if (status === "cancelled") {
     const at = history?.find((h) => h.status === "cancelled")?.at;
@@ -83,6 +85,14 @@ export function OrderTimeline({
                   </span>
                 )}
               </p>
+              {/* Live courier status from NimbusPost (shown on the Shipped step). */}
+              {step.key === "shipped" &&
+                status === "shipped" &&
+                deliveryStatus && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-2.5 py-0.5 text-xs text-accent">
+                    <Truck className="h-3 w-3" /> {deliveryStatus}
+                  </p>
+                )}
               {at && (
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   {new Date(at).toLocaleString("en-IN")}

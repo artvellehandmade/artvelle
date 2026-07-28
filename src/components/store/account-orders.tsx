@@ -18,6 +18,7 @@ export type AccountOrder = {
   courier: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  deliveryStatus: string | null;
   items: {
     name: string;
     quantity: number;
@@ -108,6 +109,7 @@ export function AccountOrders({ orders }: { orders: AccountOrder[] }) {
                     <OrderTimeline
                       status={o.status}
                       history={o.statusHistory}
+                      deliveryStatus={o.deliveryStatus}
                     />
                     {(o.courier || o.trackingNumber || o.trackingUrl) && (
                       <div className="mt-4 rounded-xl bg-muted p-4 text-sm">

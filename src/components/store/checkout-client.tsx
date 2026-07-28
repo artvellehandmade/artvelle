@@ -1,17 +1,33 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2, Lock, Truck, CreditCard } from "lucide-react";
+import { Loader2, Lock, Truck, CreditCard, Wallet, MessageCircle } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { formatINR } from "@/lib/utils";
-import { placeOrder, verifyRazorpayPayment } from "@/app/actions/orders";
+import {
+  placeOrder,
+  verifyRazorpayPayment,
+  getCheckoutContext,
+} from "@/app/actions/orders";
+import type { PaymentMode } from "@/lib/types";
 
-type PaymentMethod = "COD" | "Razorpay";
+// The stored order label for each checkout mode.
+const MODE_TO_METHOD: Record<PaymentMode, "Razorpay" | "COD" | "Partial" | "Direct"> = {
+  prepaid: "Razorpay",
+  cod: "COD",
+  partial: "Partial",
+  direct: "Direct",
+};
+
+type CheckoutContext = {
+  methods: Record<PaymentMode, boolean>;
+  products: { id: string; paymentModes: PaymentMode[]; advancePercent: number | null }[];
+};
 
 // Razorpay Checkout is loaded on demand from their CDN.
 type RazorpayOptions = {
@@ -53,6 +69,10 @@ export type CheckoutUser = {
   name: string;
   email: string;
   phone: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
 };
 
 export function CheckoutClient({ user }: { user: CheckoutUser }) {
@@ -61,20 +81,18 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  const onlineAvailable = Boolean(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
-  const codAvailable = s.codEnabled !== false;
-  const [method, setMethod] = useState<PaymentMethod>(
-    codAvailable ? "COD" : "Razorpay"
-  );
+  // Payment rules for the cart, loaded from the server (authoritative).
+  const [ctx, setCtx] = useState<CheckoutContext | null>(null);
+  const [method, setMethod] = useState<PaymentMode | null>(null);
 
   const [form, setForm] = useState({
     customerName: user.name ?? "",
     email: user.email ?? "",
     phone: user.phone ?? "",
-    address: "",
-    city: "",
-    state: "",
-    pincode: "",
+    address: user.address ?? "",
+    city: user.city ?? "",
+    state: user.state ?? "",
+    pincode: user.pincode ?? "",
     note: "",
   });
 
@@ -83,6 +101,62 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
       ? 0
       : s.shippingFee;
   const total = subtotal + shipping;
+
+  // A stable signature of the cart's product ids so we only refetch on change.
+  const idKey = items.map((i) => i.productId).sort().join(",");
+
+  useEffect(() => {
+    const ids = idKey ? idKey.split(",") : [];
+    if (ids.length === 0) {
+      setCtx(null);
+      return;
+    }
+    let alive = true;
+    getCheckoutContext(ids).then((res) => {
+      if (alive) setCtx(res);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [idKey]);
+
+  // Modes offered = intersection of each product's modes, filtered by globals.
+  const allowedModes = useMemo<PaymentMode[]>(() => {
+    if (!ctx) return [];
+    const byId = new Map(ctx.products.map((p) => [p.id, p]));
+    const all: PaymentMode[] = ["prepaid", "cod", "partial", "direct"];
+    let modes = all.filter((m) =>
+      items.every((i) => {
+        const p = byId.get(i.productId);
+        const list = p?.paymentModes?.length ? p.paymentModes : ["prepaid", "cod"];
+        return list.includes(m);
+      })
+    );
+    modes = modes.filter((m) => ctx.methods[m]);
+    return modes.length ? modes : ["direct"];
+  }, [ctx, items]);
+
+  // Advance (partial) = sum of each line's advance% of its line total.
+  const advance = useMemo(() => {
+    if (!ctx) return 0;
+    const byId = new Map(ctx.products.map((p) => [p.id, p]));
+    let a = 0;
+    for (const i of items) {
+      const pct = byId.get(i.productId)?.advancePercent ?? 0;
+      a += Math.round((i.price * i.quantity * pct) / 100);
+    }
+    return Math.min(Math.max(a, 0), total);
+  }, [ctx, items, total]);
+
+  // Keep the selected mode valid as the allowed set resolves/changes.
+  useEffect(() => {
+    if (allowedModes.length === 0) return;
+    setMethod((cur) => (cur && allowedModes.includes(cur) ? cur : allowedModes[0]));
+  }, [allowedModes]);
+
+  const isOnline = method === "prepaid" || method === "partial";
+  const balanceDue =
+    method === "prepaid" ? 0 : method === "partial" ? total - advance : total;
 
   function set(key: keyof typeof form, value: string) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -101,6 +175,7 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!method) return;
     setLoading(true);
 
     const visitorId =
@@ -108,8 +183,10 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
         ? localStorage.getItem("artvelle_vid") ?? undefined
         : undefined;
 
+    const online = method === "prepaid" || method === "partial";
+
     // If paying online, make sure the Razorpay script is ready before we start.
-    if (method === "Razorpay") {
+    if (online) {
       const ok = await loadRazorpayScript();
       if (!ok) {
         setLoading(false);
@@ -120,7 +197,7 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
 
     const res = await placeOrder({
       ...form,
-      paymentMethod: method,
+      paymentMethod: MODE_TO_METHOD[method],
       visitorId,
       items: items.map((i) => ({
         productId: i.productId,
@@ -141,15 +218,15 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
       return;
     }
 
-    // COD — order is confirmed immediately.
+    // COD / Direct — confirmed immediately, no payment window.
     if (!("payment" in res) || !res.payment) {
       clear();
-      toast.success("Order placed!");
+      toast.success(method === "direct" ? "Order request sent!" : "Order placed!");
       router.push(`/order/${res.orderNumber}`);
       return;
     }
 
-    // Online — open Razorpay Checkout, then verify server-side on success.
+    // Online (prepaid / partial) — open Razorpay, then verify server-side.
     const pay = res.payment;
     const orderNumber = res.orderNumber;
 
@@ -198,6 +275,45 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
     });
     rzp.open();
   }
+
+  // Presentation details for each offered mode.
+  const MODE_UI: Record<
+    PaymentMode,
+    { label: string; desc: string; icon: React.ReactNode }
+  > = {
+    prepaid: {
+      label: "Prepaid — Pay Online",
+      desc: "UPI, cards, netbanking & wallets — secured by Razorpay",
+      icon: <CreditCard className="h-4 w-4 text-muted-foreground" />,
+    },
+    partial: {
+      label: "Advance Payment",
+      desc: `Pay ${formatINR(advance)} advance online now · ${formatINR(
+        total - advance
+      )} on delivery. Advance is non-refundable.`,
+      icon: <Wallet className="h-4 w-4 text-muted-foreground" />,
+    },
+    cod: {
+      label: "Cash on Delivery",
+      desc: "Pay in full when your order arrives",
+      icon: <Truck className="h-4 w-4 text-muted-foreground" />,
+    },
+    direct: {
+      label: "Customised Order",
+      desc: "No payment now — we'll contact you to finalise your custom piece. Customised orders are non-refundable.",
+      icon: <MessageCircle className="h-4 w-4 text-muted-foreground" />,
+    },
+  };
+
+  const buttonLabel = !method
+    ? "Loading…"
+    : method === "prepaid"
+    ? `Pay ${formatINR(total)}`
+    : method === "partial"
+    ? `Pay ${formatINR(advance)} now`
+    : method === "direct"
+    ? "Request customised order"
+    : `Place order · ${formatINR(total)}`;
 
   return (
     <div className="container-px mx-auto max-w-6xl py-12">
@@ -289,61 +405,42 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
 
           <section>
             <h2 className="font-serif text-xl">Payment</h2>
-            <div className="mt-4 space-y-3">
-              {onlineAvailable && (
-                <label
-                  className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-colors ${
-                    method === "Razorpay"
-                      ? "border-foreground bg-muted/40"
-                      : "border-border"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={method === "Razorpay"}
-                    onChange={() => setMethod("Razorpay")}
-                    className="accent-[var(--accent)]"
-                  />
-                  <span className="text-sm">
-                    Pay online
-                    <span className="block text-xs text-muted-foreground">
-                      UPI, cards, netbanking &amp; wallets — secured by Razorpay
-                    </span>
-                  </span>
-                  <CreditCard className="ml-auto h-4 w-4 text-muted-foreground" />
-                </label>
-              )}
-
-              {codAvailable && (
-                <label
-                  className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-colors ${
-                    method === "COD"
-                      ? "border-foreground bg-muted/40"
-                      : "border-border"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="payment"
-                    checked={method === "COD"}
-                    onChange={() => setMethod("COD")}
-                    className="accent-[var(--accent)]"
-                  />
-                  <span className="text-sm">
-                    Cash on Delivery
-                    <span className="block text-xs text-muted-foreground">
-                      Pay in cash when your order arrives
-                    </span>
-                  </span>
-                  <Truck className="ml-auto h-4 w-4 text-muted-foreground" />
-                </label>
-              )}
-            </div>
-            {!onlineAvailable && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Pay conveniently on delivery.
-              </p>
+            {!ctx ? (
+              <div className="mt-4 flex items-center gap-2 rounded-2xl border border-border p-4 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading payment
+                options…
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {allowedModes.map((m) => {
+                  const ui = MODE_UI[m];
+                  return (
+                    <label
+                      key={m}
+                      className={`flex items-center gap-3 rounded-2xl border p-4 cursor-pointer transition-colors ${
+                        method === m
+                          ? "border-foreground bg-muted/40"
+                          : "border-border"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="payment"
+                        checked={method === m}
+                        onChange={() => setMethod(m)}
+                        className="accent-[var(--accent)]"
+                      />
+                      <span className="text-sm">
+                        {ui.label}
+                        <span className="block text-xs text-muted-foreground">
+                          {ui.desc}
+                        </span>
+                      </span>
+                      <span className="ml-auto">{ui.icon}</span>
+                    </label>
+                  );
+                })}
+              </div>
             )}
           </section>
         </div>
@@ -393,18 +490,49 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
               <span>Total</span>
               <span>{formatINR(total)}</span>
             </div>
+
+            {/* Payment split — shown for partial (advance) and any COD balance. */}
+            {method === "partial" && (
+              <div className="mt-1 space-y-1 rounded-xl bg-muted/50 p-3 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Pay now (advance)</span>
+                  <span className="font-medium">{formatINR(advance)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Due on delivery</span>
+                  <span className="font-medium">{formatINR(balanceDue)}</span>
+                </div>
+                <p className="pt-1 text-muted-foreground">
+                  The advance amount is non-refundable.
+                </p>
+              </div>
+            )}
+            {method === "cod" && (
+              <p className="text-xs text-muted-foreground">
+                Pay {formatINR(total)} in cash on delivery.
+              </p>
+            )}
+            {method === "direct" && (
+              <p className="text-xs text-muted-foreground">
+                No payment now — we&apos;ll contact you to finalise your
+                customised piece. Customised orders are non-refundable.
+              </p>
+            )}
           </div>
 
-          <Button type="submit" disabled={loading} className="mt-6 w-full" size="lg">
+          <Button
+            type="submit"
+            disabled={loading || !method}
+            className="mt-6 w-full"
+            size="lg"
+          >
             {loading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />{" "}
-                {method === "Razorpay" ? "Starting payment…" : "Placing order…"}
+                {isOnline ? "Starting payment…" : "Placing order…"}
               </>
-            ) : method === "Razorpay" ? (
-              <>Pay {formatINR(total)}</>
             ) : (
-              <>Place order · {formatINR(total)}</>
+              buttonLabel
             )}
           </Button>
           <p className="mt-3 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">

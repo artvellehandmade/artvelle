@@ -47,6 +47,7 @@ export default async function AccountPage() {
     courier: o.courier,
     trackingNumber: o.trackingNumber,
     trackingUrl: o.trackingUrl,
+    deliveryStatus: o.deliveryStatus,
     items: o.items as AccountOrder["items"],
     statusHistory: (Array.isArray(o.statusHistory)
       ? o.statusHistory
@@ -82,6 +83,10 @@ export default async function AccountPage() {
             name={user.name}
             email={user.email}
             phone={user.phone}
+            address={user.address}
+            city={user.city}
+            state={user.state}
+            pincode={user.pincode}
           />
         </aside>
 

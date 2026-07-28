@@ -55,6 +55,10 @@ export type ProductDTO = {
   stock: number;
   paymentModes: PaymentMode[];
   advancePercent: number | null;
+  weightGrams: number | null;
+  lengthCm: number | null;
+  breadthCm: number | null;
+  heightCm: number | null;
   isFeatured: boolean;
   isActive: boolean;
 };
@@ -77,6 +81,9 @@ export type SettingsDTO = {
   shippingFee: number;
   freeShippingThreshold: number | null;
   codEnabled: boolean;
+  prepaidEnabled: boolean;
+  partialEnabled: boolean;
+  directEnabled: boolean;
   razorpayEnabled: boolean;
   nimbusEnabled: boolean;
   announcement: string | null;

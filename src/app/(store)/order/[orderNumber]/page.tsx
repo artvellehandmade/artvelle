@@ -69,8 +69,24 @@ export default async function OrderPage({
         <CheckCircle2 className="mx-auto h-14 w-14 text-success" />
         <h1 className="mt-5 font-serif text-4xl">Thank you!</h1>
         <p className="mt-2 text-muted-foreground">
-          Your order <span className="font-medium text-foreground">{order.orderNumber}</span> is
-          confirmed. A confirmation email is on its way to {order.email}.
+          {order.paymentMethod === "Direct" ? (
+            <>
+              Your request{" "}
+              <span className="font-medium text-foreground">
+                {order.orderNumber}
+              </span>{" "}
+              has been received. We&apos;ll contact you shortly to confirm the
+              details of your custom order.
+            </>
+          ) : (
+            <>
+              Your order{" "}
+              <span className="font-medium text-foreground">
+                {order.orderNumber}
+              </span>{" "}
+              is confirmed. A confirmation email is on its way to {order.email}.
+            </>
+          )}
         </p>
       </div>
 
@@ -111,6 +127,12 @@ export default async function OrderPage({
             <span>{formatINR(order.total)}</span>
           </div>
           <Row label="Payment" value={order.paymentMethod} />
+          {order.amountPaid > 0 && (
+            <Row label="Paid online" value={formatINR(order.amountPaid)} />
+          )}
+          {order.balanceDue > 0 && order.paymentMethod !== "Direct" && (
+            <Row label="Due on delivery" value={formatINR(order.balanceDue)} />
+          )}
         </div>
 
         <div className="mt-6 rounded-xl bg-muted p-4 text-sm">
@@ -125,7 +147,11 @@ export default async function OrderPage({
       <div className="mt-6 rounded-2xl border border-border bg-card p-6">
         <h2 className="font-serif text-xl">Order status</h2>
         <div className="mt-5">
-          <OrderTimeline status={order.status} history={history} />
+          <OrderTimeline
+            status={order.status}
+            history={history}
+            deliveryStatus={order.deliveryStatus}
+          />
         </div>
         <p className="mt-4 text-sm text-muted-foreground">
           Track this order any time from{" "}

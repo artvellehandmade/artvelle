@@ -91,12 +91,22 @@ function writeLeadCookie(info: LeadInfo) {
   document.cookie = `${LEAD_COOKIE}=${value}; path=/; max-age=${LEAD_MAX_AGE}; samesite=lax`;
 }
 
-export function CartProvider({ children }: { children: React.ReactNode }) {
+export function CartProvider({
+  children,
+  initialLead,
+}: {
+  children: React.ReactNode;
+  // When the shopper is logged in, their account name/phone is passed from the
+  // server so the mini sign-up never prompts them.
+  initialLead?: { name: string; phone: string } | null;
+}) {
   const router = useRouter();
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setOpen] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null);
+  const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(
+    initialLead && initialLead.name ? initialLead : null
+  );
   const [pendingAdd, setPendingAdd] = useState<PendingAdd | null>(null);
 
   // Mirror the latest cart items into a ref so we can reliably tell whether a
@@ -123,8 +133,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore */
     }
-    setLeadInfo(readLeadCookie());
+    // Prefer the logged-in account contact (initialLead); fall back to the
+    // guest cookie. Never clear a server-provided lead with a missing cookie.
+    const cookieLead = readLeadCookie();
+    if (cookieLead) setLeadInfo(cookieLead);
+    else if (initialLead && initialLead.name) setLeadInfo(initialLead);
     setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist cart

@@ -3,6 +3,8 @@ import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { getSettings } from "@/lib/settings";
+import { getUserSession } from "@/lib/user-auth";
+import { prisma } from "@/lib/prisma";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -46,6 +48,18 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const settings = await getSettings();
+
+  // If the shopper is logged in, hand their name/phone to the cart so the
+  // add-to-cart mini sign-up never prompts them again.
+  const session = await getUserSession();
+  let initialLead: { name: string; phone: string } | null = null;
+  if (session) {
+    const u = await prisma.user
+      .findUnique({ where: { id: session.id }, select: { name: true, phone: true } })
+      .catch(() => null);
+    if (u) initialLead = { name: u.name, phone: u.phone ?? "" };
+  }
+
   return (
     <html
       lang="en"
@@ -53,7 +67,9 @@ export default async function RootLayout({
       className={`${inter.variable} ${playfair.variable} h-full`}
     >
       <body className="min-h-full flex flex-col antialiased">
-        <Providers settings={settings}>{children}</Providers>
+        <Providers settings={settings} initialLead={initialLead}>
+          {children}
+        </Providers>
       </body>
     </html>
   );

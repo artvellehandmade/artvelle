@@ -11,21 +11,39 @@ export function AccountProfile({
   name,
   email,
   phone,
+  address,
+  city,
+  state,
+  pincode,
 }: {
   name: string;
   email: string;
   phone: string | null;
+  address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  pincode?: string | null;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
-  const [fname, setFname] = useState(name);
-  const [fphone, setFphone] = useState(phone ?? "");
+  const [f, setF] = useState({
+    name,
+    phone: phone ?? "",
+    address: address ?? "",
+    city: city ?? "",
+    state: state ?? "",
+    pincode: pincode ?? "",
+  });
   const [loading, setLoading] = useState(false);
+
+  function set(key: keyof typeof f, value: string) {
+    setF((p) => ({ ...p, [key]: value }));
+  }
 
   async function onSave(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    const res = await updateProfile({ name: fname, phone: fphone });
+    const res = await updateProfile(f);
     setLoading(false);
     if (res.ok) {
       toast.success("Profile updated");
@@ -35,6 +53,8 @@ export function AccountProfile({
       toast.error(res.error || "Failed to update");
     }
   }
+
+  const addressLine = [address, city, state, pincode].filter(Boolean).join(", ");
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6">
@@ -52,28 +72,76 @@ export function AccountProfile({
 
       {editing ? (
         <form onSubmit={onSave} className="mt-4 space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">
+                Full name
+              </span>
+              <input
+                required
+                value={f.name}
+                onChange={(e) => set("name", e.target.value)}
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">
+                Phone
+              </span>
+              <input
+                value={f.phone}
+                onChange={(e) => set("phone", e.target.value)}
+                className="input"
+                placeholder="Optional"
+              />
+            </label>
+          </div>
+          <p className="border-t border-border pt-4 text-xs uppercase tracking-wider text-muted-foreground">
+            Saved shipping address (prefilled at checkout)
+          </p>
           <label className="block">
             <span className="mb-1.5 block text-sm text-muted-foreground">
-              Full name
+              Address
             </span>
             <input
-              required
-              value={fname}
-              onChange={(e) => setFname(e.target.value)}
+              value={f.address}
+              onChange={(e) => set("address", e.target.value)}
               className="input"
+              placeholder="House no, street, area"
             />
           </label>
-          <label className="block">
-            <span className="mb-1.5 block text-sm text-muted-foreground">
-              Phone
-            </span>
-            <input
-              value={fphone}
-              onChange={(e) => setFphone(e.target.value)}
-              className="input"
-              placeholder="Optional"
-            />
-          </label>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">
+                City
+              </span>
+              <input
+                value={f.city}
+                onChange={(e) => set("city", e.target.value)}
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">
+                State
+              </span>
+              <input
+                value={f.state}
+                onChange={(e) => set("state", e.target.value)}
+                className="input"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm text-muted-foreground">
+                Pincode
+              </span>
+              <input
+                value={f.pincode}
+                onChange={(e) => set("pincode", e.target.value)}
+                className="input"
+              />
+            </label>
+          </div>
           <div className="flex gap-3">
             <Button type="submit" disabled={loading} size="sm">
               {loading ? (
@@ -90,8 +158,14 @@ export function AccountProfile({
               size="sm"
               onClick={() => {
                 setEditing(false);
-                setFname(name);
-                setFphone(phone ?? "");
+                setF({
+                  name,
+                  phone: phone ?? "",
+                  address: address ?? "",
+                  city: city ?? "",
+                  state: state ?? "",
+                  pincode: pincode ?? "",
+                });
               }}
             >
               Cancel
@@ -111,6 +185,10 @@ export function AccountProfile({
           <div className="flex justify-between">
             <dt className="text-muted-foreground">Phone</dt>
             <dd className="font-medium">{phone || "—"}</dd>
+          </div>
+          <div className="flex justify-between gap-4">
+            <dt className="shrink-0 text-muted-foreground">Address</dt>
+            <dd className="text-right font-medium">{addressLine || "—"}</dd>
           </div>
         </dl>
       )}

@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { sendOrderEmails } from "@/lib/email";
-import { getUserSession } from "@/lib/user-auth";
+import { getUserSession, setUserCookie } from "@/lib/user-auth";
 import { priceWithOptions } from "@/lib/options";
 import {
   normalizeVariants,
@@ -18,6 +18,7 @@ import {
   razorpayPublicKey,
   verifyRazorpaySignature,
 } from "@/lib/razorpay";
+import { createDraftForOrder } from "@/lib/fulfilment";
 import type {
   ProductOption,
   VariantPrice,
@@ -33,10 +34,17 @@ const METHOD_TO_MODE: Record<string, PaymentMode> = {
   Direct: "direct",
 };
 
+type MethodAvailability = {
+  prepaid: boolean;
+  cod: boolean;
+  partial: boolean;
+  direct: boolean;
+};
+
 /** Which modes are usable for this cart = intersection of products, then globals. */
 function resolveAllowedModes(
   products: { paymentModes: string[] }[],
-  opts: { razorpayAvailable: boolean; codAvailable: boolean }
+  avail: MethodAvailability
 ): PaymentMode[] {
   const all: PaymentMode[] = ["prepaid", "cod", "partial", "direct"];
   let modes = all.filter((m) =>
@@ -44,13 +52,28 @@ function resolveAllowedModes(
       (p.paymentModes?.length ? p.paymentModes : ["prepaid", "cod"]).includes(m)
     )
   );
-  modes = modes.filter((m) => {
-    if (m === "prepaid" || m === "partial") return opts.razorpayAvailable;
-    if (m === "cod") return opts.codAvailable;
-    return true; // direct
-  });
+  modes = modes.filter((m) => avail[m]);
   // Never leave the cart with no way to check out.
   return modes.length ? modes : ["direct"];
+}
+
+/** Global (store-wide) availability of each method, combining toggles + config. */
+function methodAvailability(
+  settings: {
+    codEnabled: boolean;
+    prepaidEnabled: boolean;
+    partialEnabled: boolean;
+    directEnabled: boolean;
+    razorpayEnabled: boolean;
+  }
+): MethodAvailability {
+  const razorpay = settings.razorpayEnabled && isRazorpayConfigured();
+  return {
+    prepaid: settings.prepaidEnabled && razorpay,
+    partial: settings.partialEnabled && razorpay,
+    cod: settings.codEnabled,
+    direct: settings.directEnabled,
+  };
 }
 
 const inputSchema = z.object({
@@ -90,6 +113,8 @@ export async function placeOrder(input: PlaceOrderInput) {
       requiresLogin: true as const,
     };
   }
+  // Active shopper — refresh the login cookie so it keeps sliding forward.
+  await setUserCookie(user).catch(() => {});
 
   const parsed = inputSchema.safeParse(input);
   if (!parsed.success) {
@@ -159,12 +184,7 @@ export async function placeOrder(input: PlaceOrderInput) {
   const total = subtotal + shipping;
 
   // ---- Resolve the chosen mode against the product rules + global toggles. ----
-  const razorpayAvailable = settings.razorpayEnabled && isRazorpayConfigured();
-  const codAvailable = settings.codEnabled;
-  const allowedModes = resolveAllowedModes(products, {
-    razorpayAvailable,
-    codAvailable,
-  });
+  const allowedModes = resolveAllowedModes(products, methodAvailability(settings));
   const mode = METHOD_TO_MODE[data.paymentMethod] ?? "cod";
   if (!allowedModes.includes(mode)) {
     return {
@@ -243,6 +263,20 @@ export async function placeOrder(input: PlaceOrderInput) {
       })
       .catch(() => {});
   }
+
+  // Remember this shipping address on the account so it prefills next time.
+  await prisma.user
+    .update({
+      where: { id: user.id },
+      data: {
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        state: data.state,
+        pincode: data.pincode,
+      },
+    })
+    .catch(() => {});
 
   // ---- Online (prepaid / partial): create a Razorpay order for the browser. ----
   // Confirmation emails are deferred until the payment is verified.
@@ -338,8 +372,7 @@ export async function getCheckoutContext(productIds: string[]) {
   ]);
 
   return {
-    razorpayAvailable: settings.razorpayEnabled && isRazorpayConfigured(),
-    codAvailable: settings.codEnabled,
+    methods: methodAvailability(settings),
     products: products.map((p) => ({
       id: p.id,
       paymentModes: (p.paymentModes?.length
@@ -382,7 +415,7 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
   if (!order || order.userId !== user.id) {
     return { ok: false as const, error: "Order not found." };
   }
-  if (order.paymentStatus === "paid") {
+  if (order.paymentStatus === "paid" || order.paymentStatus === "partial") {
     return { ok: true as const, orderNumber: order.orderNumber };
   }
   if (order.razorpayOrderId !== data.razorpayOrderId) {
@@ -401,23 +434,39 @@ export async function verifyRazorpayPayment(input: VerifyPaymentInput) {
     return { ok: false as const, error: "Payment verification failed." };
   }
 
+  // amountPaid is whatever we charged online (full for prepaid, advance for
+  // partial). balanceDue was fixed at order creation; a remaining balance means
+  // this was a partial (advance) payment.
+  const amountPaid = Math.max(0, order.total - order.balanceDue);
+  const isPartial = order.balanceDue > 0;
+
   const history = Array.isArray(order.statusHistory)
     ? (order.statusHistory as unknown as { status: string; note?: string; at: string }[])
     : [];
   history.push({
-    status: "pending",
-    note: "Payment received (Razorpay)",
+    status: "confirmed",
+    note: isPartial
+      ? `Advance received (Razorpay) — balance ₹${order.balanceDue} on delivery. Order confirmed.`
+      : "Payment received (Razorpay). Order confirmed.",
     at: new Date().toISOString(),
   });
 
+  // A paid online order is auto-confirmed (no manual acceptance needed).
   await prisma.order.update({
     where: { id: order.id },
     data: {
-      paymentStatus: "paid",
+      paymentStatus: isPartial ? "partial" : "paid",
+      amountPaid,
+      status: "confirmed",
       razorpayPaymentId: data.razorpayPaymentId,
       statusHistory: history as unknown as object[],
     },
   });
+
+  // Stage a NimbusPost draft shipment so admin can dispatch in one click.
+  await createDraftForOrder(order.id).catch((err) =>
+    console.error("[orders] draft shipment failed:", err)
+  );
 
   // Now that the order is paid, send the confirmation emails.
   try {

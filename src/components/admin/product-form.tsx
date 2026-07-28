@@ -40,6 +40,14 @@ export function ProductForm({ product, categories }: Props) {
   const [advancePercent, setAdvancePercent] = useState(
     product?.advancePercent?.toString() ?? ""
   );
+  const [parcel, setParcel] = useState({
+    weightGrams: product?.weightGrams?.toString() ?? "",
+    lengthCm: product?.lengthCm?.toString() ?? "",
+    breadthCm: product?.breadthCm?.toString() ?? "",
+    heightCm: product?.heightCm?.toString() ?? "",
+  });
+  const setParcelField = (k: keyof typeof parcel, v: string) =>
+    setParcel((p) => ({ ...p, [k]: v }));
   function toggleMode(m: Mode) {
     setPaymentModes((prev) =>
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
@@ -287,6 +295,10 @@ export function ProductForm({ product, categories }: Props) {
       advancePercent: paymentModes.includes("partial") && advancePercent
         ? Number(advancePercent)
         : null,
+      weightGrams: parcel.weightGrams ? Number(parcel.weightGrams) : null,
+      lengthCm: parcel.lengthCm ? Number(parcel.lengthCm) : null,
+      breadthCm: parcel.breadthCm ? Number(parcel.breadthCm) : null,
+      heightCm: parcel.heightCm ? Number(parcel.heightCm) : null,
     };
 
     const res = editing
@@ -791,10 +803,10 @@ export function ProductForm({ product, categories }: Props) {
             At least one must be selected.
           </p>
           {([
-            { mode: "prepaid" as Mode, label: "Prepaid (full online payment)" },
-            { mode: "cod" as Mode, label: "COD (cash on delivery)" },
-            { mode: "partial" as Mode, label: "Partial (advance online, rest COD)" },
-            { mode: "direct" as Mode, label: "Direct enquiry (no payment)" },
+            { mode: "prepaid" as Mode, label: "Prepaid — Pay Online (full amount)" },
+            { mode: "cod" as Mode, label: "Cash on Delivery" },
+            { mode: "partial" as Mode, label: "Advance Payment (advance online + COD)" },
+            { mode: "direct" as Mode, label: "Customised Order (pay to owner, non-refundable)" },
           ] as { mode: Mode; label: string }[]).map(({ mode, label }) => (
             <label key={mode} className="flex items-center gap-3 text-sm cursor-pointer">
               <input
@@ -820,6 +832,59 @@ export function ProductForm({ product, categories }: Props) {
               />
             </label>
           )}
+        </Card>
+
+        <Card title="Shipping (parcel size)">
+          <p className="text-xs text-muted-foreground">
+            Used when creating a NimbusPost shipment. Leave blank to use the
+            store default. Weight is per unit (multiplied by quantity).
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="label">Weight (grams)</span>
+              <input
+                type="number"
+                min={1}
+                value={parcel.weightGrams}
+                onChange={(e) => setParcelField("weightGrams", e.target.value)}
+                className="input"
+                placeholder="e.g. 500"
+              />
+            </label>
+            <label className="block">
+              <span className="label">Length (cm)</span>
+              <input
+                type="number"
+                min={1}
+                value={parcel.lengthCm}
+                onChange={(e) => setParcelField("lengthCm", e.target.value)}
+                className="input"
+                placeholder="e.g. 15"
+              />
+            </label>
+            <label className="block">
+              <span className="label">Breadth (cm)</span>
+              <input
+                type="number"
+                min={1}
+                value={parcel.breadthCm}
+                onChange={(e) => setParcelField("breadthCm", e.target.value)}
+                className="input"
+                placeholder="e.g. 15"
+              />
+            </label>
+            <label className="block">
+              <span className="label">Height (cm)</span>
+              <input
+                type="number"
+                min={1}
+                value={parcel.heightCm}
+                onChange={(e) => setParcelField("heightCm", e.target.value)}
+                className="input"
+                placeholder="e.g. 10"
+              />
+            </label>
+          </div>
         </Card>
 
         <div className="flex gap-3">

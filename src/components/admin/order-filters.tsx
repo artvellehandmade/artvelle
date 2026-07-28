@@ -11,7 +11,7 @@ const ORDER_STATUSES = [
   "delivered",
   "cancelled",
 ];
-const PAYMENT_METHODS = ["COD", "UPI", "Razorpay"];
+const PAYMENT_METHODS = ["COD", "Razorpay", "Partial", "Direct"];
 
 type FilterState = {
   q: string;
@@ -105,6 +105,22 @@ export function OrderFilters() {
           />
         </div>
         <button
+          onClick={() => {
+            const next = new URLSearchParams();
+            next.set("status", "pending");
+            setF((p) => ({ ...p, status: "pending" }));
+            router.replace(`${pathname}?${next.toString()}`);
+          }}
+          className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-sm ${
+            f.status === "pending"
+              ? "border-accent bg-accent/10 text-accent"
+              : "border-border hover:bg-muted"
+          }`}
+          title="Show orders awaiting your acceptance"
+        >
+          Needs confirmation
+        </button>
+        <button
           onClick={() => setOpen((v) => !v)}
           className="inline-flex items-center gap-2 rounded-full border border-border px-3.5 py-2 text-sm hover:bg-muted"
         >
@@ -149,8 +165,10 @@ export function OrderFilters() {
                 className="input h-10"
               >
                 <option value="">Any</option>
-                <option value="pending">Pending</option>
+                <option value="pending">Pending (COD)</option>
+                <option value="partial">Part-paid (advance)</option>
                 <option value="paid">Paid</option>
+                <option value="failed">Failed</option>
               </select>
             </Field>
 

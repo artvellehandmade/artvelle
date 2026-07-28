@@ -103,6 +103,7 @@ export default async function AdminOrders({
     courier: o.courier,
     trackingNumber: o.trackingNumber,
     trackingUrl: o.trackingUrl,
+    nimbusShipmentId: o.nimbusShipmentId,
     note: o.note,
     createdAt: o.createdAt.toISOString(),
   }));

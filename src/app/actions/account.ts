@@ -183,13 +183,19 @@ export async function resetPassword(input: { token: string; password: string }) 
   return { ok: true as const };
 }
 
-// ---------- Update profile ----------
+// ---------- Update profile (name, phone + saved shipping address) ----------
 const profileSchema = z.object({
   name: z.string().trim().min(2, "Please enter your name"),
   phone: z.string().trim().optional(),
+  address: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  pincode: z.string().trim().optional(),
 });
 
-export async function updateProfile(input: { name: string; phone?: string }) {
+export type ProfileInput = z.input<typeof profileSchema>;
+
+export async function updateProfile(input: ProfileInput) {
   const session = await getUserSession();
   if (!session) return { ok: false as const, error: "Not signed in" };
 
@@ -197,11 +203,21 @@ export async function updateProfile(input: { name: string; phone?: string }) {
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0].message };
   }
+  const d = parsed.data;
 
   const user = await prisma.user.update({
     where: { id: session.id },
-    data: { name: parsed.data.name, phone: parsed.data.phone || null },
+    data: {
+      name: d.name,
+      phone: d.phone || null,
+      address: d.address || null,
+      city: d.city || null,
+      state: d.state || null,
+      pincode: d.pincode || null,
+    },
   });
   await setUserCookie({ id: user.id, email: user.email, name: user.name });
+  // Keep the guest lead cookie in sync too.
+  await setLeadCookie(user.name, user.phone ?? "");
   return { ok: true as const };
 }

@@ -74,6 +74,9 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
         ? Number(f.freeShippingThreshold)
         : null,
       codEnabled: f.codEnabled,
+      prepaidEnabled: f.prepaidEnabled,
+      partialEnabled: f.partialEnabled,
+      directEnabled: f.directEnabled,
       razorpayEnabled: f.razorpayEnabled,
       nimbusEnabled: f.nimbusEnabled,
       announcement: f.announcement || null,
@@ -218,32 +221,54 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
             onChange={(v) => set("freeShippingThreshold", v)}
           />
         </div>
-        <label className="flex items-center gap-3 text-sm">
-          <input
-            type="checkbox"
-            checked={f.codEnabled}
-            onChange={(e) => set("codEnabled", e.target.checked)}
-            className="h-4 w-4 accent-[var(--accent)]"
-          />
-          Cash on delivery enabled
-        </label>
+      </Card>
+
+      <Card title="Payment methods">
+        <p className="text-sm text-muted-foreground">
+          Turn each checkout method on or off for the whole store. A method
+          appears at checkout only when it&apos;s ON here <b>and</b> the product
+          allows it (set per product in the product editor).
+        </p>
+        <Toggle
+          label="Cash on Delivery"
+          description="Customer pays in full when the order is delivered."
+          checked={f.codEnabled}
+          onChange={(v) => set("codEnabled", v)}
+        />
+        <Toggle
+          label="Prepaid — Pay Online"
+          description="Full payment online via Razorpay. Requires Razorpay turned on below."
+          checked={f.prepaidEnabled}
+          onChange={(v) => set("prepaidEnabled", v)}
+        />
+        <Toggle
+          label="Advance Payment (Advance + COD)"
+          description="Customer pays a non-refundable advance online; balance is collected on delivery. Requires Razorpay."
+          checked={f.partialEnabled}
+          onChange={(v) => set("partialEnabled", v)}
+        />
+        <Toggle
+          label="Customised Order (Pay to Owner)"
+          description="No online payment — the order is placed as a request and you arrange payment directly. Non-refundable."
+          checked={f.directEnabled}
+          onChange={(v) => set("directEnabled", v)}
+        />
       </Card>
 
       <Card title="Integrations">
         <p className="text-sm text-muted-foreground">
-          Use the toggles below to enable online payment (Razorpay) and
-          automated shipping (NimbusPost) site-wide. You also control which
-          products support each feature per-product in the product editor.
+          Master switches for the payment gateway and courier. Prepaid & Advance
+          methods need Razorpay ON; automated dispatch needs NimbusPost ON.
         </p>
         <Toggle
           label="Razorpay online payments"
-          description="Enable prepaid & partial payment at checkout. Requires Razorpay keys in env."
+          description="Powers Prepaid & Advance payment at checkout. Requires Razorpay keys in the environment."
           checked={f.razorpayEnabled}
           onChange={(v) => set("razorpayEnabled", v)}
         />
         <Toggle
           label="NimbusPost automated shipping"
-          description="Let admin create shipments directly from order cards. Requires NimbusPost credentials in env."
+          description="Create shipments + AWB from order cards. Requires NimbusPost credentials in the environment."
           checked={f.nimbusEnabled}
           onChange={(v) => set("nimbusEnabled", v)}
         />

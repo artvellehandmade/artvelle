@@ -14,8 +14,13 @@ const SECRET =
 
 export type UserSession = { id: string; email: string; name: string };
 
+// Sticky login: a long-lived token, re-issued on every authenticated action
+// (login/signup/reset/profile/order) so active shoppers effectively never
+// get logged out.
+const SESSION_DAYS = 400;
+
 export function signUserToken(session: UserSession): string {
-  return jwt.sign(session, SECRET, { expiresIn: "30d" });
+  return jwt.sign(session, SECRET, { expiresIn: `${SESSION_DAYS}d` });
 }
 
 export function verifyUserToken(token: string): UserSession | null {
@@ -45,7 +50,7 @@ export async function setUserCookie(session: UserSession) {
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: 60 * 60 * 24 * 30,
+    maxAge: 60 * 60 * 24 * SESSION_DAYS,
   });
 }
 

@@ -8,9 +8,11 @@ import type { SettingsDTO } from "@/lib/types";
 
 export function Providers({
   settings,
+  initialLead,
   children,
 }: {
   settings: SettingsDTO;
+  initialLead?: { name: string; phone: string } | null;
   children: React.ReactNode;
 }) {
   return (
@@ -21,7 +23,7 @@ export function Providers({
       disableTransitionOnChange
     >
       <SettingsProvider value={settings}>
-        <CartProvider>
+        <CartProvider initialLead={initialLead}>
           {children}
           <Toaster
             position="bottom-right"
