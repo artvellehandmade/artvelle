@@ -88,6 +88,8 @@ model Order {
   deliveryStatus  String? // latest raw courier status from NimbusPost webhook (e.g. "In Transit")
   statusHistory  Json     @default("[]") // [{ status, note, at }] appended on each admin update
   note          String?
+  couponCode    String?
+  discountTotal Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -213,4 +215,20 @@ model Review {
   @@index([productId])
   @@index([approved])
   @@index([featured])
+}
+
+// -------- Coupons --------
+model Coupon {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  discountAmount Int
+  isPercentage   Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  productIds     String[] @default([]) // Array of product IDs this coupon applies to
+  usageLimit     Int?     // Optional max times this coupon can be used
+  usedCount      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([isActive])
 }

@@ -15,6 +15,7 @@ import {
   LogOut,
   Menu,
   X,
+  Ticket,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { logout } from "@/app/actions/auth";
@@ -25,6 +26,7 @@ const nav = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/leads", label: "Interested customers", icon: Users },
   { href: "/admin/messages", label: "Inquiries", icon: MessageSquare },
   { href: "/admin/settings", label: "Branding & settings", icon: Settings },

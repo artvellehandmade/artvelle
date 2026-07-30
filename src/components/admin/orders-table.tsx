@@ -61,6 +61,8 @@ export type AdminOrder = {
   }[];
   subtotal: number;
   shipping: number;
+  discountTotal?: number;
+  couponCode?: string | null;
   total: number;
   amountPaid: number;
   balanceDue: number;
@@ -243,6 +245,12 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                           {o.shipping === 0 ? "Free" : formatINR(o.shipping)}
                         </span>
                       </div>
+                      {o.discountTotal ? (
+                        <div className="flex justify-between text-success">
+                          <span>Discount {o.couponCode ? `(${o.couponCode})` : ""}</span>
+                          <span>-{formatINR(o.discountTotal)}</span>
+                        </div>
+                      ) : null}
                       <div className="flex justify-between font-medium text-foreground text-sm">
                         <span>Total</span>
                         <span>{formatINR(o.total)}</span>

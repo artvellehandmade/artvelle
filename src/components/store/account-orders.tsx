@@ -12,6 +12,8 @@ export type AccountOrder = {
   total: number;
   subtotal: number;
   shipping: number;
+  discountTotal?: number;
+  couponCode?: string | null;
   paymentMethod: string;
   paymentStatus: string;
   createdAt: string;
@@ -181,6 +183,12 @@ export function AccountOrders({ orders }: { orders: AccountOrder[] }) {
                           {o.shipping === 0 ? "Free" : formatINR(o.shipping)}
                         </span>
                       </div>
+                      {o.discountTotal ? (
+                        <div className="flex justify-between text-success">
+                          <span>Discount {o.couponCode ? `(${o.couponCode})` : ""}</span>
+                          <span>-{formatINR(o.discountTotal)}</span>
+                        </div>
+                      ) : null}
                       <div className="flex justify-between font-medium">
                         <span>Total</span>
                         <span>{formatINR(o.total)}</span>

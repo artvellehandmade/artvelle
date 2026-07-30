@@ -81,6 +81,11 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
+  const [couponCode, setCouponCode] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+
   // Payment rules for the cart, loaded from the server (authoritative).
   const [ctx, setCtx] = useState<CheckoutContext | null>(null);
   const [method, setMethod] = useState<PaymentMode | null>(null);
@@ -100,7 +105,9 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
     s.freeShippingThreshold != null && subtotal >= s.freeShippingThreshold
       ? 0
       : s.shippingFee;
-  const total = subtotal + shipping;
+      
+  const discountTotal = appliedCoupon ? appliedCoupon.discountAmount : 0;
+  const total = Math.max(0, subtotal + shipping - discountTotal);
 
   // A stable signature of the cart's product ids so we only refetch on change.
   const idKey = items.map((i) => i.productId).sort().join(",");
@@ -173,6 +180,36 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
     );
   }
 
+  async function handleApplyCoupon() {
+    if (!couponCode) return;
+    setApplyingCoupon(true);
+    setCouponError("");
+
+    try {
+      const res = await fetch("/api/store/coupons/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: couponCode, items }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAppliedCoupon({ code: data.code, discountAmount: data.discountAmount });
+        setCouponCode("");
+        toast.success("Coupon applied!");
+      } else {
+        setCouponError(data.error);
+      }
+    } catch (err) {
+      setCouponError("Failed to apply coupon");
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }
+
+  function handleRemoveCoupon() {
+    setAppliedCoupon(null);
+  }
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!method) return;
@@ -199,6 +236,7 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
       ...form,
       paymentMethod: MODE_TO_METHOD[method],
       visitorId,
+      couponCode: appliedCoupon?.code,
       items: items.map((i) => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -477,6 +515,45 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
             ))}
           </ul>
 
+          <div className="mt-5 space-y-3 border-t border-border pt-4">
+            {/* Coupon Code Section */}
+            {!appliedCoupon ? (
+              <div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                    placeholder="Discount code"
+                    className="input w-full uppercase"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleApplyCoupon}
+                    disabled={applyingCoupon || !couponCode}
+                  >
+                    {applyingCoupon ? "..." : "Apply"}
+                  </Button>
+                </div>
+                {couponError && (
+                  <p className="mt-1 text-xs text-danger">{couponError}</p>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-2 text-sm">
+                <span className="font-medium font-mono">{appliedCoupon.code}</span>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  className="text-xs text-danger hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            )}
+          </div>
+
           <div className="mt-5 space-y-2 border-t border-border pt-4 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Subtotal</span>
@@ -486,6 +563,12 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
               <span className="text-muted-foreground">Shipping</span>
               <span>{shipping === 0 ? "Free" : formatINR(shipping)}</span>
             </div>
+            {appliedCoupon && (
+              <div className="flex justify-between text-success">
+                <span>Discount ({appliedCoupon.code})</span>
+                <span>-{formatINR(appliedCoupon.discountAmount)}</span>
+              </div>
+            )}
             <div className="flex justify-between border-t border-border pt-2 text-base font-medium">
               <span>Total</span>
               <span>{formatINR(total)}</span>

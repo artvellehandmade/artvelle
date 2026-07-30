@@ -16,6 +16,7 @@ type SP = {
   to?: string;
   min?: string;
   max?: string;
+  coupon?: string;
   match?: string;
 };
 
@@ -58,6 +59,10 @@ function buildWhere(sp: SP): Prisma.OrderWhereInput {
   if (sp.max && !isNaN(Number(sp.max))) total.lte = Number(sp.max);
   if (total.gte != null || total.lte != null) conditions.push({ total });
 
+  if (sp.coupon) {
+    conditions.push({ couponCode: { equals: sp.coupon, mode: "insensitive" } });
+  }
+
   if (conditions.length === 0) return {};
   if (conditions.length === 1) return conditions[0];
 
@@ -94,6 +99,8 @@ export default async function AdminOrders({
     items: o.items as AdminOrder["items"],
     subtotal: o.subtotal,
     shipping: o.shipping,
+    discountTotal: o.discountTotal,
+    couponCode: o.couponCode,
     total: o.total,
     amountPaid: o.amountPaid,
     balanceDue: o.balanceDue,

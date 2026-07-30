@@ -87,6 +87,7 @@ const inputSchema = z.object({
   note: z.string().optional(),
   paymentMethod: z.enum(["COD", "Razorpay", "Partial", "Direct"]).default("COD"),
   visitorId: z.string().optional(),
+  couponCode: z.string().optional(),
   items: z
     .array(
       z.object({
@@ -181,7 +182,31 @@ export async function placeOrder(input: PlaceOrderInput) {
   ) {
     shipping = 0;
   }
-  const total = subtotal + shipping;
+  
+  // Calculate discount server-side if coupon code is provided
+  let discountTotal = 0;
+  let appliedCoupon = null;
+
+  if (data.couponCode) {
+    const coupon = await prisma.coupon.findUnique({
+      where: { code: data.couponCode.toUpperCase() },
+    });
+    
+    if (coupon && coupon.isActive && (coupon.usageLimit === null || coupon.usedCount < coupon.usageLimit)) {
+      const applicableItems = lineItems.filter(i => coupon.productIds.includes(i.productId));
+      if (applicableItems.length > 0) {
+        appliedCoupon = coupon;
+        const applicableSubtotal = applicableItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+        if (coupon.isPercentage) {
+          discountTotal = Math.floor((applicableSubtotal * coupon.discountAmount) / 100);
+        } else {
+          discountTotal = Math.min(coupon.discountAmount, applicableSubtotal);
+        }
+      }
+    }
+  }
+
+  const total = Math.max(0, subtotal + shipping - discountTotal);
 
   // ---- Resolve the chosen mode against the product rules + global toggles. ----
   const allowedModes = resolveAllowedModes(products, methodAvailability(settings));
@@ -234,6 +259,8 @@ export async function placeOrder(input: PlaceOrderInput) {
         items: lineItems,
         subtotal,
         shipping,
+        discountTotal,
+        couponCode: appliedCoupon?.code,
         total,
         amountPaid: 0,
         balanceDue,
@@ -248,6 +275,14 @@ export async function placeOrder(input: PlaceOrderInput) {
       await tx.product.update({
         where: { id: i.productId },
         data: { stock: { decrement: i.quantity } },
+      });
+    }
+
+    // Increment coupon usage count if a coupon was used
+    if (appliedCoupon) {
+      await tx.coupon.update({
+        where: { id: appliedCoupon.id },
+        data: { usedCount: { increment: 1 } },
       });
     }
 

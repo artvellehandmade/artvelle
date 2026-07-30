@@ -35,6 +35,8 @@ export default async function AccountPage() {
     total: o.total,
     subtotal: o.subtotal,
     shipping: o.shipping,
+    discountTotal: o.discountTotal,
+    couponCode: o.couponCode,
     paymentMethod: o.paymentMethod,
     paymentStatus: o.paymentStatus,
     createdAt: o.createdAt.toISOString(),

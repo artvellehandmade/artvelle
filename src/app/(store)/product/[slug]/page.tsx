@@ -124,19 +124,6 @@ export default async function ProductPage({
             {product.description}
           </p>
 
-          {product.tags.length > 0 && (
-            <div className="mt-5 flex flex-wrap gap-2">
-              {product.tags.map((t) => (
-                <span
-                  key={t}
-                  className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground"
-                >
-                  #{t}
-                </span>
-              ))}
-            </div>
-          )}
-
           <div className="mt-8">
             <ProductPurchase product={product} />
           </div>

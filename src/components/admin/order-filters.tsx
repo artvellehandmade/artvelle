@@ -22,6 +22,7 @@ type FilterState = {
   to: string;
   min: string;
   max: string;
+  coupon: string;
   match: "all" | "any";
 };
 
@@ -35,6 +36,7 @@ function fromParams(params: URLSearchParams): FilterState {
     to: params.get("to") ?? "",
     min: params.get("min") ?? "",
     max: params.get("max") ?? "",
+    coupon: params.get("coupon") ?? "",
     match: (params.get("match") as "all" | "any") ?? "all",
   };
 }
@@ -55,6 +57,7 @@ export function OrderFilters() {
     f.to,
     f.min,
     f.max,
+    f.coupon,
   ].filter(Boolean).length;
 
   function set<K extends keyof FilterState>(key: K, value: FilterState[K]) {
@@ -71,6 +74,7 @@ export function OrderFilters() {
     if (f.to) next.set("to", f.to);
     if (f.min) next.set("min", f.min);
     if (f.max) next.set("max", f.max);
+    if (f.coupon) next.set("coupon", f.coupon.toUpperCase());
     if (activeCount > 1) next.set("match", f.match);
     router.replace(`${pathname}?${next.toString()}`);
   }
@@ -85,6 +89,7 @@ export function OrderFilters() {
       to: "",
       min: "",
       max: "",
+      coupon: "",
       match: "all",
     });
     router.replace(pathname);
@@ -142,7 +147,7 @@ export function OrderFilters() {
 
       {open && (
         <div className="border-t border-border p-4">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Field label="Order status">
               <select
                 value={f.status}
@@ -185,6 +190,16 @@ export function OrderFilters() {
                   </option>
                 ))}
               </select>
+            </Field>
+
+            <Field label="Coupon code">
+              <input
+                type="text"
+                value={f.coupon}
+                onChange={(e) => set("coupon", e.target.value.toUpperCase())}
+                className="input h-10 uppercase"
+                placeholder="e.g. SUMMER20"
+              />
             </Field>
 
             <Field label="From date">
