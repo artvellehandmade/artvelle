@@ -74,7 +74,10 @@ export default async function ProductPage({
       <div className="grid items-start gap-10 md:grid-cols-2 lg:gap-16">
         {/* Gallery: pinned to the top and sticky so a long description never
             stretches or scrolls the square photo out of view. */}
-        <div className="md:sticky md:top-24 self-start">
+        {/* min-w-0: the gallery's thumbnail rail is a horizontal scroller, and a
+            grid item's default `min-width: auto` would otherwise stretch this
+            column to the rail's full min-content width and overflow the page. */}
+        <div className="md:sticky md:top-24 self-start min-w-0">
           <ProductGallery
             product={product}
             variants={variants}

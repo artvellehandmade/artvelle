@@ -46,6 +46,13 @@ export function ProductForm({ product, categories }: Props) {
     breadthCm: product?.breadthCm?.toString() ?? "",
     heightCm: product?.heightCm?.toString() ?? "",
   });
+  const [shipping, setShipping] = useState({
+    shippingType: product?.shippingType ?? "free",
+    shippingFee: product?.shippingFee?.toString() ?? "0",
+    shippingMarkup: product?.shippingMarkup?.toString() ?? "0",
+  });
+  const setShippingField = (k: keyof typeof shipping, v: string) =>
+    setShipping((p) => ({ ...p, [k]: v }));
   const setParcelField = (k: keyof typeof parcel, v: string) =>
     setParcel((p) => ({ ...p, [k]: v }));
   function toggleMode(m: Mode) {
@@ -299,6 +306,9 @@ export function ProductForm({ product, categories }: Props) {
       lengthCm: parcel.lengthCm ? Number(parcel.lengthCm) : null,
       breadthCm: parcel.breadthCm ? Number(parcel.breadthCm) : null,
       heightCm: parcel.heightCm ? Number(parcel.heightCm) : null,
+      shippingType: shipping.shippingType,
+      shippingFee: Number(shipping.shippingFee || 0),
+      shippingMarkup: Number(shipping.shippingMarkup || 0),
     };
 
     const res = editing
@@ -834,10 +844,53 @@ export function ProductForm({ product, categories }: Props) {
           )}
         </Card>
 
-        <Card title="Shipping (parcel size)">
+        <Card title="Shipping settings & Parcel size">
           <p className="text-xs text-muted-foreground">
-            Used when creating a NimbusPost shipment. Leave blank to use the
-            store default. Weight is per unit (multiplied by quantity).
+            Configure how shipping is charged for this product. 
+            Used when creating a NimbusPost shipment or calculating fees at checkout.
+          </p>
+
+          <label className="block mb-4">
+            <span className="label">Shipping Type</span>
+            <select
+              value={shipping.shippingType}
+              onChange={(e) => setShippingField("shippingType", e.target.value)}
+              className="input bg-card"
+            >
+              <option value="free">Free Shipping (Always ₹0)</option>
+              <option value="fixed">Fixed Shipping (Flat rate per qty)</option>
+              <option value="nimbus">NimbusAPI + Markup (Dynamic calculation)</option>
+            </select>
+          </label>
+
+          {shipping.shippingType === "fixed" && (
+            <label className="block mb-4">
+              <span className="label">Fixed Shipping Fee (₹ per qty)</span>
+              <input
+                type="number"
+                min={0}
+                value={shipping.shippingFee}
+                onChange={(e) => setShippingField("shippingFee", e.target.value)}
+                className="input"
+              />
+            </label>
+          )}
+
+          {shipping.shippingType === "nimbus" && (
+            <label className="block mb-4">
+              <span className="label">Shipping Markup (₹ added to API rate per qty)</span>
+              <input
+                type="number"
+                min={0}
+                value={shipping.shippingMarkup}
+                onChange={(e) => setShippingField("shippingMarkup", e.target.value)}
+                className="input"
+              />
+            </label>
+          )}
+
+          <p className="text-xs text-muted-foreground mb-2 mt-4">
+            Dimensions and weight. Weight is per unit (multiplied by quantity).
           </p>
           <div className="grid grid-cols-2 gap-3">
             <label className="block">

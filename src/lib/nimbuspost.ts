@@ -277,3 +277,73 @@ export async function createShipment(
 export async function trackShipment(awb: string) {
   return authed(`shipments/track/${encodeURIComponent(awb)}`, { method: "GET" });
 }
+
+export type RateInput = {
+  destinationPincode: string;
+  weightGrams: number;
+  lengthCm: number;
+  breadthCm: number;
+  heightCm: number;
+  paymentType: "prepaid" | "cod";
+};
+
+export async function calculateShippingRate(input: RateInput): Promise<number | null> {
+  if (!isNimbusPostConfigured()) return null;
+
+  try {
+    // The origin location should be the pickup address ID (e.g. WH-001).
+    const originLocation = process.env.NIMBUSPOST_WAREHOUSE_NAME || "WH-001";
+    const weightKg = Math.max((input.weightGrams || 0) / 1000, 0.1);
+    const length = Math.max(input.lengthCm || 0, 1);
+    const breadth = Math.max(input.breadthCm || 0, 1);
+    const height = Math.max(input.heightCm || 0, 1);
+
+    let data;
+    if (process.env.NIMBUSPOST_TOKEN?.trim()) {
+      data = await authed("orders/api/v1/courier/serviceability", {
+        method: "POST",
+        body: JSON.stringify({
+          origin: originLocation,
+          destination: input.destinationPincode,
+          payment_type: input.paymentType,
+          weight: weightKg,
+          length,
+          breadth,
+          height,
+        }),
+      });
+    } else {
+      data = await authed("courier/serviceability", {
+        method: "POST",
+        body: JSON.stringify({
+          origin: originLocation,
+          destination: input.destinationPincode,
+          payment_type: input.paymentType,
+          weight: weightKg,
+          length,
+          breadth,
+          height,
+        }),
+      });
+    }
+
+    if (!data?.status || !data?.data?.length) {
+      return null;
+    }
+
+    // Find the cheapest courier
+    const couriers = data.data;
+    let minRate = Infinity;
+    for (const courier of couriers) {
+      const rate = Number(courier.total_charges || courier.freight_charge);
+      if (rate && rate < minRate) {
+        minRate = rate;
+      }
+    }
+
+    return minRate === Infinity ? null : minRate;
+  } catch (error) {
+    console.error("NimbusPost rate calculation error:", error);
+    return null;
+  }
+}

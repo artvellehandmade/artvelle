@@ -45,6 +45,9 @@ model Product {
   lengthCm          Int?
   breadthCm         Int?
   heightCm          Int?
+  shippingType      String   @default("nimbus") // "free", "fixed", "nimbus"
+  shippingFee       Int      @default(0)
+  shippingMarkup    Int      @default(0)
   isFeatured        Boolean  @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -167,7 +170,6 @@ model SiteSettings {
   facebook              String?  @default("")
   adminNotifyEmail      String   @default("admin@artvelle.example")
   currency              String   @default("INR")
-  shippingFee           Int      @default(0)
   freeShippingThreshold Int? // free shipping above this order value
   razorpayEnabled       Boolean  @default(false) // master switch for online payments
   nimbusEnabled         Boolean  @default(false) // master switch for NimbusPost shipping

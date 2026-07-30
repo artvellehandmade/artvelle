@@ -15,7 +15,6 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
   const [uploading, setUploading] = useState(false);
   const [f, setF] = useState({
     ...initial,
-    shippingFee: String(initial.shippingFee ?? 0),
     freeShippingThreshold:
       initial.freeShippingThreshold != null
         ? String(initial.freeShippingThreshold)
@@ -69,7 +68,6 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
       facebook: f.facebook || null,
       adminNotifyEmail: f.adminNotifyEmail,
       currency: f.currency,
-      shippingFee: Number(f.shippingFee || 0),
       freeShippingThreshold: f.freeShippingThreshold
         ? Number(f.freeShippingThreshold)
         : null,
@@ -209,18 +207,17 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
         />
         <div className="grid gap-4 sm:grid-cols-2">
           <Text
-            label="Shipping fee (₹)"
-            type="number"
-            value={f.shippingFee}
-            onChange={(v) => set("shippingFee", v)}
-          />
-          <Text
             label="Free shipping above (₹, optional)"
             type="number"
             value={f.freeShippingThreshold}
             onChange={(v) => set("freeShippingThreshold", v)}
           />
         </div>
+        <p className="text-xs text-muted-foreground">
+          Shipping is now set per product (Free / Fixed / NimbusPost + markup) —
+          edit it on each product&apos;s page under &quot;Shipping settings &amp; parcel
+          size&quot;.
+        </p>
       </Card>
 
       <Card title="Payment methods">

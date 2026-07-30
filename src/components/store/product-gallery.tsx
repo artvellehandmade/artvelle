@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
@@ -24,35 +24,75 @@ export function ProductGallery({
   const safe = list.length ? list : [""];
 
   const [activeUrl, setActiveUrl] = useState<string>(safe[0]);
-  const [direction, setDirection] = useState(0);
   const [zoomed, setZoomed] = useState(false);
 
-  // Separate ref arrays: desktop rail vs mobile grid (they coexist in DOM)
-  const desktopRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const mobileRefs  = useRef<(HTMLButtonElement | null)[]>([]);
+  // Horizontal thumbnail strip: one shared rail for mobile + desktop.
+  const stripRef = useRef<HTMLDivElement | null>(null);
+  const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [canLeft, setCanLeft] = useState(false);
+  const [canRight, setCanRight] = useState(false);
 
   if (safe.length && !safe.includes(activeUrl)) {
     setActiveUrl(safe[0]);
-    setDirection(0);
   }
   const current = Math.max(0, safe.indexOf(activeUrl));
-  const many    = safe.length > 1;
+  const many = safe.length > 1;
 
+  // Track which strip arrows apply (i.e. the rail is wider than its viewport).
+  useEffect(() => {
+    const el = stripRef.current;
+    if (!el) return;
+    // Ignore a trivially small overflow: 8 thumbs overrun a 563px rail by ~5px,
+    // and an arrow that scrolls 5px is worse than no arrow at all.
+    const EDGE = 10;
+    const sync = () => {
+      setCanLeft(el.scrollLeft > EDGE);
+      setCanRight(el.scrollLeft + el.clientWidth < el.scrollWidth - EDGE);
+    };
+    sync();
+    el.addEventListener("scroll", sync, { passive: true });
+    // Observe the children too, not just the rail: the rail's own box never
+    // changes as layout settles, so container-only observation can miss a
+    // narrow overflow (8 thumbs overflow a 563px rail by just 5px) and leave
+    // the arrows wrongly hidden.
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    for (const child of el.children) ro.observe(child);
+    const raf = requestAnimationFrame(sync);
+    return () => {
+      el.removeEventListener("scroll", sync);
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [safe.length]);
+
+  /**
+   * Centre a thumb inside the strip. Deliberately not scrollIntoView() — that
+   * also scrolls the page vertically, which yanked the photo out of view.
+   */
   function revealThumb(index: number) {
-    // Scroll whichever thumb container is visible into view (other is display:none → no-op)
-    desktopRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
-    mobileRefs.current[index]?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+    const strip = stripRef.current;
+    const thumb = thumbRefs.current[index];
+    if (!strip || !thumb) return;
+    strip.scrollTo({
+      left: thumb.offsetLeft - strip.clientWidth / 2 + thumb.clientWidth / 2,
+      behavior: "smooth",
+    });
   }
 
-  function goTo(index: number, dir: number) {
+  function nudgeStrip(dir: 1 | -1) {
+    const strip = stripRef.current;
+    if (!strip) return;
+    strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: "smooth" });
+  }
+
+  function goTo(index: number) {
     const wrapped = (index + safe.length) % safe.length;
-    setDirection(dir);
     setActiveUrl(safe[wrapped]);
     revealThumb(wrapped);
   }
 
   function pickPhoto(img: string, index: number) {
-    setDirection(index > current ? 1 : -1);
     setActiveUrl(img);
     const v = variantForImage(variants, img);
     if (v) setSelection({ ...v.combo });
@@ -61,50 +101,8 @@ export function ProductGallery({
 
   return (
     <>
-      {/* ─── Gallery wrapper — desktop shifts right for left rail ─── */}
-      <div className="relative md:pl-24">
-
-        {/* ── DESKTOP: vertical thumbnail rail (left side, UNCHANGED) ── */}
-        {many && (
-          <div className="hidden md:flex md:absolute md:inset-y-0 md:left-0 md:w-20 md:flex-col md:gap-3 md:overflow-y-auto [scrollbar-width:thin]">
-            {safe.map((img, i) => (
-              <button
-                key={`d-${i}`}
-                ref={(el) => { desktopRefs.current[i] = el; }}
-                type="button"
-                onClick={() => pickPhoto(img, i)}
-                aria-label={`View photo ${i + 1}`}
-                aria-pressed={current === i}
-                className={cn(
-                  "relative aspect-square w-full shrink-0 overflow-hidden rounded-xl border-2",
-                  "cursor-pointer transition-all duration-200",
-                  current === i
-                    ? "border-accent scale-[1.03] opacity-100 shadow-md shadow-accent/20"
-                    : "border-transparent opacity-50 hover:opacity-80 hover:scale-[1.02]"
-                )}
-              >
-                {img && (
-                  <Image
-                    src={img}
-                    alt={`${name} ${i + 1}`}
-                    fill
-                    sizes="80px"
-                    className="object-cover"
-                    loading={i === 0 ? "eager" : "lazy"}
-                  />
-                )}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ════════════════════════════════════════════════════════════════
-            MAIN PRODUCT IMAGE
-            • aspect-square → true 1:1 square at every viewport width
-            • object-contain → full product always visible, never cropped
-            • bg-muted fills letterbox space around contained image
-            • Fade animation (no x-slide) → zero layout shift on change
-        ════════════════════════════════════════════════════════════════ */}
+      <div className="relative">
+        {/* ── MAIN PHOTO — true 1:1 at every width, never cropped ── */}
         <div className="group relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-border/70">
           <AnimatePresence initial={false} mode="popLayout">
             <motion.div
@@ -117,8 +115,8 @@ export function ProductGallery({
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.15}
               onDragEnd={(_e, info) => {
-                if (info.offset.x < -60) goTo(current + 1, 1);
-                else if (info.offset.x > 60) goTo(current - 1, -1);
+                if (info.offset.x < -60) goTo(current + 1);
+                else if (info.offset.x > 60) goTo(current - 1);
               }}
               className="absolute inset-0 touch-pan-y"
               style={{ cursor: many ? "grab" : "default" }}
@@ -141,42 +139,39 @@ export function ProductGallery({
             </motion.div>
           </AnimatePresence>
 
-          {/* ◀ / ▶ swipe arrows on main image */}
           {many && (
             <>
               <button
                 type="button"
-                onClick={() => goTo(current - 1, -1)}
+                onClick={() => goTo(current - 1)}
                 aria-label="Previous photo"
-                className="absolute left-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
+                className="absolute left-2 top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
               <button
                 type="button"
-                onClick={() => goTo(current + 1, 1)}
+                onClick={() => goTo(current + 1)}
                 aria-label="Next photo"
-                className="absolute right-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
+                className="absolute right-2 top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
 
-              {/* N / Total counter */}
               <div className="absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/75 px-3 py-0.5 backdrop-blur">
-                <span className="text-[11px] tabular-nums font-medium text-foreground/70">
+                <span className="text-[11px] font-medium tabular-nums text-foreground/70">
                   {current + 1} / {safe.length}
                 </span>
               </div>
             </>
           )}
 
-          {/* Zoom button */}
           {safe[current] && (
             <button
               type="button"
               onClick={() => setZoomed(true)}
               aria-label="Zoom image"
-              className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
+              className="absolute right-2 top-2 z-10 grid h-9 w-9 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
             >
               <ZoomIn className="h-4 w-4" />
             </button>
@@ -184,49 +179,71 @@ export function ProductGallery({
         </div>
 
         {/* ════════════════════════════════════════════════════════════════
-            MOBILE THUMBNAIL GRID  (hidden md+, replaced by left rail)
+            THUMBNAIL STRIP — horizontal scroll, identical on mobile + desktop.
 
-            Layout: exactly 6 thumbnails per row, wrapping naturally.
-
-            [T][T][T][T][T][T]
-            [T][T][T][T][T]        ← extra images wrap to next row
-
-            Why flex-wrap instead of overflow-x-auto:
-            • Page NEVER scrolls horizontally
-            • No scrollbar (no overflow to hide)
-            • Matches the Shape Studioz reference exactly
-            • Each thumb = calc((100% - 5 × 8px) / 6) → 6 per row always
-            • Extra images naturally flow to a second row
+            Mini fixed-size thumbs (shrink-0) so 3 images or 30 lay out the
+            same and the strip never reflows the page. Active state is a ring,
+            not a transform: a scaled child inside a scroll container forces
+            the cross-axis overflow to `auto`, which is what produced the
+            stray scrollbar next to the old vertical rail.
         ════════════════════════════════════════════════════════════════ */}
         {many && (
-          <div className="mt-3 md:hidden">
+          <div className="relative mt-3">
+            {/* Desktop-only strip arrows, shown only when there's overflow */}
+            {canLeft && (
+              <button
+                type="button"
+                onClick={() => nudgeStrip(-1)}
+                aria-label="Scroll thumbnails left"
+                className="absolute -left-1 top-1/2 z-20 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-background/90 text-foreground shadow-md ring-1 ring-border backdrop-blur transition hover:bg-background md:grid"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {canRight && (
+              <button
+                type="button"
+                onClick={() => nudgeStrip(1)}
+                aria-label="Scroll thumbnails right"
+                className="absolute -right-1 top-1/2 z-20 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full bg-background/90 text-foreground shadow-md ring-1 ring-border backdrop-blur transition hover:bg-background md:grid"
+              >
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Edge fades hint that more photos exist off-screen */}
+            {canLeft && (
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-background to-transparent" />
+            )}
+            {canRight && (
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-background to-transparent" />
+            )}
+
             <div
-              className="flex flex-wrap"
-              style={{ gap: "6px" }}
+              ref={stripRef}
+              // No scroll-snap here on purpose: mandatory snapping fights a
+              // small overflow (it springs the last few px back to the nearest
+              // thumb), which made the arrow visible but unable to scroll.
+              className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth py-1"
             >
               {safe.map((img, i) => {
                 const isActive = current === i;
                 return (
                   <button
-                    key={`m-${i}`}
-                    ref={(el) => { mobileRefs.current[i] = el; }}
+                    key={`t-${i}`}
+                    ref={(el) => {
+                      thumbRefs.current[i] = el;
+                    }}
                     type="button"
                     onClick={() => pickPhoto(img, i)}
                     aria-label={`View photo ${i + 1}`}
                     aria-pressed={isActive}
-                    style={{
-                      // 6 per row: (100% - 5 gaps) / 6
-                      // gap = 6px → 5 gaps = 30px
-                      width: "calc((100% - 30px) / 6)",
-                      aspectRatio: "1 / 1",
-                      flexShrink: 0,
-                    }}
                     className={cn(
-                      "relative overflow-hidden rounded-xl border-2 cursor-pointer",
-                      "transition-all duration-200",
+                      "relative aspect-square h-14 w-14 shrink-0 overflow-hidden rounded-xl md:h-16 md:w-16",
+                      "cursor-pointer transition-all duration-200",
                       isActive
-                        ? "border-accent opacity-100 shadow-sm shadow-accent/30"
-                        : "border-border/30 opacity-60 hover:opacity-85 hover:border-border/60"
+                        ? "ring-2 ring-accent ring-offset-1 ring-offset-background"
+                        : "opacity-60 ring-1 ring-border/50 hover:opacity-100 hover:ring-border"
                     )}
                   >
                     {img && (
@@ -234,7 +251,7 @@ export function ProductGallery({
                         src={img}
                         alt={`${name} view ${i + 1}`}
                         fill
-                        sizes="calc((100vw - 62px) / 6)"
+                        sizes="64px"
                         className="object-cover"
                         loading={i <= 5 ? "eager" : "lazy"}
                       />
@@ -268,7 +285,10 @@ export function ProductGallery({
             <>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); goTo(current - 1, -1); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goTo(current - 1);
+                }}
                 aria-label="Previous photo"
                 className="absolute left-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
               >
@@ -276,7 +296,10 @@ export function ProductGallery({
               </button>
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); goTo(current + 1, 1); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  goTo(current + 1);
+                }}
                 aria-label="Next photo"
                 className="absolute right-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
               >

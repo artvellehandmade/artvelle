@@ -19,6 +19,8 @@ import {
   verifyRazorpaySignature,
 } from "@/lib/razorpay";
 import { createDraftForOrder } from "@/lib/fulfilment";
+import { calculateShippingRate } from "@/lib/nimbuspost";
+
 import type {
   ProductOption,
   VariantPrice,
@@ -175,12 +177,50 @@ export async function placeOrder(input: PlaceOrderInput) {
   const subtotal = lineItems.reduce((n, i) => n + i.price * i.quantity, 0);
 
   const settings = await getSettings();
-  let shipping = settings.shippingFee ?? 0;
-  if (
-    settings.freeShippingThreshold != null &&
-    subtotal >= settings.freeShippingThreshold
-  ) {
-    shipping = 0;
+  const mode = METHOD_TO_MODE[data.paymentMethod] ?? "cod";
+
+  const isFreeThreshold = settings.freeShippingThreshold != null && subtotal >= settings.freeShippingThreshold;
+  let shipping = 0;
+
+  if (!isFreeThreshold) {
+    let nimbusWeight = 0;
+    let nimbusLength = 0;
+    let nimbusBreadth = 0;
+    let nimbusHeight = 0;
+    let nimbusMarkupTotal = 0;
+    let hasNimbusProducts = false;
+    const byId = new Map(products.map((p) => [p.id, p]));
+
+    for (const i of lineItems) {
+      const p = byId.get(i.productId);
+      if (!p) continue;
+      const type = (p as any).shippingType || "nimbus";
+      
+      if (type === "fixed") {
+        shipping += ((p as any).shippingFee || 0) * i.quantity;
+      } else if (type === "nimbus") {
+        hasNimbusProducts = true;
+        nimbusMarkupTotal += ((p as any).shippingMarkup || 0) * i.quantity;
+        if (p.weightGrams) nimbusWeight += p.weightGrams * i.quantity;
+        if (p.lengthCm) nimbusLength = Math.max(nimbusLength, p.lengthCm);
+        if (p.breadthCm) nimbusBreadth = Math.max(nimbusBreadth, p.breadthCm);
+        if (p.heightCm) nimbusHeight = Math.max(nimbusHeight, p.heightCm);
+      }
+    }
+
+    if (hasNimbusProducts) {
+      const rate = await calculateShippingRate({
+        destinationPincode: data.pincode,
+        weightGrams: nimbusWeight,
+        lengthCm: nimbusLength,
+        breadthCm: nimbusBreadth,
+        heightCm: nimbusHeight,
+        paymentType: mode === "cod" ? "cod" : "prepaid",
+      });
+      if (rate !== null) {
+        shipping += rate + nimbusMarkupTotal;
+      }
+    }
   }
   
   // Calculate discount server-side if coupon code is provided
@@ -210,7 +250,6 @@ export async function placeOrder(input: PlaceOrderInput) {
 
   // ---- Resolve the chosen mode against the product rules + global toggles. ----
   const allowedModes = resolveAllowedModes(products, methodAvailability(settings));
-  const mode = METHOD_TO_MODE[data.paymentMethod] ?? "cod";
   if (!allowedModes.includes(mode)) {
     return {
       ok: false as const,

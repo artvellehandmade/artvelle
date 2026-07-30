@@ -86,6 +86,11 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
   const [couponError, setCouponError] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
 
+  const [dynamicShippingFee, setDynamicShippingFee] = useState<number | null>(null);
+  const [shippingLoading, setShippingLoading] = useState(false);
+  const [shippingError, setShippingError] = useState("");
+
+
   // Payment rules for the cart, loaded from the server (authoritative).
   const [ctx, setCtx] = useState<CheckoutContext | null>(null);
   const [method, setMethod] = useState<PaymentMode | null>(null);
@@ -101,10 +106,14 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
     note: "",
   });
 
-  const shipping =
-    s.freeShippingThreshold != null && subtotal >= s.freeShippingThreshold
-      ? 0
-      : s.shippingFee;
+  // If shipping is free globally via type, or if subtotal threshold is met
+  const isFreeThreshold = s.freeShippingThreshold != null && subtotal >= s.freeShippingThreshold;
+  
+  let shipping = 0;
+  if (!isFreeThreshold) {
+    shipping = dynamicShippingFee ?? 0;
+  }
+
       
   const discountTotal = appliedCoupon ? appliedCoupon.discountAmount : 0;
   const total = Math.max(0, subtotal + shipping - discountTotal);
@@ -126,6 +135,49 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
       alive = false;
     };
   }, [idKey]);
+
+  useEffect(() => {
+    // We always calculate via API since the backend now handles per-product shipping rules (Free, Fixed, Nimbus).
+    // If the cart has no nimbus products, the API will just return the fixed fee total immediately.
+
+    if (!form.pincode || form.pincode.length < 6 || !method || items.length === 0) {
+      setDynamicShippingFee(null);
+      setShippingError("");
+      return;
+    }
+    let alive = true;
+    setShippingLoading(true);
+    setShippingError("");
+
+    fetch("/api/store/shipping", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        pincode: form.pincode,
+        paymentType: method === "cod" ? "cod" : "prepaid",
+        items: items.map((i) => ({ productId: i.productId, quantity: i.quantity })),
+      }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!alive) return;
+        setShippingLoading(false);
+        if (data.success) {
+          setDynamicShippingFee(data.rate);
+        } else {
+          setDynamicShippingFee(null);
+          setShippingError(data.error || "Shipping not available");
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setShippingLoading(false);
+        setDynamicShippingFee(null);
+        setShippingError("Failed to calculate shipping");
+      });
+
+    return () => { alive = false; };
+  }, [form.pincode, method, items]);
 
   // Modes offered = intersection of each product's modes, filtered by globals.
   const allowedModes = useMemo<PaymentMode[]>(() => {
@@ -559,10 +611,18 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
               <span className="text-muted-foreground">Subtotal</span>
               <span>{formatINR(subtotal)}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Shipping</span>
-              <span>{shipping === 0 ? "Free" : formatINR(shipping)}</span>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground flex gap-2 items-center">
+                Shipping {shippingLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+              </span>
+              <span>{shippingLoading ? "Calculating..." : shipping === 0 ? "Free" : formatINR(shipping)}</span>
             </div>
+            {shippingError && (
+              <div className="flex justify-between text-danger">
+                <span className="text-xs">Error</span>
+                <span className="text-xs">{shippingError}</span>
+              </div>
+            )}
             {appliedCoupon && (
               <div className="flex justify-between text-success">
                 <span>Discount ({appliedCoupon.code})</span>
@@ -605,7 +665,7 @@ export function CheckoutClient({ user }: { user: CheckoutUser }) {
 
           <Button
             type="submit"
-            disabled={loading || !method}
+            disabled={loading || !method || shippingLoading || !!shippingError}
             className="mt-6 w-full"
             size="lg"
           >

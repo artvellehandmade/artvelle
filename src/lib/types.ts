@@ -59,6 +59,9 @@ export type ProductDTO = {
   lengthCm: number | null;
   breadthCm: number | null;
   heightCm: number | null;
+  shippingType: string;
+  shippingFee: number;
+  shippingMarkup: number;
   isFeatured: boolean;
   isActive: boolean;
 };
@@ -78,7 +81,6 @@ export type SettingsDTO = {
   facebook: string | null;
   adminNotifyEmail: string;
   currency: string;
-  shippingFee: number;
   freeShippingThreshold: number | null;
   codEnabled: boolean;
   prepaidEnabled: boolean;

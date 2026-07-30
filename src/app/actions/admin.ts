@@ -90,6 +90,9 @@ const productSchema = z.object({
   lengthCm: z.coerce.number().int().positive().nullable().optional(),
   breadthCm: z.coerce.number().int().positive().nullable().optional(),
   heightCm: z.coerce.number().int().positive().nullable().optional(),
+  shippingType: z.string().default("free"),
+  shippingFee: z.coerce.number().int().nonnegative().default(0),
+  shippingMarkup: z.coerce.number().int().default(0),
 });
 
 export type ProductInput = z.input<typeof productSchema>;
@@ -117,6 +120,9 @@ export async function createProduct(input: ProductInput) {
       lengthCm: data.lengthCm ?? null,
       breadthCm: data.breadthCm ?? null,
       heightCm: data.heightCm ?? null,
+      shippingType: data.shippingType,
+      shippingFee: data.shippingFee,
+      shippingMarkup: data.shippingMarkup,
       slug,
     },
   });
@@ -148,6 +154,9 @@ export async function updateProduct(id: string, input: ProductInput) {
       lengthCm: data.lengthCm ?? null,
       breadthCm: data.breadthCm ?? null,
       heightCm: data.heightCm ?? null,
+      shippingType: data.shippingType,
+      shippingFee: data.shippingFee,
+      shippingMarkup: data.shippingMarkup,
       slug,
     },
   });
@@ -270,7 +279,6 @@ const settingsSchema = z.object({
   facebook: z.string().nullable().optional(),
   adminNotifyEmail: z.string().email(),
   currency: z.string().default("INR"),
-  shippingFee: z.coerce.number().int().nonnegative().default(0),
   freeShippingThreshold: z.coerce
     .number()
     .int()
