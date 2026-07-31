@@ -133,7 +133,7 @@ export async function dispatchOrder(
     return {
       ok: false,
       error:
-        "NimbusPost isn't set up. Add NIMBUSPOST_EMAIL, NIMBUSPOST_PASSWORD and NIMBUSPOST_WAREHOUSE_NAME.",
+        "NimbusPost isn't set up. Add NIMBUSPOST_API_KEY, NIMBUSPOST_API_SECRET and NIMBUSPOST_WAREHOUSE_NAME.",
     };
   }
 
