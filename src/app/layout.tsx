@@ -5,6 +5,7 @@ import { Providers } from "@/components/providers";
 import { getSettings } from "@/lib/settings";
 import { getUserSession } from "@/lib/user-auth";
 import { prisma } from "@/lib/prisma";
+import { siteUrl } from "@/lib/site-url";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -24,21 +25,46 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  // Shrink the layout viewport when the on-screen keyboard opens, so fixed
+  // elements stay anchored to the visible area instead of drifting behind it.
+  interactiveWidget: "resizes-content",
 };
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();
+  const base = siteUrl();
+  const title = `${s.brandName} — ${s.tagline}`;
+
   return {
-    title: {
-      default: `${s.brandName} — ${s.tagline}`,
-      template: `%s · ${s.brandName}`,
-    },
+    // Required for relative OG/canonical URLs to resolve; without it Next
+    // silently drops them and social cards render blank.
+    metadataBase: new URL(base),
+    title: { default: title, template: `%s · ${s.brandName}` },
     description: s.heroSubtext,
+    keywords: [
+      "resin art",
+      "handmade resin art India",
+      "resin coasters",
+      "resin wall art",
+      "custom resin gifts",
+      "handcrafted home decor",
+      s.brandName,
+    ],
+    alternates: { canonical: "/" },
     openGraph: {
-      title: `${s.brandName} — ${s.tagline}`,
+      title,
       description: s.heroSubtext,
+      url: base,
+      siteName: s.brandName,
       type: "website",
+      locale: "en_IN",
     },
+    twitter: {
+      card: "summary_large_image",
+      title,
+      description: s.heroSubtext,
+    },
+    robots: { index: true, follow: true },
   };
 }
 
@@ -60,6 +86,51 @@ export default async function RootLayout({
     if (u) initialLead = { name: u.name, phone: u.phone ?? "" };
   }
 
+  const base = siteUrl();
+
+  // Site-wide structured data: who the brand is (knowledge panel) and how to
+  // search it (sitelinks searchbox). Per-page Product/Breadcrumb graphs live
+  // on their own routes.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": `${base}/#organization`,
+        name: settings.brandName,
+        url: base,
+        description: settings.heroSubtext,
+        ...(settings.logoUrl ? { logo: settings.logoUrl } : {}),
+        ...(settings.instagram || settings.facebook
+          ? { sameAs: [settings.instagram, settings.facebook].filter(Boolean) }
+          : {}),
+        contactPoint: {
+          "@type": "ContactPoint",
+          contactType: "customer service",
+          email: settings.contactEmail,
+          telephone: settings.contactPhone,
+          areaServed: "IN",
+          availableLanguage: ["en", "hi"],
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${base}/#website`,
+        url: base,
+        name: settings.brandName,
+        publisher: { "@id": `${base}/#organization` },
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${base}/shop?q={search_term_string}`,
+          },
+          "query-input": "required name=search_term_string",
+        },
+      },
+    ],
+  };
+
   return (
     <html
       lang="en"
@@ -67,6 +138,10 @@ export default async function RootLayout({
       className={`${inter.variable} ${playfair.variable} h-full`}
     >
       <body className="min-h-full flex flex-col antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <Providers settings={settings} initialLead={initialLead}>
           {children}
         </Providers>

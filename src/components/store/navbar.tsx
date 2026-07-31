@@ -9,6 +9,7 @@ import { useCart } from "@/context/cart";
 import { useSettings } from "@/context/settings";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { SearchBox } from "@/components/store/search-box";
+import { useKeyboardOpen } from "@/hooks/use-keyboard-open";
 import { cn } from "@/lib/utils";
 
 // Desktop nav links (all pages)
@@ -34,6 +35,7 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
   const { count, setOpen } = useCart();
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
+  const keyboardOpen = useKeyboardOpen();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -135,9 +137,10 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
         </nav>
       </header>
 
-      {/* ── Mobile bottom tab bar (hidden on md+) ── */}
+      {/* ── Mobile bottom tab bar (hidden on md+, and while typing) ── */}
       <nav
         aria-label="Mobile navigation"
+        hidden={keyboardOpen}
         className={cn(
           "fixed bottom-0 inset-x-0 z-50 md:hidden",
           "border-t border-border bg-background/95 backdrop-blur-xl",

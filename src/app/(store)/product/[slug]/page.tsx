@@ -9,6 +9,8 @@ import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductCard } from "@/components/store/product-card";
 import { ProductViewProvider } from "@/context/product-view";
 import { normalizeVariants, priceRange } from "@/lib/variants";
+import { getSettings } from "@/lib/settings";
+import { siteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
@@ -20,9 +22,45 @@ export async function generateMetadata({
   const { slug } = await params;
   const product = await getProductBySlug(slug);
   if (!product) return { title: "Product" };
+
+  const range = priceRange(product);
+
+  // Lead with the buying signals a shopper scans for in a search result —
+  // price and availability — then fall back to the description. Google
+  // truncates around 160 characters.
+  const description = [
+    `${product.name} — ${formatINR(range.min)}${range.min !== range.max ? `+` : ""}.`,
+    product.description.replace(/\s+/g, " ").trim(),
+  ]
+    .join(" ")
+    .slice(0, 158);
+
+  const images = product.images.filter(Boolean);
+  const canonical = `/product/${product.slug}`;
+
   return {
     title: product.name,
-    description: product.description.slice(0, 150),
+    description,
+    keywords: [product.name, product.category, ...(product.tags ?? [])].filter(
+      Boolean
+    ) as string[],
+    alternates: { canonical },
+    openGraph: {
+      title: product.name,
+      description,
+      url: canonical,
+      type: "website",
+      ...(images.length ? { images: [{ url: images[0], alt: product.name }] } : {}),
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: product.name,
+      description,
+      ...(images.length ? { images: [images[0]] } : {}),
+    },
+    // Sold-out pieces stay indexed on purpose — they keep their ranking for
+    // when a similar piece is listed, and schema.org carries availability.
+    robots: { index: true, follow: true },
   };
 }
 
@@ -35,12 +73,10 @@ export default async function ProductPage({
   const product = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  const related = await getRelated(
-    product.category,
-    product.id,
-    4,
-    product.secondaryCategory
-  );
+  const [related, settings] = await Promise.all([
+    getRelated(product.category, product.id, 4, product.secondaryCategory),
+    getSettings(),
+  ]);
   const discount =
     product.compareAtPrice && product.compareAtPrice > product.price
       ? Math.round(
@@ -55,8 +91,61 @@ export default async function ProductPage({
   const range = priceRange(product);
   const hasRange = range.min !== range.max;
 
+  const base = siteUrl();
+  const productUrl = `${base}/product/${product.slug}`;
+  // Relative uploads would be meaningless to a crawler — force absolute.
+  const absoluteImages = product.images
+    .filter(Boolean)
+    .map((src) => (src.startsWith("http") ? src : `${base}${src}`));
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Product",
+        "@id": `${productUrl}#product`,
+        name: product.name,
+        description: product.description.replace(/\s+/g, " ").trim(),
+        ...(absoluteImages.length ? { image: absoluteImages } : {}),
+        category: product.category,
+        brand: { "@type": "Brand", name: settings.brandName },
+        offers: {
+          "@type": "AggregateOffer",
+          priceCurrency: "INR",
+          lowPrice: range.min,
+          highPrice: range.max,
+          offerCount: Math.max(variants.length, 1),
+          availability:
+            product.stock > 0
+              ? "https://schema.org/InStock"
+              : "https://schema.org/OutOfStock",
+          url: productUrl,
+          seller: { "@id": `${base}/#organization` },
+        },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: base },
+          { "@type": "ListItem", position: 2, name: "Shop", item: `${base}/shop` },
+          {
+            "@type": "ListItem",
+            position: 3,
+            name: product.category,
+            item: `${base}/shop?category=${encodeURIComponent(product.category)}`,
+          },
+          { "@type": "ListItem", position: 4, name: product.name, item: productUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="container-px mx-auto max-w-7xl py-4 md:py-12">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       {/* Breadcrumb */}
       <nav className="mb-2 md:mb-6 flex items-center gap-1 text-sm text-muted-foreground">
         <Link href="/" className="hover:text-accent">

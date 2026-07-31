@@ -91,6 +91,34 @@ export function Footer() {
 
           <div>
             <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Help &amp; policies
+            </h4>
+            <ul className="mt-4 space-y-2 text-sm">
+              <li>
+                <Link href="/faq" className="hover:text-accent">
+                  FAQs
+                </Link>
+              </li>
+              <li>
+                <Link href="/shipping-returns" className="hover:text-accent">
+                  Shipping &amp; returns
+                </Link>
+              </li>
+              <li>
+                <Link href="/privacy-policy" className="hover:text-accent">
+                  Privacy policy
+                </Link>
+              </li>
+              <li>
+                <Link href="/terms" className="hover:text-accent">
+                  Terms &amp; conditions
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          <div>
+            <h4 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
               Get in touch
             </h4>
             <ul className="mt-4 space-y-3 text-sm text-muted-foreground">
