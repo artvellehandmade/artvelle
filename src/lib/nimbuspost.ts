@@ -256,7 +256,14 @@ export async function shipDraft(nimbusOrderId: string): Promise<ShipmentResult> 
   return readBooking(data);
 }
 
-/** Create the order AND book it in one call. */
+/**
+ * Create the order AND book it in one call.
+ *
+ * ⚠️ INTENTIONALLY UNUSED by the fulfilment flow. This skips the draft stage,
+ * so the order never appears in NimbusPost for a human to review and the wallet
+ * is charged immediately. The store requires draft-first approval — use
+ * `createDraftOrder()` then `shipDraft()`. Kept only for API completeness.
+ */
 export async function createShipment(input: ShipmentInput): Promise<ShipmentResult> {
   const payload = await buildOrderPayload(input);
   const data = await np<{ booking?: Booking }>("/v2/shipments", {
@@ -280,6 +287,49 @@ export async function cancelShipment(awb: string, reason = "cancelled by seller"
     method: "POST",
     body: JSON.stringify({ awb, reason }),
   });
+}
+
+export type NimbusOrderState = {
+  orderStatus: string;
+  booked: boolean;
+  awb: string | null;
+  courierName: string | null;
+  labelUrl: string | null;
+  trackingUrl: string | null;
+};
+
+/**
+ * Read a NimbusPost order's current state.
+ *
+ * Used to pick up a booking made by a human in the NimbusPost dashboard: an
+ * unbooked order carries `shipment.awb === ""`, and it fills in once a courier
+ * is allocated. That is the only signal that someone booked it outside our
+ * admin, so this is how the AWB gets back into our database.
+ */
+export async function getOrderState(orderId: string): Promise<NimbusOrderState> {
+  const data = await np<{
+    order_status?: string;
+    shipment?: {
+      awb?: string;
+      courier_name?: string;
+      label_url?: string;
+      tracking_url?: string;
+    };
+  }>(`/v2/orders/${encodeURIComponent(orderId)}`, { method: "GET" });
+
+  const s = data.shipment ?? {};
+  const awb = (s.awb ?? "").trim();
+
+  return {
+    orderStatus: data.order_status ?? "unknown",
+    booked: awb.length > 0,
+    awb: awb || null,
+    courierName: s.courier_name?.trim() || null,
+    labelUrl: s.label_url?.trim() || null,
+    trackingUrl:
+      s.tracking_url?.trim() ||
+      (awb ? `https://track.nimbuspost.com/track/${awb}` : null),
+  };
 }
 
 export async function trackShipment(awb: string) {

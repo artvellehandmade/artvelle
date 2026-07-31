@@ -112,13 +112,26 @@ product for shipping = setting its **weight & dimensions**:
 - For a multi‑item order, the store **adds up item weights** and takes the **largest**
   dimensions.
 
-### The dispatch flow
+### The dispatch flow — draft first, always
+
+**Nothing is ever booked in one click.** An order must exist in NimbusPost as an
+unbooked draft before a courier can be allocated, so a human can review it — either
+in the NimbusPost dashboard or here — before any wallet charge.
+
 1. When an order is **confirmed** (auto for prepaid, or when you click *Confirm order*
-   for COD), the store creates a **draft order** in NimbusPost — no courier yet.
-2. In **Admin → Orders**, open the order and click **"Dispatch (generate AWB)"**. This
-   assigns the cheapest serviceable courier, generates the AWB, and saves the tracking
-   number + link (also shown in the customer's account).
-3. For COD / partial orders, the remaining balance is automatically set as the COD
+   for COD), the store creates a **draft order** in NimbusPost — no courier, no AWB,
+   no charge.
+2. If that draft didn't get staged (shipping was off, NimbusPost wasn't configured,
+   or it errored), the button in **Admin → Orders** reads **"Send draft to NimbusPost"**.
+   Clicking it stages the draft **and stops** — it will not book.
+3. Once a draft exists the button becomes **"Book & generate AWB"**. That allocates
+   the cheapest serviceable courier, generates the AWB, deducts the wallet, and saves
+   the tracking number + link (also shown in the customer's account).
+4. **Or book it in the NimbusPost dashboard** after reviewing it there. Then press
+   **"Sync from NimbusPost"** in the order panel to pull the AWB, courier and tracking
+   link back into the store and email the customer. Without this step the store has no
+   AWB, so the status webhook (which matches on AWB) can never find the order.
+5. For COD / partial orders, the remaining balance is automatically set as the COD
    amount the courier collects.
 
 If NimbusPost isn't configured yet, confirming still works — the draft step is just
