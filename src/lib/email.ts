@@ -21,10 +21,22 @@ async function send(opts: {
   }
   try {
     const res = await resend.emails.send({ from: FROM, ...opts });
-    if (res.error) console.error("[email] send error:", res.error);
+    if (res.error) {
+      // By far the most common cause is EMAIL_FROM using a domain that isn't
+      // verified in Resend (a gmail.com / outlook.com address can never be),
+      // which rejects every send while the app carries on as if it worked.
+      console.error(
+        `[email] REJECTED "${opts.subject}" to ${opts.to} — from="${FROM}".`,
+        `Is that domain verified in Resend? →`,
+        res.error
+      );
+    }
     return res;
   } catch (err) {
-    console.error("[email] send threw:", err);
+    console.error(
+      `[email] THREW sending "${opts.subject}" to ${opts.to} — from="${FROM}":`,
+      err
+    );
     return { error: err };
   }
 }
