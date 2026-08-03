@@ -86,6 +86,31 @@ export default async function AdminOrders({
     prisma.order.count().catch(() => 0),
   ]);
 
+  // Line items store the productId but not the slug, so resolve the storefront
+  // slug for every product these orders reference — that's what turns a line
+  // item into a clickable product link. A product deleted since the order was
+  // placed simply has no slug, and renders without a link.
+  const productIds = [
+    ...new Set(
+      raw.flatMap((o) =>
+        (Array.isArray(o.items) ? (o.items as { productId?: string }[]) : [])
+          .map((i) => i.productId)
+          .filter((id): id is string => !!id)
+      )
+    ),
+  ];
+  const slugById = new Map(
+    (productIds.length
+      ? await prisma.product
+          .findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, slug: true },
+          })
+          .catch(() => [])
+      : []
+    ).map((p) => [p.id, p.slug])
+  );
+
   const orders: AdminOrder[] = raw.map((o) => ({
     id: o.id,
     orderNumber: o.orderNumber,
@@ -96,7 +121,12 @@ export default async function AdminOrders({
     city: o.city,
     state: o.state,
     pincode: o.pincode,
-    items: o.items as AdminOrder["items"],
+    items: (Array.isArray(o.items) ? (o.items as AdminOrder["items"]) : []).map(
+      (it) => ({
+        ...it,
+        slug: it.productId ? (slugById.get(it.productId) ?? null) : null,
+      })
+    ),
     subtotal: o.subtotal,
     shipping: o.shipping,
     discountTotal: o.discountTotal,

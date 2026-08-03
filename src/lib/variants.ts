@@ -216,6 +216,62 @@ export function variantForImage(
 }
 
 /**
+ * What a photo tells us about the variant on screen. Every available variant
+ * carrying the photo is considered, and only the attributes they ALL agree on
+ * are inferred. A photo unique to one variant therefore pins every attribute,
+ * while a photo shared by all four sizes of one design still pins the design
+ * and says nothing about size. Returns {} when the photo is uninformative
+ * (used by every variant, or by none).
+ */
+export function attributesForImage(variants: Variant[], img: string): Selection {
+  const owners = variants.filter((v) => v.available && v.images.includes(img));
+  if (!owners.length) return {};
+  const agreed: Selection = {};
+  for (const [group, value] of Object.entries(owners[0].combo)) {
+    if (owners.every((v) => v.combo[group] === value)) agreed[group] = value;
+  }
+  return agreed;
+}
+
+/**
+ * The selection to apply when a customer picks a photo: what the photo implies,
+ * plus any earlier pick the photo is silent about that is still consistent with
+ * it. The photo always wins — a stale selection is dropped rather than allowed
+ * to override the thing the customer just clicked (which is why this cannot be
+ * a plain merge + pruneSelection, as prune resolves conflicts in option order,
+ * not in favour of the photo).
+ *
+ * Returns null when the photo implies nothing, so the caller can leave the
+ * customer's selection alone instead of resetting it.
+ */
+export function selectionForImage(
+  variants: Variant[],
+  options: ProductOption[],
+  img: string,
+  current: Selection
+): Selection | null {
+  const inferred = attributesForImage(variants, img);
+  if (!Object.keys(inferred).length) return null;
+
+  const next: Selection = { ...inferred };
+  for (const group of options.map((o) => o.name)) {
+    if (next[group] != null) continue;
+    const prev = current[group];
+    if (prev == null) continue;
+    // Keep the earlier pick only if some available variant still supports it
+    // alongside everything the photo just fixed.
+    const stillPossible = variants.some(
+      (v) =>
+        v.available &&
+        v.combo[group] === prev &&
+        Object.entries(next).every(([g, val]) => v.combo[g] === val)
+    );
+    if (stillPossible) next[group] = prev;
+  }
+  return next;
+}
+
+/**
  * After a change, walk the option groups in order and fix any downstream
  * selection that is no longer valid, snapping it to the first enabled choice.
  */

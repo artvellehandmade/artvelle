@@ -12,8 +12,10 @@ import {
   CheckCircle2,
   MessageSquare,
   RefreshCw,
+  ExternalLink,
 } from "lucide-react";
 import { formatINR, whatsappLink } from "@/lib/utils";
+import { CopyableId } from "@/components/admin/copy-id";
 import {
   updateOrderStatus,
   updatePaymentStatus,
@@ -56,6 +58,10 @@ export type AdminOrder = {
   state: string;
   pincode: string;
   items: {
+    /** Present on orders placed after line items started recording it. */
+    productId?: string;
+    /** Resolved server-side; null when the product has since been deleted. */
+    slug?: string | null;
     name: string;
     quantity: number;
     price: number;
@@ -219,9 +225,23 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                     </p>
                     <ul className="mt-2 space-y-1.5">
                       {o.items.map((it, i) => (
-                        <li key={i} className="flex justify-between">
-                          <span>
-                            {it.name} × {it.quantity}
+                        <li key={i} className="flex justify-between gap-3">
+                          <span className="min-w-0">
+                            {it.slug ? (
+                              <a
+                                href={`/product/${it.slug}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Open this product on the store"
+                                className="inline-flex items-baseline gap-1 font-medium underline-offset-2 hover:underline"
+                              >
+                                {it.name}
+                                <ExternalLink className="h-3 w-3 shrink-0 self-center opacity-60" />
+                              </a>
+                            ) : (
+                              <span className="font-medium">{it.name}</span>
+                            )}{" "}
+                            × {it.quantity}
                             {it.options && it.options.length > 0 && (
                               <span className="block text-xs text-muted-foreground">
                                 {it.options
@@ -229,8 +249,18 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                                   .join(" · ")}
                               </span>
                             )}
+                            {it.productId && (
+                              <span className="mt-1 block">
+                                <CopyableId id={it.productId} />
+                                {!it.slug && (
+                                  <span className="ml-1.5 text-[11px] text-muted-foreground">
+                                    · product no longer in the catalogue
+                                  </span>
+                                )}
+                              </span>
+                            )}
                           </span>
-                          <span className="font-medium">
+                          <span className="whitespace-nowrap font-medium">
                             {formatINR(it.price * it.quantity)}
                           </span>
                         </li>

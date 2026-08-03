@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { formatINR } from "@/lib/utils";
 import { ProductRowActions } from "@/components/admin/product-row-actions";
 import { ProductFilters } from "@/components/admin/product-filters";
+import { CopyableId } from "@/components/admin/copy-id";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Products" };
@@ -183,10 +184,15 @@ export default async function AdminProducts({
                         <div className="min-w-0">
                           <p className="truncate font-medium">{p.name}</p>
                           {p.isFeatured && (
-                            <span className="text-[11px] gold-text">
+                            <span className="block text-[11px] gold-text">
                               ★ Featured
                             </span>
                           )}
+                          {/* Same ID shown on order line items, so one copied
+                              off an order can be matched back to here. */}
+                          <span className="mt-1 block">
+                            <CopyableId id={p.id} />
+                          </span>
                         </div>
                       </div>
                     </td>

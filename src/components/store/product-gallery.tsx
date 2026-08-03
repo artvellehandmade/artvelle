@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProductView } from "@/context/product-view";
-import { unionImages, variantForImage } from "@/lib/variants";
+import { unionImages, selectionForImage } from "@/lib/variants";
 import type { ProductDTO, Variant } from "@/lib/types";
 
 export function ProductGallery({
@@ -86,16 +86,19 @@ export function ProductGallery({
     strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: "smooth" });
   }
 
+  /** Arrows, swipe and the lightbox all land on a photo the same way a thumb does. */
   function goTo(index: number) {
     const wrapped = (index + safe.length) % safe.length;
-    setActiveUrl(safe[wrapped]);
-    revealThumb(wrapped);
+    pickPhoto(safe[wrapped], wrapped);
   }
 
   function pickPhoto(img: string, index: number) {
     setActiveUrl(img);
-    const v = variantForImage(variants, img);
-    if (v) setSelection({ ...v.combo });
+    // Picking a photo picks the variant it belongs to. A photo shared by
+    // several variants still pins whatever they have in common (e.g. the
+    // design) and leaves the rest of the choice to the customer.
+    const next = selectionForImage(variants, product.options, img, selection);
+    if (next) setSelection(next);
     revealThumb(index);
   }
 
