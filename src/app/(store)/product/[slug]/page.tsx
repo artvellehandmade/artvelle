@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Truck, ShieldCheck, HandHeart, ChevronRight } from "lucide-react";
 import { getProductBySlug, getRelated } from "@/lib/products";
+import { getProductCrumb } from "@/lib/catalog";
 import { formatINR } from "@/lib/utils";
 import { ProductGallery } from "@/components/store/product-gallery";
 import { ProductPurchase } from "@/components/store/product-purchase";
@@ -73,9 +74,16 @@ export default async function ProductPage({
   const product = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  const [related, settings] = await Promise.all([
-    getRelated(product.category, product.id, 4, product.secondaryCategory),
+  const [related, settings, crumb] = await Promise.all([
+    getRelated(
+      product.category,
+      product.id,
+      4,
+      product.secondaryCategory,
+      product.subcategoryId
+    ),
     getSettings(),
+    getProductCrumb(product.subcategoryId),
   ]);
   const discount =
     product.compareAtPrice && product.compareAtPrice > product.price
@@ -134,7 +142,22 @@ export default async function ProductPage({
             name: product.category,
             item: `${base}/shop?category=${encodeURIComponent(product.category)}`,
           },
-          { "@type": "ListItem", position: 4, name: product.name, item: productUrl },
+          ...(crumb
+            ? [
+                {
+                  "@type": "ListItem",
+                  position: 4,
+                  name: crumb.name,
+                  item: `${base}${crumb.href}`,
+                },
+              ]
+            : []),
+          {
+            "@type": "ListItem",
+            position: crumb ? 5 : 4,
+            name: product.name,
+            item: productUrl,
+          },
         ],
       },
     ],
@@ -155,6 +178,14 @@ export default async function ProductPage({
         <Link href="/shop" className="hover:text-accent">
           Shop
         </Link>
+        {crumb && (
+          <>
+            <ChevronRight className="h-4 w-4" />
+            <Link href={crumb.href} className="hover:text-accent">
+              {crumb.name}
+            </Link>
+          </>
+        )}
         <ChevronRight className="h-4 w-4" />
         <span className="text-foreground">{product.name}</span>
       </nav>

@@ -7,22 +7,41 @@ import { toast } from "sonner";
 import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical, ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createProduct, updateProduct } from "@/app/actions/admin";
+import { PhotoPicker } from "@/components/admin/photo-picker";
 import { allCombinations, comboKey } from "@/lib/options";
 import { formatINR } from "@/lib/utils";
 import type { ProductDTO, ProductOption } from "@/lib/types";
 
-type Props = { product?: ProductDTO; categories: string[] };
+type SubcategoryOption = { id: string; name: string; categoryName: string };
 
-export function ProductForm({ product, categories }: Props) {
+type Props = {
+  product?: ProductDTO;
+  categories: string[];
+  subcategories?: SubcategoryOption[];
+  /** Preselected when arriving from "Add product" inside a subcategory. */
+  initialCategory?: string;
+  initialSubcategoryId?: string;
+};
+
+export function ProductForm({
+  product,
+  categories,
+  subcategories = [],
+  initialCategory,
+  initialSubcategoryId,
+}: Props) {
   const router = useRouter();
-  const editing = !!product;
+  // A duplicate arrives as a fully populated product with a blank id — that is
+  // still a create, not an edit.
+  const editing = !!product?.id;
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
   const [form, setForm] = useState({
     name: product?.name ?? "",
-    category: product?.category ?? categories[0] ?? "",
+    category: initialCategory ?? product?.category ?? categories[0] ?? "",
     secondaryCategory: product?.secondaryCategory ?? "",
+    subcategoryId: initialSubcategoryId ?? product?.subcategoryId ?? "",
     price: product?.price?.toString() ?? "",
     compareAtPrice: product?.compareAtPrice?.toString() ?? "",
     stock: product?.stock?.toString() ?? "0",
@@ -192,6 +211,27 @@ export function ProductForm({ product, categories }: Props) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // Only the groups belonging to the currently selected primary category.
+  const categorySubs = useMemo(
+    () => subcategories.filter((s) => s.categoryName === form.category),
+    [subcategories, form.category]
+  );
+
+  // Switching category must drop a group that belongs to the old one,
+  // otherwise the product would sit in a group its shoppers never reach.
+  function onCategoryChange(category: string) {
+    setForm((f) => {
+      const stillValid = subcategories.some(
+        (s) => s.id === f.subcategoryId && s.categoryName === category
+      );
+      return {
+        ...f,
+        category,
+        subcategoryId: stillValid ? f.subcategoryId : "",
+      };
+    });
+  }
+
   async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files?.length) return;
@@ -279,6 +319,7 @@ export function ProductForm({ product, categories }: Props) {
       name: form.name,
       category: form.category,
       secondaryCategory: form.secondaryCategory || null,
+      subcategoryId: form.subcategoryId || null,
       options: cleanOptions,
       variantPrices: [], // superseded by `variants`
       variants,
@@ -318,7 +359,13 @@ export function ProductForm({ product, categories }: Props) {
     setSaving(false);
     if (res.ok) {
       toast.success(editing ? "Product updated" : "Product created");
-      router.push("/admin/products");
+      // Land back on the group that was just added to, so the next piece in
+      // the set is one click away.
+      router.push(
+        form.subcategoryId
+          ? `/admin/products?subcategoryId=${form.subcategoryId}`
+          : "/admin/products"
+      );
       router.refresh();
     } else {
       toast.error(res.error || "Could not save");
@@ -436,6 +483,11 @@ export function ProductForm({ product, categories }: Props) {
           )}
 
           <div className="flex flex-wrap items-center gap-3">
+            <PhotoPicker
+              selected={images}
+              onChange={setImages}
+              preferCategory={form.category}
+            />
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm hover:bg-muted">
               {uploading ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -475,7 +527,13 @@ export function ProductForm({ product, categories }: Props) {
           </div>
           <p className="text-xs text-muted-foreground">
             Drag photos to reorder them (or use the arrows on hover). The first
-            image is used as the cover. Upload needs Vercel Blob configured;
+            image is used as the cover. The photo library holds every image
+            committed under{" "}
+            <code className="rounded bg-muted px-1 py-0.5">
+              public/products/gallery/
+            </code>{" "}
+            — pick the same photo for as many products as you like, and removing
+            it here never deletes the file. Upload needs Vercel Blob configured;
             pasting an image URL always works.
           </p>
         </Card>
@@ -764,7 +822,7 @@ export function ProductForm({ product, categories }: Props) {
             <span className="label">Category *</span>
             <select
               value={form.category}
-              onChange={(e) => set("category", e.target.value)}
+              onChange={(e) => onCategoryChange(e.target.value)}
               className="input"
             >
               {categories.map((c) => (
@@ -773,6 +831,31 @@ export function ProductForm({ product, categories }: Props) {
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="block">
+            <span className="label">Subcategory (optional)</span>
+            <select
+              value={form.subcategoryId}
+              onChange={(e) => set("subcategoryId", e.target.value)}
+              className="input"
+              disabled={categorySubs.length === 0}
+            >
+              <option value="">
+                {categorySubs.length === 0
+                  ? "No subcategories in this category yet"
+                  : "None — show on the category page"}
+              </option>
+              {categorySubs.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted-foreground">
+              Group this piece under e.g. <b>Resin Pooja Thali</b>. Leave as
+              None for a one-off that should show on the category page directly.
+            </span>
           </label>
 
           <label className="block">

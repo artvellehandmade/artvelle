@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma db push && node scripts/build-media-manifest.mjs && next build",
+    "media:manifest": "node scripts/build-media-manifest.mjs",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",

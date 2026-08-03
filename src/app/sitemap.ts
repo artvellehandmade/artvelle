@@ -49,8 +49,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }),
   ]);
 
+  // Only groups that actually hold two or more pieces get their own URL — a
+  // group of one collapses into that product on the storefront, so indexing it
+  // would just duplicate the product page.
+  const subcategories = await prisma.subcategory
+    .findMany({
+      where: { isActive: true },
+      select: {
+        slug: true,
+        updatedAt: true,
+        category: { select: { name: true } },
+        _count: { select: { products: { where: { isActive: true } } } },
+      },
+    })
+    .then((subs) => subs.filter((s) => s._count.products > 1))
+    .catch((e) => {
+      console.error("[sitemap] subcategory query FAILED:", e);
+      return [];
+    });
+
   console.log(
-    `[sitemap] ${products.length} products, ${categories.length} categories, base=${base}`
+    `[sitemap] ${products.length} products, ${categories.length} categories, ${subcategories.length} subcategories, base=${base}`
   );
 
   for (const c of categories) {
@@ -59,6 +78,17 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.7,
+    });
+  }
+
+  for (const s of subcategories) {
+    entries.push({
+      url: `${base}/shop?category=${encodeURIComponent(
+        s.category.name
+      )}&sub=${s.slug}`,
+      lastModified: s.updatedAt,
+      changeFrequency: "weekly",
+      priority: 0.75,
     });
   }
 

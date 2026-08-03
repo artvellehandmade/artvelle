@@ -10,7 +10,7 @@ import type {
 import { searchProducts } from "./search";
 
 /** Normalise a Prisma product row into a ProductDTO (coerces the JSON columns). */
-function toDTO(p: Product): ProductDTO {
+export function toDTO(p: Product): ProductDTO {
   return {
     ...p,
     options: Array.isArray(p.options)
@@ -138,23 +138,34 @@ export async function getRelated(
   category: string,
   excludeId: string,
   limit = 4,
-  secondaryCategory?: string | null
+  secondaryCategory?: string | null,
+  subcategoryId?: string | null
 ): Promise<ProductDTO[]> {
   try {
     const cats = [category, secondaryCategory].filter(Boolean) as string[];
-    const products = await prisma.product.findMany({
+
+    // Siblings in the same group come first — the closest match to what the
+    // shopper is looking at is another design of the same thing.
+    const siblings = subcategoryId
+      ? await prisma.product.findMany({
+          where: { isActive: true, id: { not: excludeId }, subcategoryId },
+          take: limit,
+          orderBy: { createdAt: "desc" },
+        })
+      : [];
+    if (siblings.length >= limit) return siblings.slice(0, limit).map(toDTO);
+
+    const seen = new Set([excludeId, ...siblings.map((p) => p.id)]);
+    const rest = await prisma.product.findMany({
       where: {
         isActive: true,
-        id: { not: excludeId },
-        OR: [
-          { category: { in: cats } },
-          { secondaryCategory: { in: cats } },
-        ],
+        id: { notIn: [...seen] },
+        OR: [{ category: { in: cats } }, { secondaryCategory: { in: cats } }],
       },
-      take: limit,
+      take: limit - siblings.length,
       orderBy: { createdAt: "desc" },
     });
-    return products.map(toDTO);
+    return [...siblings, ...rest].map(toDTO);
   } catch {
     return [];
   }

@@ -3,15 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon, Layers, ChevronRight } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { createCategory, updateCategory, deleteCategory } from "@/app/actions/admin";
+import { PhotoPicker } from "@/components/admin/photo-picker";
 
 type Category = {
   id: string;
   name: string;
   slug: string;
   imageUrl: string | null;
+  subcategoryCount: number;
 };
 
 export function CategoryManager({ initialCategories }: { initialCategories: Category[] }) {
@@ -96,8 +99,9 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
       <div className="flex items-center justify-between">
         <div>
           <h1 className="font-serif text-3xl">Categories</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Manage product categories dynamically
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+            Plain text names, top of the shelf. Open a category to manage the
+            subcategories inside it — that&apos;s where products actually live.
           </p>
         </div>
         <button
@@ -128,7 +132,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
             </div>
             <div>
               <label className="block text-xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                Cover Image URL (Optional)
+                Cover Image (Optional)
               </label>
               <input
                 type="text"
@@ -139,6 +143,12 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
               />
             </div>
           </div>
+          <PhotoPicker
+            selected={newImageUrl ? [newImageUrl] : []}
+            onChange={(urls) => setNewImageUrl(urls[0] ?? "")}
+            max={1}
+            label="Pick from photo library"
+          />
           <div className="flex justify-end gap-2">
             <button
               type="submit"
@@ -159,6 +169,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
               <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <th className="px-5 py-4 font-medium w-16">Image</th>
                 <th className="px-5 py-4 font-medium">Name</th>
+                <th className="px-5 py-4 font-medium">Subcategories</th>
                 <th className="px-5 py-4 font-medium">Slug</th>
                 <th className="px-5 py-4 font-medium text-right">Actions</th>
               </tr>
@@ -166,7 +177,7 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
             <tbody className="divide-y divide-border">
               {initialCategories.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-5 py-8 text-center text-muted-foreground">
+                  <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">
                     No categories found. Add your first category using the button above.
                   </td>
                 </tr>
@@ -202,6 +213,20 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
                         ) : (
                           cat.name
                         )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <Link
+                          href={`/admin/categories/${cat.id}`}
+                          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        >
+                          <Layers className="h-3.5 w-3.5" />
+                          {cat.subcategoryCount === 0
+                            ? "Add subcategories"
+                            : `${cat.subcategoryCount} subcategor${
+                                cat.subcategoryCount === 1 ? "y" : "ies"
+                              }`}
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </Link>
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {isEditing ? (
@@ -278,6 +303,12 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
               placeholder="/products/gallery/..."
             />
           </div>
+          <PhotoPicker
+            selected={editImageUrl ? [editImageUrl] : []}
+            onChange={(urls) => setEditImageUrl(urls[0] ?? "")}
+            max={1}
+            label="Pick from photo library"
+          />
           <div className="flex justify-end">
             <button
               onClick={() => handleUpdate(editingId)}

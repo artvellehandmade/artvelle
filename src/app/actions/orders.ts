@@ -7,6 +7,7 @@ import { sendOrderEmails } from "@/lib/email";
 import { getUserSession, setUserCookie } from "@/lib/user-auth";
 import { priceWithOptions } from "@/lib/options";
 import {
+  missingChoices,
   normalizeVariants,
   resolveVariant,
   toSelection,
@@ -131,9 +132,18 @@ export async function placeOrder(input: PlaceOrderInput) {
     where: { id: { in: ids }, isActive: true },
   });
 
+  // Cart problems are the shopper's to fix, so they come back as a message
+  // rather than a thrown error the checkout page can only show as "something
+  // went wrong".
+  let cartError: string | null = null;
+  const fail = (message: string) => {
+    cartError ??= message;
+    return null;
+  };
+
   const lineItems = data.items.map((i) => {
     const p = products.find((pr) => pr.id === i.productId);
-    if (!p) throw new Error("A product in your cart is no longer available.");
+    if (!p) return fail("A product in your cart is no longer available.");
     // Recompute the unit price from the product's real option prices.
     const productOptions = Array.isArray(p.options)
       ? (p.options as unknown as ProductOption[])
@@ -153,6 +163,16 @@ export async function placeOrder(input: PlaceOrderInput) {
       variantPrices
     );
 
+    // Every option group must be answered. The product page already blocks
+    // this, but a cart saved before the item gained options — or one edited by
+    // hand — would otherwise order an unbuildable piece.
+    const unanswered = missingChoices(productOptions, toSelection(clean));
+    if (unanswered.length > 0) {
+      return fail(
+        `Please choose ${unanswered.join(" and ")} for “${p.name}” before checking out.`
+      );
+    }
+
     // Prefer the Flipkart-style variant matrix when the product uses one.
     const source = { price: p.price, options: productOptions, variants, variantPrices, images: p.images };
     const normalized = normalizeVariants(source);
@@ -160,6 +180,11 @@ export async function placeOrder(input: PlaceOrderInput) {
       normalized.length && clean.length
         ? resolveVariant(normalized, toSelection(clean))
         : null;
+    if (normalized.length && clean.length && !matched) {
+      return fail(
+        `The combination you picked for “${p.name}” is no longer available.`
+      );
+    }
     const unitPrice = matched ? matched.price : additivePrice;
     const image = matched?.images[0] ?? p.images[0] ?? "";
 
@@ -174,7 +199,11 @@ export async function placeOrder(input: PlaceOrderInput) {
     };
   });
 
-  const subtotal = lineItems.reduce((n, i) => n + i.price * i.quantity, 0);
+  // Stop before any stock is reserved or any payment is started.
+  if (cartError) return { ok: false as const, error: cartError };
+  const validItems = lineItems.filter((i) => i !== null);
+
+  const subtotal = validItems.reduce((n, i) => n + i.price * i.quantity, 0);
 
   const settings = await getSettings();
   const mode = METHOD_TO_MODE[data.paymentMethod] ?? "cod";
@@ -191,7 +220,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     let hasNimbusProducts = false;
     const byId = new Map(products.map((p) => [p.id, p]));
 
-    for (const i of lineItems) {
+    for (const i of validItems) {
       const p = byId.get(i.productId);
       if (!p) continue;
       const type = (p as any).shippingType || "nimbus";
@@ -234,7 +263,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     });
     
     if (coupon && coupon.isActive && (coupon.usageLimit === null || coupon.usedCount < coupon.usageLimit)) {
-      const applicableItems = lineItems.filter(i => coupon.productIds.includes(i.productId));
+      const applicableItems = validItems.filter(i => coupon.productIds.includes(i.productId));
       if (applicableItems.length > 0) {
         appliedCoupon = coupon;
         const applicableSubtotal = applicableItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
@@ -262,7 +291,7 @@ export async function placeOrder(input: PlaceOrderInput) {
   const productById = new Map(products.map((p) => [p.id, p]));
   let advance = 0;
   if (mode === "partial") {
-    for (const li of lineItems) {
+    for (const li of validItems) {
       const pct = productById.get(li.productId)?.advancePercent ?? 0;
       advance += Math.round((li.price * li.quantity * pct) / 100);
     }
@@ -296,7 +325,7 @@ export async function placeOrder(input: PlaceOrderInput) {
         pincode: data.pincode,
         note: data.note,
         paymentMethod: data.paymentMethod,
-        items: lineItems,
+        items: validItems,
         subtotal,
         shipping,
         discountTotal,
@@ -311,7 +340,7 @@ export async function placeOrder(input: PlaceOrderInput) {
     });
 
     // Reduce stock (reserves it while an online payment is completed).
-    for (const i of lineItems) {
+    for (const i of validItems) {
       await tx.product.update({
         where: { id: i.productId },
         data: { stock: { decrement: i.quantity } },
@@ -389,7 +418,7 @@ export async function placeOrder(input: PlaceOrderInput) {
       // don't leave a dangling unpaid order with depleted stock.
       await prisma
         .$transaction(async (tx) => {
-          for (const i of lineItems) {
+          for (const i of validItems) {
             await tx.product.update({
               where: { id: i.productId },
               data: { stock: { increment: i.quantity } },
@@ -416,7 +445,7 @@ export async function placeOrder(input: PlaceOrderInput) {
       city: order.city,
       state: order.state,
       pincode: order.pincode,
-      items: lineItems,
+      items: validItems,
       subtotal,
       shipping,
       total,

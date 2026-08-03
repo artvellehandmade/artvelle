@@ -72,6 +72,8 @@ const productSchema = z.object({
   description: z.string().min(1),
   category: z.string().min(1),
   secondaryCategory: z.string().nullable().optional(),
+  // Group inside the primary category. Null = a one-off shown on the category page.
+  subcategoryId: z.string().nullable().optional(),
   price: z.coerce.number().int().nonnegative(),
   compareAtPrice: z.coerce.number().int().nonnegative().nullable().optional(),
   stock: z.coerce.number().int().nonnegative(),
@@ -114,6 +116,7 @@ export async function createProduct(input: ProductInput) {
     data: {
       ...data,
       secondaryCategory: data.secondaryCategory || null,
+      subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options,
       variantPrices: data.variantPrices,
@@ -148,6 +151,7 @@ export async function updateProduct(id: string, input: ProductInput) {
     data: {
       ...data,
       secondaryCategory: data.secondaryCategory || null,
+      subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options,
       variantPrices: data.variantPrices,
@@ -263,6 +267,166 @@ export async function deleteCategory(id: string) {
     return { ok: true as const };
   } catch (err: any) {
     return { ok: false as const, error: err.message || "Failed to delete category" };
+  }
+}
+
+// -------- Subcategories --------
+// A subcategory is the group a shopper sees in place of its products
+// ("Resin Pooja Thali"), with the real pieces listed one level down.
+const subcategorySchema = z.object({
+  categoryId: z.string().min(1, "Pick a category"),
+  name: z.string().trim().min(1, "Name is required"),
+  // 1–2 cover photos; empty means "borrow from the products inside".
+  images: z.array(z.string().trim()).max(2, "At most 2 photos").default([]),
+  // Manual price range. Both blank = computed live from the products inside.
+  priceMin: z.coerce.number().int().nonnegative().nullable().optional(),
+  priceMax: z.coerce.number().int().nonnegative().nullable().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export type SubcategoryInput = z.input<typeof subcategorySchema>;
+
+async function ensureUniqueSubcategorySlug(
+  categoryId: string,
+  name: string,
+  ignoreId?: string
+) {
+  const base = slugify(name) || "group";
+  let slug = base;
+  let n = 1;
+  while (true) {
+    const existing = await prisma.subcategory.findUnique({
+      where: { categoryId_slug: { categoryId, slug } },
+    });
+    if (!existing || existing.id === ignoreId) return slug;
+    n += 1;
+    slug = `${base}-${n}`;
+  }
+}
+
+function revalidateSubcategories(categoryId: string) {
+  revalidateStore();
+  revalidatePath("/admin/categories");
+  revalidatePath(`/admin/categories/${categoryId}`);
+}
+
+export async function createSubcategory(input: SubcategoryInput) {
+  await requireAdmin();
+  const parsed = subcategorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const data = parsed.data;
+  if (
+    data.priceMin != null &&
+    data.priceMax != null &&
+    data.priceMin > data.priceMax
+  ) {
+    return { ok: false as const, error: "Lowest price cannot exceed highest price" };
+  }
+  const slug = await ensureUniqueSubcategorySlug(data.categoryId, data.name);
+
+  try {
+    const sub = await prisma.subcategory.create({
+      data: {
+        categoryId: data.categoryId,
+        name: data.name,
+        slug,
+        images: data.images.filter(Boolean),
+        priceMin: data.priceMin ?? null,
+        priceMax: data.priceMax ?? null,
+        isActive: data.isActive,
+      },
+    });
+    revalidateSubcategories(data.categoryId);
+    return { ok: true as const, id: sub.id };
+  } catch (err: any) {
+    return {
+      ok: false as const,
+      error: err.message || "Failed to create subcategory",
+    };
+  }
+}
+
+export async function updateSubcategory(id: string, input: SubcategoryInput) {
+  await requireAdmin();
+  const parsed = subcategorySchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0].message };
+  }
+  const data = parsed.data;
+  if (
+    data.priceMin != null &&
+    data.priceMax != null &&
+    data.priceMin > data.priceMax
+  ) {
+    return { ok: false as const, error: "Lowest price cannot exceed highest price" };
+  }
+  const slug = await ensureUniqueSubcategorySlug(
+    data.categoryId,
+    data.name,
+    id
+  );
+
+  try {
+    await prisma.subcategory.update({
+      where: { id },
+      data: {
+        categoryId: data.categoryId,
+        name: data.name,
+        slug,
+        images: data.images.filter(Boolean),
+        priceMin: data.priceMin ?? null,
+        priceMax: data.priceMax ?? null,
+        isActive: data.isActive,
+      },
+    });
+    revalidateSubcategories(data.categoryId);
+    return { ok: true as const };
+  } catch (err: any) {
+    return {
+      ok: false as const,
+      error: err.message || "Failed to update subcategory",
+    };
+  }
+}
+
+/** Products inside are not deleted — they fall back to sitting on the category page. */
+export async function deleteSubcategory(id: string) {
+  await requireAdmin();
+  try {
+    const sub = await prisma.subcategory.delete({ where: { id } });
+    revalidateSubcategories(sub.categoryId);
+    return { ok: true as const };
+  } catch (err: any) {
+    return {
+      ok: false as const,
+      error: err.message || "Failed to delete subcategory",
+    };
+  }
+}
+
+/** Move a product in or out of a group (null = show it on the category page). */
+export async function setProductSubcategory(
+  productId: string,
+  subcategoryId: string | null
+) {
+  await requireAdmin();
+  try {
+    const product = await prisma.product.update({
+      where: { id: productId },
+      data: { subcategoryId },
+      select: { slug: true, subcategoryId: true },
+    });
+    revalidateStore();
+    revalidatePath("/admin/categories");
+    revalidatePath(`/product/${product.slug}`);
+    return { ok: true as const };
+  } catch (err: any) {
+    return {
+      ok: false as const,
+      error: err.message || "Failed to move product",
+    };
   }
 }
 

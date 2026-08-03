@@ -45,6 +45,8 @@ export type ProductDTO = {
   description: string;
   category: string;
   secondaryCategory: string | null;
+  /** Group inside the primary category; null = shown directly on the category page. */
+  subcategoryId: string | null;
   tags: string[];
   options: ProductOption[];
   variantPrices: VariantPrice[];

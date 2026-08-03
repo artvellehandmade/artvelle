@@ -29,6 +29,9 @@ export function ShopFilters({ categories }: { categories: string[] }) {
       if (!v || v === "All") sp.delete(k);
       else sp.set(k, v);
     }
+    // Switching category or searching leaves the current subcategory behind —
+    // it belongs to the category you just navigated away from.
+    if ("category" in next || "q" in next) sp.delete("sub");
     router.push(`/shop?${sp.toString()}`);
   }
 

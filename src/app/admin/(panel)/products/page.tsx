@@ -14,6 +14,8 @@ export const metadata = { title: "Products" };
 type SP = {
   q?: string;
   category?: string;
+  /** A subcategory id, or "__none" for pieces not in any group. */
+  subcategoryId?: string;
   status?: string;
   stock?: string;
   sort?: string;
@@ -42,6 +44,14 @@ function buildWhere(sp: SP): Prisma.ProductWhereInput {
         { secondaryCategory: sp.category },
       ],
     });
+  }
+
+  if (sp.subcategoryId) {
+    conditions.push(
+      sp.subcategoryId === "__none"
+        ? { subcategoryId: null }
+        : { subcategoryId: sp.subcategoryId }
+    );
   }
 
   if (sp.status) {
@@ -91,13 +101,29 @@ export default async function AdminProducts({
 
   const [products, totalCount, categoriesList] = await Promise.all([
     prisma.product
-      .findMany({ where, orderBy })
+      .findMany({
+        where,
+        orderBy,
+        include: { subcategory: { select: { name: true } } },
+      })
       .catch(() => []),
     prisma.product.count().catch(() => 0),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
 
+  const subcategoriesList = await prisma.subcategory
+    .findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, category: { select: { name: true } } },
+    })
+    .catch(() => []);
+
   const categories = categoriesList.map((c) => c.name);
+  const subcategories = subcategoriesList.map((s) => ({
+    id: s.id,
+    name: s.name,
+    categoryName: s.category.name,
+  }));
 
   return (
     <div>
@@ -128,7 +154,10 @@ export default async function AdminProducts({
       </div>
 
       <div className="mt-6">
-        <ProductFilters categories={categories} />
+        <ProductFilters
+          categories={categories}
+          subcategories={subcategories}
+        />
       </div>
 
       {products.length === 0 ? (
@@ -198,6 +227,11 @@ export default async function AdminProducts({
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {p.category}
+                      {p.subcategory && (
+                        <span className="mt-0.5 block text-xs opacity-70">
+                          ↳ {p.subcategory.name}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">{formatINR(p.price)}</td>
                     <td className="px-4 py-3">

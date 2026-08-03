@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ShoppingBag, Minus, Plus, Check, Zap, Loader2 } from "lucide-react";
+import { ShoppingBag, Minus, Plus, Check, Zap, Loader2, X } from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useProductView } from "@/context/product-view";
 import { Button } from "@/components/ui/button";
@@ -15,7 +15,8 @@ import {
   effectiveVariant,
   minMatchingPrice,
   toSelectedOptions,
-  getDefaultSelection,
+  missingChoices,
+  realOptionGroups,
 } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 
@@ -28,29 +29,34 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   const [added, setAdded] = useState(false);
   const [buying, setBuying] = useState(false);
 
-  // Auto-set the first choice of each option group as default
-  useEffect(() => {
-    if (product.options && product.options.length > 0) {
-      const def = getDefaultSelection(product.options, variants);
-      setSelection(def);
-    }
-  }, [product, variants, setSelection]);
-
-  const hasOptions = product.options.length > 0;
+  // Nothing is pre-selected: the customer browses every photo, then narrows
+  // down. Buying is blocked until every option group has an answer.
+  const groups = useMemo(() => realOptionGroups(product.options), [product]);
+  const hasOptions = groups.length > 0;
   const variant = effectiveVariant(product, selection);
   const minPrice = minMatchingPrice(product, selection);
   const unitPrice = variant ? variant.price : minPrice;
 
+  const missing = missingChoices(product.options, selection);
   const noVariantAvailable =
     variants.length > 0 && !variants.some((v) => v.available);
   const soldOut = product.stock <= 0 || noVariantAvailable;
-  // With variants, a specific one must be pinned down before ordering.
-  const needsChoice = variants.length > 0 && !variant;
+  // Every group answered AND, where a variant matrix exists, that exact
+  // combination has to resolve to an available variant.
+  const unavailableCombo =
+    missing.length === 0 && variants.length > 0 && !variant;
+  const needsChoice = missing.length > 0 || unavailableCombo;
   const canOrder = !soldOut && !needsChoice;
 
   function toggle(groupName: string, value: string) {
-    // Already selected — do nothing (no deselection allowed).
-    if (selection[groupName] === value) return;
+    // Clicking the chosen answer again clears it, so a customer can back out
+    // of a pick without reloading the page.
+    if (selection[groupName] === value) {
+      const next = { ...selection };
+      delete next[groupName];
+      setSelection(pruneSelection(variants, product.options, next));
+      return;
+    }
     if (!isChoiceEnabled(variants, product.options, groupName, value, selection))
       return;
     // Set the choice, then drop any now-incompatible later options.
@@ -60,6 +66,12 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
         [groupName]: value,
       })
     );
+  }
+
+  /** "Size" · "Design and Size" · "Design, Size and Vatki" */
+  function listNames(names: string[]) {
+    if (names.length <= 1) return names[0] ?? "";
+    return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   }
 
   function buildItem() {
@@ -94,14 +106,30 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
 
   return (
     <div className="space-y-6">
-      {/* Options — checkbox-style boxes */}
-      {product.options.map((group) => (
+      {/* Options — checkbox-style boxes; every group must be answered */}
+      {groups.map((group) => (
         <div key={group.name}>
-          <p className="mb-2 text-sm font-medium">
-            {group.name}
-            <span className="ml-2 font-normal text-muted-foreground">
-              {selection[group.name] ?? "Any"}
+          <p className="mb-2 flex flex-wrap items-center gap-x-2 text-sm font-medium">
+            <span>
+              {group.name}
+              <span className="text-danger"> *</span>
             </span>
+            {selection[group.name] ? (
+              <>
+                <span className="font-normal text-muted-foreground">
+                  {selection[group.name]}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggle(group.name, selection[group.name])}
+                  className="inline-flex cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-3 w-3" /> clear
+                </button>
+              </>
+            ) : (
+              <span className="font-normal text-danger">Please select</span>
+            )}
           </p>
           <div className="flex flex-wrap gap-2">
             {group.choices.map((choice) => {
@@ -130,7 +158,11 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                         : "cursor-not-allowed border-dashed border-border text-muted-foreground/50"
                   }`}
                   title={
-                    !enabled ? "Not available in this combination" : undefined
+                    !enabled
+                      ? "Not available in this combination"
+                      : isActive
+                        ? "Click again to unselect"
+                        : undefined
                   }
                 >
                   <span
@@ -180,9 +212,14 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
         </Button>
       ) : (
         <div className="space-y-3">
-          {needsChoice && (
-            <p className="text-sm text-muted-foreground">
-              Please choose an option to continue.
+          {missing.length > 0 && (
+            <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
+              Select {listNames(missing)} to continue.
+            </p>
+          )}
+          {unavailableCombo && (
+            <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
+              That combination isn&apos;t available — try a different one.
             </p>
           )}
           <div className="flex flex-wrap items-center gap-3">
@@ -237,7 +274,9 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
               ) : (
                 <Zap className="h-4 w-4" />
               )}
-              Buy now · {formatINR(unitPrice * qty)}
+              {/* No price until the selection is real — a "from" price on a
+                  Buy button reads as the price you are about to pay. */}
+              Buy now{needsChoice ? "" : ` · ${formatINR(unitPrice * qty)}`}
             </Button>
             <WhatsAppProductButton
               product={product}

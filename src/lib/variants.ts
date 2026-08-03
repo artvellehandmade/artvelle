@@ -28,30 +28,26 @@ export function toSelectedOptions(sel: Selection): SelectedOption[] {
   return Object.entries(sel).map(([name, value]) => ({ name, value }));
 }
 
+/** The option groups a product actually offers (named, with choices). */
+export function realOptionGroups(options: ProductOption[]): ProductOption[] {
+  return (options ?? []).filter((g) => g.name && g.choices?.length > 0);
+}
+
 /**
- * Return default selection for a product: pre-selects the first choice of each option group.
+ * Which option groups the customer still has to pick.
+ *
+ * Nothing is pre-selected anywhere, and an order is only allowed once every
+ * group has an answer — a half-chosen thali is not a thing that can be made.
+ * Shared by the product page (to disable the buttons) and by placeOrder (to
+ * reject a cart that got past the page some other way).
  */
-export function getDefaultSelection(
+export function missingChoices(
   options: ProductOption[],
-  variants?: Variant[]
-): Selection {
-  const selection: Selection = {};
-  if (!options || !options.length) return selection;
-
-  for (const group of options) {
-    if (!group.name || !group.choices || !group.choices.length) continue;
-    const norm = variants ?? [];
-    const firstChoice = group.choices.find((c) =>
-      norm.length
-        ? isChoiceEnabled(norm, options, group.name, c.label, selection)
-        : true
-    ) ?? group.choices[0];
-
-    if (firstChoice) {
-      selection[group.name] = firstChoice.label;
-    }
-  }
-  return selection;
+  selected: Selection
+): string[] {
+  return realOptionGroups(options)
+    .filter((g) => !selected[g.name])
+    .map((g) => g.name);
 }
 
 /**

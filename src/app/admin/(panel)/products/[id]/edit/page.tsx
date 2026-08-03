@@ -14,13 +14,26 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [product, categoriesList] = await Promise.all([
+  const [product, categoriesList, subcategories] = await Promise.all([
     prisma.product.findUnique({ where: { id } }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
+    prisma.subcategory.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        category: { select: { name: true } },
+      },
+    }),
   ]);
   if (!product) notFound();
 
   const categories = categoriesList.map((c) => c.name);
+  const subs = subcategories.map((s) => ({
+    id: s.id,
+    name: s.name,
+    categoryName: s.category.name,
+  }));
 
   const dto = {
     ...product,
@@ -44,7 +57,7 @@ export default async function EditProductPage({
         <ChevronLeft className="h-4 w-4" /> Back to products
       </Link>
       <h1 className="mb-6 font-serif text-3xl">Edit product</h1>
-      <ProductForm product={dto} categories={categories} />
+      <ProductForm product={dto} categories={categories} subcategories={subs} />
     </div>
   );
 }

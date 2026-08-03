@@ -19,6 +19,10 @@ model Product {
   description       String
   category          String // primary category
   secondaryCategory String? // optional — lets a piece appear under a second category
+  // Optional group inside the primary category ("Resin Pooja Thali").
+  // Null = the piece is a one-off and sits directly on the category page.
+  subcategoryId     String?
+  subcategory       Subcategory? @relation(fields: [subcategoryId], references: [id], onDelete: SetNull)
   tags              String[] @default([])
   // Per-product options/variants the customer chooses (Size, Type, Shape…).
   // Shape: [{ name, choices: [{ label, priceDelta, image? }] }]
@@ -55,6 +59,7 @@ model Product {
 
   @@index([category])
   @@index([secondaryCategory])
+  @@index([subcategoryId])
   @@index([isActive])
 }
 
@@ -193,12 +198,47 @@ model AdminUser {
 
 // -------- Categories --------
 model Category {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  slug      String   @unique
-  imageUrl  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id            String        @id @default(cuid())
+  name          String        @unique
+  slug          String        @unique
+  imageUrl      String?
+  sortOrder     Int           @default(0)
+  subcategories Subcategory[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+// -------- Subcategories (a "group" shown in place of its products) --------
+// A subcategory is the middle shelf: "Pooja Essentials" (category) →
+// "Resin Pooja Thali" (subcategory) → the individual thalis (products).
+// On the storefront it is displayed like a product card — name, photo,
+// price range — but clicking it opens the list of real products inside.
+// A subcategory holding a single product collapses to that product instead,
+// so one-off pieces never make the customer click twice.
+model Subcategory {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  // 1–2 cover photos. Left empty, the storefront borrows photos from the
+  // products inside — so the same file is never uploaded twice.
+  images     String[] @default([])
+  // Optional manual price range. Left null, it is computed live from the
+  // products inside (min–max), so it can never drift out of date.
+  priceMin   Int?
+  priceMax   Int?
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  products   Product[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // Slugs only need to be unique inside their own category, so two categories
+  // can both have a "Photo Frame" group.
+  @@unique([categoryId, slug])
+  @@index([categoryId])
+  @@index([isActive])
 }
 
 // -------- Customer Reviews --------
