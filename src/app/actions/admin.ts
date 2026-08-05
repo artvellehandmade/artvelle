@@ -9,8 +9,11 @@ import { sendOrderStatusEmail } from "@/lib/email";
 import { isLeadStatus } from "@/lib/leads";
 import { slugify } from "@/lib/utils";
 import {
+  chooseCourierForOrder,
   createDraftForOrder,
   dispatchOrder,
+  getCourierOptionsForOrder,
+  syncAllOpenOrders,
   syncOrderFromNimbus,
 } from "@/lib/fulfilment";
 
@@ -733,7 +736,35 @@ export async function shipOrderViaNimbus(id: string) {
     outcome: "booked" as const,
     awb: result.awb,
     courier: result.courier,
+    courierMismatch: result.courierMismatch ?? null,
   };
+}
+
+/** Couriers that will carry this order, with rates, for the admin to review. */
+export async function getCourierOptionsAction(orderId: string) {
+  await requireAdmin();
+  return getCourierOptionsForOrder(orderId);
+}
+
+/** Remember which courier the admin picked; used when the draft is booked. */
+export async function chooseCourierAction(
+  orderId: string,
+  courierId: string | null,
+  courierName: string | null
+) {
+  await requireAdmin();
+  await chooseCourierForOrder(orderId, courierId, courierName);
+  revalidatePath("/admin/orders");
+  return { ok: true as const };
+}
+
+/** Run the automatic sync now, for every order still in flight. */
+export async function syncAllOrdersAction() {
+  await requireAdmin();
+  const result = await syncAllOpenOrders();
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+  return result;
 }
 
 /**
@@ -747,9 +778,24 @@ export async function syncOrderFromNimbusAction(id: string) {
   if (!result.ok) return { ok: false as const, error: result.error };
 
   if (result.outcome === "not-booked") {
+    revalidatePath("/admin/orders");
     return {
       ok: true as const,
       outcome: "not-booked" as const,
+      orderStatus: result.orderStatus,
+    };
+  }
+
+  // Already booked — this was a tracking refresh. refreshTracking has already
+  // emailed the customer if the order actually moved, so don't send again.
+  if (result.outcome === "tracked") {
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin");
+    return {
+      ok: true as const,
+      outcome: "tracked" as const,
+      awb: result.awb,
+      deliveryStatus: result.deliveryStatus,
       orderStatus: result.orderStatus,
     };
   }

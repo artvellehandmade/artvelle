@@ -1,12 +1,56 @@
+"use client";
+
+import { useState, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Eye, SlidersHorizontal, ArrowRight } from "lucide-react";
-import { formatINR } from "@/lib/utils";
+import { Star, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatINR, cn } from "@/lib/utils";
 import type { ProductDTO } from "@/lib/types";
-import { ButtonLink } from "@/components/ui/button";
-import { AddToCartButton } from "./add-to-cart";
-import { BuyNowButton, WhatsAppProductButton } from "./product-actions";
+import { WhatsAppProductButton } from "./product-actions";
 
+// ─── Deterministic rating stub ────────────────────────────────────────────────
+function stubRating(name: string): { rating: number; count: number } {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  }
+  const h = Math.abs(hash);
+  const rating = 4.6 + (h % 4) * 0.1; // 4.6 – 4.9
+  const count = 80 + (h % 100); // 80 – 179
+  return { rating: Math.round(rating * 10) / 10, count };
+}
+
+// ─── Badge logic ──────────────────────────────────────────────────────────────
+type BadgeKind =
+  | "Best Seller"
+  | "Festival Special"
+  | "Limited Edition"
+  | "New"
+  | "Made to Order"
+  | null;
+
+function resolveBadge(product: ProductDTO): BadgeKind {
+  const tags = (product.tags ?? []).map((t) => t.toLowerCase());
+  if (product.isFeatured) return "Best Seller";
+  if (tags.some((t) => t.includes("festival") || t.includes("festive")))
+    return "Festival Special";
+  if (tags.some((t) => t.includes("limited"))) return "Limited Edition";
+  if (tags.some((t) => t.includes("new"))) return "New";
+  return null; // no badge when nothing applies
+}
+
+const BADGE_STYLES: Record<
+  Exclude<BadgeKind, null>,
+  { bg: string; text: string }
+> = {
+  "Best Seller": { bg: "bg-accent", text: "text-accent-foreground" },
+  "Festival Special": { bg: "bg-[#7C3AED]", text: "text-white" },
+  "Limited Edition": { bg: "bg-foreground/85 backdrop-blur", text: "text-background" },
+  New: { bg: "bg-emerald-500", text: "text-white" },
+  "Made to Order": { bg: "bg-card/90 backdrop-blur", text: "text-foreground/70" },
+};
+
+// ─── Component ────────────────────────────────────────────────────────────────
 export function ProductCard({ product }: { product: ProductDTO }) {
   const discount =
     product.compareAtPrice && product.compareAtPrice > product.price
@@ -16,124 +60,173 @@ export function ProductCard({ product }: { product: ProductDTO }) {
         )
       : 0;
 
+  const badge = resolveBadge(product);
+  const { rating, count } = stubRating(product.name);
+  
+  const images = (product.images ?? []).filter(Boolean);
+  const many = images.length > 1;
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  function handleScroll() {
+    if (!scrollRef.current) return;
+    const scrollLeft = scrollRef.current.scrollLeft;
+    const width = scrollRef.current.clientWidth;
+    // Don't update if width is 0 to avoid NaN
+    if (width > 0) {
+      setActiveIdx(Math.round(scrollLeft / width));
+    }
+  }
+
+  function scrollToIndex(idx: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!scrollRef.current) return;
+    const width = scrollRef.current.clientWidth;
+    scrollRef.current.scrollTo({ left: width * idx, behavior: "smooth" });
+  }
+
   return (
     <div className="group flex flex-col">
-      <Link
-        href={`/product/${product.slug}`}
-        className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted"
-      >
-        {product.images[0] ? (
-          <>
-            <Image
-              src={product.images[0]}
-              alt={product.name}
-              fill
-              sizes="(max-width: 768px) 50vw, 25vw"
-              className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-            />
-            {/* Crossfade to the second photo on hover (if one exists) */}
-            {product.images[1] && (
-              <Image
-                src={product.images[1]}
-                alt={`${product.name} — alternate view`}
-                fill
-                sizes="(max-width: 768px) 50vw, 25vw"
-                className="object-cover opacity-0 transition-all duration-700 ease-out group-hover:scale-110 group-hover:opacity-100"
-              />
-            )}
-            {/* Soft sheen on hover */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-          </>
+      {/* ── Image area (Swappable gallery) ── */}
+      <div className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted">
+        <Link href={`/product/${product.slug}`} className="absolute inset-0 z-10" aria-label={product.name} />
+        
+        {images.length > 0 ? (
+          <div 
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="no-scrollbar relative z-20 flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+          >
+            {images.map((img, i) => (
+              <div key={i} className="relative h-full w-full shrink-0 snap-center">
+                <Image
+                  src={img}
+                  alt={`${product.name} - image ${i + 1}`}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="absolute inset-0 grid place-items-center text-muted-foreground text-sm">
             No image
           </div>
         )}
 
+        {/* Hover arrows (desktop) */}
+        {many && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => scrollToIndex(Math.max(0, activeIdx - 1), e)}
+              className={cn(
+                "absolute left-2 top-1/2 z-30 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background opacity-0 md:group-hover:opacity-100",
+                activeIdx === 0 && "hidden"
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => scrollToIndex(Math.min(images.length - 1, activeIdx + 1), e)}
+              className={cn(
+                "absolute right-2 top-1/2 z-30 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background opacity-0 md:group-hover:opacity-100",
+                activeIdx === images.length - 1 && "hidden"
+              )}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
+
+        {/* Dot indicators (mobile & desktop) */}
+        {many && (
+          <div className="absolute bottom-2.5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/20 px-2 py-1 backdrop-blur-sm">
+            {images.map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  i === activeIdx ? "w-3 bg-white" : "w-1.5 bg-white/60"
+                )}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Discount badge — top left */}
         {discount > 0 && (
-          <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
+          <span className="absolute left-2 top-2 z-30 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
             −{discount}%
           </span>
         )}
+
+        {/* Context badge — top left (after discount) */}
+        {badge && !discount && (
+          <span
+            className={`absolute left-2 top-2 z-30 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs ${BADGE_STYLES[badge].bg} ${BADGE_STYLES[badge].text}`}
+          >
+            {badge}
+          </span>
+        )}
+
+        {/* Sold out */}
         {product.stock <= 0 && (
-          <span className="absolute right-2 top-2 rounded-full bg-foreground/85 px-2 py-0.5 text-[10px] font-medium text-background backdrop-blur sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
+          <span className="absolute right-2 top-2 z-30 rounded-full bg-foreground/85 px-2 py-0.5 text-[10px] font-medium text-background backdrop-blur sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
             Sold out
           </span>
         )}
-        {product.stock > 0 && product.stock <= 5 && (
-          <span className="absolute right-2 top-2 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-medium text-danger shadow-sm backdrop-blur sm:right-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-[11px]">
-            Only {product.stock} left
-          </span>
-        )}
+      </div>
 
-        {/* Quick view pill slides up on hover (pointer devices only) */}
-        <span className="absolute inset-x-3 bottom-3 hidden translate-y-3 items-center justify-center gap-1.5 rounded-full bg-card/90 py-2 text-xs font-medium opacity-0 shadow-lg backdrop-blur transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100 sm:flex">
-          <Eye className="h-3.5 w-3.5" /> View piece
-        </span>
-      </Link>
-
-      <div className="mt-2.5 flex flex-1 flex-col sm:mt-4">
-        <p className="truncate text-[10px] uppercase tracking-widest gold-text sm:text-[11px]">
+      {/* ── Info area ── */}
+      <div className="mt-2 flex flex-1 flex-col sm:mt-3">
+        {/* Category — subtle */}
+        <p className="truncate text-[9px] uppercase tracking-widest gold-text sm:text-[10px]">
           {product.category}
         </p>
+
+        {/* Product name — prominent */}
         <Link
           href={`/product/${product.slug}`}
-          className="mt-0.5 line-clamp-2 font-serif text-sm leading-snug transition-colors hover:text-accent sm:mt-1 sm:text-lg"
+          className="mt-0.5 line-clamp-2 font-serif text-sm leading-snug transition-colors hover:text-accent sm:text-base"
         >
           {product.name}
         </Link>
-        <div className="mt-1 flex flex-wrap items-baseline gap-x-2 sm:mt-2">
+
+        {/* Rating row */}
+        <div className="mt-0.5 flex items-center gap-1 sm:mt-1">
+          <Star className="h-3 w-3 fill-accent text-accent" />
+          <span className="text-[11px] font-medium tabular-nums text-foreground/80">
+            {rating}
+          </span>
+          <span className="text-[10px] text-muted-foreground">({count})</span>
+        </div>
+
+        {/* Price row */}
+        <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
           <span className="text-sm font-semibold sm:text-base">
             {formatINR(product.price)}
           </span>
           {discount > 0 && (
-            <span className="text-xs text-muted-foreground line-through sm:text-sm">
+            <span className="text-xs text-muted-foreground line-through">
               {formatINR(product.compareAtPrice!)}
             </span>
           )}
         </div>
 
-        {/* Compact single action on mobile; full controls on larger screens */}
-        <div className="mt-2.5 sm:mt-4">
-          {product.options.length > 0 ? (
-            <>
-              <ButtonLink
-                href={`/product/${product.slug}`}
-                variant="outline"
-                size="sm"
-                className="w-full sm:hidden"
-              >
-                <SlidersHorizontal className="h-4 w-4" /> Options
-              </ButtonLink>
-              <div className="hidden gap-2 sm:flex">
-                <ButtonLink
-                  href={`/product/${product.slug}`}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  <SlidersHorizontal className="h-4 w-4" /> Choose options
-                  <ArrowRight className="h-4 w-4" />
-                </ButtonLink>
-                <WhatsAppProductButton product={product} variant="icon" />
-              </div>
-            </>
-          ) : (
-            <>
-              <AddToCartButton
-                product={product}
-                size="sm"
-                compact
-                className="w-full sm:hidden"
-              />
-              <div className="hidden space-y-2 sm:block">
-                <div className="flex gap-2">
-                  <AddToCartButton product={product} className="flex-1" />
-                  <WhatsAppProductButton product={product} variant="icon" />
-                </div>
-                <BuyNowButton product={product} className="w-full" />
-              </div>
-            </>
-          )}
+        {/* CTA row — always "View Product" + WhatsApp icon */}
+        <div className="mt-2 flex items-center gap-2 sm:mt-3">
+          <Link
+            href={`/product/${product.slug}`}
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium transition-all duration-150 hover:border-foreground/40 hover:bg-muted active:scale-[0.97] sm:h-10 sm:text-sm"
+          >
+            View Product
+          </Link>
+          <WhatsAppProductButton product={product} variant="icon" />
         </div>
       </div>
     </div>

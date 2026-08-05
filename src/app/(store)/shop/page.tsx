@@ -3,7 +3,12 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { ChevronRight } from "lucide-react";
 import { getProducts, type ShopQuery } from "@/lib/products";
-import { getCategoryTiles, getSubcategoryView } from "@/lib/catalog";
+import {
+  getCategoryTiles,
+  getShopTiles,
+  getSubcategoryView,
+  type CategoryTile,
+} from "@/lib/catalog";
 import { ProductCard } from "@/components/store/product-card";
 import { SubcategoryCard } from "@/components/store/subcategory-card";
 import { Reveal } from "@/components/store/reveal";
@@ -88,14 +93,36 @@ export async function generateMetadata({
   };
 }
 
+// 2-up on phones so each tile is large enough to read; 3-up from sm and
+// 4-up on desktop keeps the shelf density every real store uses.
 const GRID =
-  "mt-8 grid grid-cols-3 gap-x-3 gap-y-7 sm:gap-x-5 sm:gap-y-10 md:mt-10 md:grid-cols-3 lg:grid-cols-4";
+  "mt-8 grid grid-cols-2 gap-x-3 gap-y-7 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-10 md:mt-10 lg:grid-cols-4";
 
 function Empty({ message }: { message: string }) {
   return (
     <div className="mt-16 rounded-2xl border border-dashed border-border p-12 text-center">
       <p className="font-serif text-xl">No pieces found</p>
       <p className="mt-2 text-sm text-muted-foreground">{message}</p>
+    </div>
+  );
+}
+
+/** One grid for both shapes of listing — groups and products sit side by side. */
+function TileGrid({ tiles }: { tiles: CategoryTile[] }) {
+  return (
+    <div className={GRID}>
+      {tiles.map((tile, i) => (
+        <Reveal
+          key={tile.kind === "product" ? tile.product.id : tile.id}
+          delay={Math.min(i * 0.05, 0.3)}
+        >
+          {tile.kind === "product" ? (
+            <ProductCard product={tile.product} />
+          ) : (
+            <SubcategoryCard tile={tile} />
+          )}
+        </Reveal>
+      ))}
     </div>
   );
 }
@@ -192,20 +219,7 @@ export default async function ShopPage({
         </Suspense>
 
         {tiles.length > 0 ? (
-          <div className={GRID}>
-            {tiles.map((tile, i) => (
-              <Reveal
-                key={tile.kind === "product" ? tile.product.id : tile.id}
-                delay={Math.min(i * 0.05, 0.3)}
-              >
-                {tile.kind === "product" ? (
-                  <ProductCard product={tile.product} />
-                ) : (
-                  <SubcategoryCard tile={tile} category={sp.category!} />
-                )}
-              </Reveal>
-            ))}
-          </div>
+          <TileGrid tiles={tiles} />
         ) : (
           <Empty message="Nothing in this category yet — try another one." />
         )}
@@ -213,8 +227,44 @@ export default async function ShopPage({
     );
   }
 
-  // ---- Level 1: shop all, and every search — a flat list of real pieces ----
-  const products = await getProducts({ category: sp.category, q: sp.q, sort });
+  // ---- A search reaches individual pieces, so it stays a flat product list ----
+  if (sp.q) {
+    const products = await getProducts({ category: sp.category, q: sp.q, sort });
+    return (
+      <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
+        <header className="mb-6 md:mb-8">
+          <p className="text-xs uppercase tracking-widest text-muted-foreground">
+            Search
+          </p>
+          <h1 className="mt-1 font-serif text-3xl md:text-4xl">
+            “{sp.q}”
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {products.length} piece{products.length === 1 ? "" : "s"} found
+          </p>
+        </header>
+
+        <Suspense fallback={<div className="h-24" />}>
+          <ShopFilters categories={categories} />
+        </Suspense>
+
+        {products.length > 0 ? (
+          <div className={GRID}>
+            {products.map((p, i) => (
+              <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
+                <ProductCard product={p} />
+              </Reveal>
+            ))}
+          </div>
+        ) : (
+          <Empty message="Try a different category or search term." />
+        )}
+      </div>
+    );
+  }
+
+  // ---- Level 1: shop all — folded the same way as a category page ----
+  const tiles = await getShopTiles(sort);
 
   return (
     <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
@@ -222,25 +272,17 @@ export default async function ShopPage({
         <p className="text-xs uppercase tracking-widest text-muted-foreground">
           The collection
         </p>
-        <h1 className="mt-1 font-serif text-3xl md:text-4xl">
-          {inCategory ? sp.category : "Shop all"}
-        </h1>
+        <h1 className="mt-1 font-serif text-3xl md:text-4xl">Shop all</h1>
       </header>
 
       <Suspense fallback={<div className="h-24" />}>
         <ShopFilters categories={categories} />
       </Suspense>
 
-      {products.length > 0 ? (
-        <div className={GRID}>
-          {products.map((p, i) => (
-            <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
-              <ProductCard product={p} />
-            </Reveal>
-          ))}
-        </div>
+      {tiles.length > 0 ? (
+        <TileGrid tiles={tiles} />
       ) : (
-        <Empty message="Try a different category or search term." />
+        <Empty message="Nothing here yet — please check back soon." />
       )}
     </div>
   );

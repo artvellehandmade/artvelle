@@ -12,15 +12,21 @@ type Photo = {
   file: string;
   category: string;
   group: string;
+  source: "repo" | "blob" | "external";
 };
 type PhotoUse = { kind: string; id: string; name: string };
 type Library = { photos: Photo[]; usage: Record<string, PhotoUse[]> };
 
+// Repo folders sort alphabetically; the two synthetic buckets go last so the
+// real gallery structure stays at the front of the filter strip.
+const LAST = ["Uploaded", "Pasted links"];
+
 /**
- * Picks photos that already live in the repo under public/products/gallery.
+ * Picks any photo the store already has: the gallery committed to the repo,
+ * anything uploaded to Vercel Blob, and any image URL pasted in by hand.
  *
- * Nothing here uploads or deletes: choosing a photo just records its path, and
- * removing it only drops the path. The file stays in the repo, so the same
+ * Nothing here uploads or deletes: choosing a photo just records its URL, and
+ * removing it only drops the URL. The file stays where it is, so the same
  * photo can be attached to another product later, or added back to this one.
  */
 export function PhotoPicker({
@@ -66,9 +72,20 @@ export function PhotoPicker({
   }, [open, library, preferCategory]);
 
   const folders = useMemo(() => {
-    const names = new Set<string>();
-    for (const p of library?.photos ?? []) if (p.category) names.add(p.category);
-    return ["All", ...[...names].sort()];
+    const counts = new Map<string, number>();
+    for (const p of library?.photos ?? []) {
+      if (p.category) counts.set(p.category, (counts.get(p.category) ?? 0) + 1);
+    }
+    const names = [...counts.keys()].sort((a, b) => {
+      const ai = LAST.indexOf(a);
+      const bi = LAST.indexOf(b);
+      if (ai !== bi) return (ai === -1 ? -1 : ai) - (bi === -1 ? -1 : bi);
+      return a.localeCompare(b);
+    });
+    return [
+      { name: "All", count: library?.photos.length ?? 0 },
+      ...names.map((name) => ({ name, count: counts.get(name) ?? 0 })),
+    ];
   }, [library]);
 
   const visible = useMemo(() => {
@@ -130,7 +147,9 @@ export function PhotoPicker({
               <div className="min-w-0">
                 <h3 className="font-serif text-lg">Photo library</h3>
                 <p className="truncate text-xs text-muted-foreground">
-                  {library ? `${library.photos.length} photos in the repo` : "Loading…"}
+                  {library
+                    ? `${library.photos.length} photos — repo gallery, uploads and pasted links`
+                    : "Loading…"}
                   {max !== undefined && ` · pick up to ${max}`}
                 </p>
               </div>
@@ -157,17 +176,18 @@ export function PhotoPicker({
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {folders.map((f) => (
                   <button
-                    key={f}
+                    key={f.name}
                     type="button"
-                    onClick={() => setFolder(f)}
+                    onClick={() => setFolder(f.name)}
                     className={cn(
                       "shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs transition-colors",
-                      folder === f
+                      folder === f.name
                         ? "border-transparent bg-foreground text-background"
                         : "border-border text-muted-foreground hover:bg-muted"
                     )}
                   >
-                    {f}
+                    {f.name}
+                    <span className="ml-1.5 opacity-60">{f.count}</span>
                   </button>
                 ))}
               </div>

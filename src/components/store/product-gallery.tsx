@@ -1,13 +1,48 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProductView } from "@/context/product-view";
-import { unionImages, selectionForImage } from "@/lib/variants";
+import { selectionForImage, resolveVariant } from "@/lib/variants";
 import type { ProductDTO, Variant } from "@/lib/types";
+
+// ─── Gallery helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Build the ordered image list for the current selection.
+ *
+ * Rule (per the spec):
+ *   gallery = product.images (common, always shown)
+ *           + selectedVariant.images (variant-specific, appended after common)
+ *   — de-duplicated, order preserved.
+ *
+ * When no variant is selected (or when the product has no variants), only the
+ * common images are shown.
+ */
+function buildGallery(
+  product: ProductDTO,
+  variants: Variant[],
+  selection: Record<string, string>
+): string[] {
+  const common = (product.images ?? []).filter(Boolean);
+
+  // Resolve the currently pinned variant (needs every option group answered).
+  const pinned = variants.length ? resolveVariant(variants, selection) : null;
+  const variantImgs = (pinned?.images ?? []).filter(Boolean);
+
+  // Merge: common first, then any variant-specific images not already listed.
+  const merged: string[] = [...common];
+  for (const img of variantImgs) {
+    if (!merged.includes(img)) merged.push(img);
+  }
+
+  return merged.length ? merged : [""];
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function ProductGallery({
   product,
@@ -20,30 +55,42 @@ export function ProductGallery({
 }) {
   const { selection, setSelection } = useProductView();
 
-  const list = unionImages(product, selection, product.images).filter(Boolean);
-  const safe = list.length ? list : [""];
+  const safe = buildGallery(product, variants, selection);
 
-  const [activeUrl, setActiveUrl] = useState<string>(safe[0]);
-  const [zoomed, setZoomed] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [zoomed, setZoomed]       = useState(false);
 
-  // Horizontal thumbnail strip: one shared rail for mobile + desktop.
-  const stripRef = useRef<HTMLDivElement | null>(null);
-  const thumbRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const [canLeft, setCanLeft] = useState(false);
-  const [canRight, setCanRight] = useState(false);
+  // Thumbnail strip scroll state.
+  const stripRef                      = useRef<HTMLDivElement | null>(null);
+  const thumbRefs                     = useRef<(HTMLButtonElement | null)[]>([]);
+  const [canLeft, setCanLeft]         = useState(false);
+  const [canRight, setCanRight]       = useState(false);
 
-  if (safe.length && !safe.includes(activeUrl)) {
-    setActiveUrl(safe[0]);
-  }
-  const current = Math.max(0, safe.indexOf(activeUrl));
-  const many = safe.length > 1;
+  // Clamp active index whenever the image list changes (e.g. after a variant
+  // pick adds / removes photos).
+  useEffect(() => {
+    setActiveIdx((i) => Math.min(i, Math.max(0, safe.length - 1)));
+  }, [safe.length]);
 
-  // Track which strip arrows apply (i.e. the rail is wider than its viewport).
+  // Bidirectional sync: when selection changes (via ProductPurchase pills),
+  // if the selected variant has its own image, jump to it.
+  useEffect(() => {
+    const pinned = variants.length ? resolveVariant(variants, selection) : null;
+    const variantFirstImg = pinned?.images?.[0];
+    if (variantFirstImg) {
+      const idx = safe.indexOf(variantFirstImg);
+      if (idx !== -1 && idx !== activeIdx) {
+        setActiveIdx(idx);
+        revealThumb(idx);
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selection, safe]);
+
+  // Strip scroll-arrow visibility.
   useEffect(() => {
     const el = stripRef.current;
     if (!el) return;
-    // Ignore a trivially small overflow: 8 thumbs overrun a 563px rail by ~5px,
-    // and an arrow that scrolls 5px is worse than no arrow at all.
     const EDGE = 10;
     const sync = () => {
       setCanLeft(el.scrollLeft > EDGE);
@@ -51,10 +98,6 @@ export function ProductGallery({
     };
     sync();
     el.addEventListener("scroll", sync, { passive: true });
-    // Observe the children too, not just the rail: the rail's own box never
-    // changes as layout settles, so container-only observation can miss a
-    // narrow overflow (8 thumbs overflow a 563px rail by just 5px) and leave
-    // the arrows wrongly hidden.
     const ro = new ResizeObserver(sync);
     ro.observe(el);
     for (const child of el.children) ro.observe(child);
@@ -66,10 +109,7 @@ export function ProductGallery({
     };
   }, [safe.length]);
 
-  /**
-   * Centre a thumb inside the strip. Deliberately not scrollIntoView() — that
-   * also scrolls the page vertically, which yanked the photo out of view.
-   */
+  /** Centre a thumbnail inside the horizontal strip. */
   function revealThumb(index: number) {
     const strip = stripRef.current;
     const thumb = thumbRefs.current[index];
@@ -81,52 +121,65 @@ export function ProductGallery({
   }
 
   function nudgeStrip(dir: 1 | -1) {
-    const strip = stripRef.current;
-    if (!strip) return;
-    strip.scrollBy({ left: dir * strip.clientWidth * 0.8, behavior: "smooth" });
+    stripRef.current?.scrollBy({
+      left: dir * (stripRef.current.clientWidth * 0.8),
+      behavior: "smooth",
+    });
   }
 
-  /** Arrows, swipe and the lightbox all land on a photo the same way a thumb does. */
-  function goTo(index: number) {
-    const wrapped = (index + safe.length) % safe.length;
-    pickPhoto(safe[wrapped], wrapped);
-  }
+  /**
+   * Navigate to image at `index`, wrapping around.
+   * Also infers the variant the image belongs to and updates the selection.
+   */
+  const goTo = useCallback(
+    (index: number) => {
+      const wrapped = ((index % safe.length) + safe.length) % safe.length;
+      const img     = safe[wrapped];
 
-  function pickPhoto(img: string, index: number) {
-    setActiveUrl(img);
-    // Picking a photo picks the variant it belongs to. A photo shared by
-    // several variants still pins whatever they have in common (e.g. the
-    // design) and leaves the rest of the choice to the customer.
-    const next = selectionForImage(variants, product.options, img, selection);
-    if (next) setSelection(next);
-    revealThumb(index);
-  }
+      setActiveIdx(wrapped);
+      revealThumb(wrapped);
+
+      // Bidirectional sync: infer the variant this image implies.
+      if (img) {
+        const next = selectionForImage(variants, product.options, img, selection);
+        if (next) setSelection(next);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [safe, variants, product.options, selection]
+  );
+
+  const many    = safe.length > 1;
+  const current = safe[activeIdx] ?? "";
+
+  // ── Dot / counter indicator ──────────────────────────────────────────────
+  const useDots = safe.length <= 6;
 
   return (
     <>
       <div className="relative">
-        {/* ── MAIN PHOTO — true 1:1 at every width, never cropped ── */}
+        {/* ── Main photo ── */}
         <div className="group relative aspect-square w-full overflow-hidden rounded-2xl bg-muted ring-1 ring-border/70">
           <AnimatePresence initial={false} mode="popLayout">
             <motion.div
-              key={activeUrl || "empty"}
+              key={activeIdx}
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.22, ease: "easeInOut" }}
+              transition={{ duration: 0.25, ease: "easeInOut" }}
               drag={many ? "x" : false}
               dragConstraints={{ left: 0, right: 0 }}
               dragElastic={0.15}
               onDragEnd={(_e, info) => {
-                if (info.offset.x < -60) goTo(current + 1);
-                else if (info.offset.x > 60) goTo(current - 1);
+                if (info.offset.x < -60) goTo(activeIdx + 1);
+                else if (info.offset.x > 60) goTo(activeIdx - 1);
               }}
               className="absolute inset-0 touch-pan-y"
               style={{ cursor: many ? "grab" : "default" }}
             >
-              {safe[current] ? (
+              {current ? (
                 <Image
-                  src={safe[current]}
+                  src={current}
                   alt={name}
                   fill
                   className="pointer-events-none select-none object-contain"
@@ -142,11 +195,12 @@ export function ProductGallery({
             </motion.div>
           </AnimatePresence>
 
+          {/* Prev / Next arrows */}
           {many && (
             <>
               <button
                 type="button"
-                onClick={() => goTo(current - 1)}
+                onClick={() => goTo(activeIdx - 1)}
                 aria-label="Previous photo"
                 className="absolute left-2 top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
               >
@@ -154,22 +208,17 @@ export function ProductGallery({
               </button>
               <button
                 type="button"
-                onClick={() => goTo(current + 1)}
+                onClick={() => goTo(activeIdx + 1)}
                 aria-label="Next photo"
                 className="absolute right-2 top-1/2 z-10 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background md:opacity-0 md:group-hover:opacity-100"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>
-
-              <div className="absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2 rounded-full bg-background/75 px-3 py-0.5 backdrop-blur">
-                <span className="text-[11px] font-medium tabular-nums text-foreground/70">
-                  {current + 1} / {safe.length}
-                </span>
-              </div>
             </>
           )}
 
-          {safe[current] && (
+          {/* Zoom button */}
+          {current && (
             <button
               type="button"
               onClick={() => setZoomed(true)}
@@ -179,20 +228,41 @@ export function ProductGallery({
               <ZoomIn className="h-4 w-4" />
             </button>
           )}
+
+          {/* Dot indicator (≤6 images) or N/M counter */}
+          {many && (
+            <div className="absolute bottom-2.5 left-1/2 z-10 -translate-x-1/2">
+              {useDots ? (
+                <div className="flex items-center gap-1.5">
+                  {safe.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => goTo(i)}
+                      aria-label={`Go to photo ${i + 1}`}
+                      className={cn(
+                        "rounded-full transition-all duration-150",
+                        i === activeIdx
+                          ? "h-2 w-5 bg-accent"
+                          : "h-1.5 w-1.5 bg-white/60 hover:bg-white/90"
+                      )}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-full bg-background/75 px-3 py-0.5 backdrop-blur">
+                  <span className="text-[11px] font-medium tabular-nums text-foreground/70">
+                    {activeIdx + 1} / {safe.length}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════
-            THUMBNAIL STRIP — horizontal scroll, identical on mobile + desktop.
-
-            Mini fixed-size thumbs (shrink-0) so 3 images or 30 lay out the
-            same and the strip never reflows the page. Active state is a ring,
-            not a transform: a scaled child inside a scroll container forces
-            the cross-axis overflow to `auto`, which is what produced the
-            stray scrollbar next to the old vertical rail.
-        ════════════════════════════════════════════════════════════════ */}
+        {/* ── Thumbnail strip ── */}
         {many && (
           <div className="relative mt-3">
-            {/* Desktop-only strip arrows, shown only when there's overflow */}
             {canLeft && (
               <button
                 type="button"
@@ -214,7 +284,7 @@ export function ProductGallery({
               </button>
             )}
 
-            {/* Edge fades hint that more photos exist off-screen */}
+            {/* Edge fades */}
             {canLeft && (
               <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-background to-transparent" />
             )}
@@ -224,26 +294,21 @@ export function ProductGallery({
 
             <div
               ref={stripRef}
-              // No scroll-snap here on purpose: mandatory snapping fights a
-              // small overflow (it springs the last few px back to the nearest
-              // thumb), which made the arrow visible but unable to scroll.
               className="no-scrollbar flex gap-2 overflow-x-auto scroll-smooth py-1"
             >
               {safe.map((img, i) => {
-                const isActive = current === i;
+                const isActive = activeIdx === i;
                 return (
                   <button
                     key={`t-${i}`}
-                    ref={(el) => {
-                      thumbRefs.current[i] = el;
-                    }}
+                    ref={(el) => { thumbRefs.current[i] = el; }}
                     type="button"
-                    onClick={() => pickPhoto(img, i)}
+                    onClick={() => goTo(i)}
                     aria-label={`View photo ${i + 1}`}
                     aria-pressed={isActive}
                     className={cn(
                       "relative aspect-square h-14 w-14 shrink-0 overflow-hidden rounded-xl md:h-16 md:w-16",
-                      "cursor-pointer transition-all duration-200",
+                      "cursor-pointer transition-all duration-150",
                       isActive
                         ? "ring-2 ring-accent ring-offset-1 ring-offset-background"
                         : "opacity-60 ring-1 ring-border/50 hover:opacity-100 hover:ring-border"
@@ -267,10 +332,8 @@ export function ProductGallery({
         )}
       </div>
 
-      {/* ════════════════════════════════════════════════════════════════
-          FULLSCREEN ZOOM LIGHTBOX
-      ════════════════════════════════════════════════════════════════ */}
-      {zoomed && safe[current] && (
+      {/* ── Fullscreen zoom lightbox ── */}
+      {zoomed && current && (
         <div
           className="fixed inset-0 z-[100] flex items-center justify-center bg-black/95 backdrop-blur-sm"
           onClick={() => setZoomed(false)}
@@ -288,25 +351,19 @@ export function ProductGallery({
             <>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  goTo(current - 1);
-                }}
+                onClick={(e) => { e.stopPropagation(); goTo(activeIdx - 1); }}
                 aria-label="Previous photo"
-                className="absolute left-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
+                className="absolute left-3 top-1/2 z-10 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
               >
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronLeft className="h-6 w-6" />
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  goTo(current + 1);
-                }}
+                onClick={(e) => { e.stopPropagation(); goTo(activeIdx + 1); }}
                 aria-label="Next photo"
-                className="absolute right-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
+                className="absolute right-3 top-1/2 z-10 grid h-12 w-12 -translate-y-1/2 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30"
               >
-                <ChevronRight className="h-5 w-5" />
+                <ChevronRight className="h-6 w-6" />
               </button>
             </>
           )}
@@ -316,7 +373,7 @@ export function ProductGallery({
             onClick={(e) => e.stopPropagation()}
           >
             <Image
-              src={safe[current]}
+              src={current}
               alt={name}
               fill
               sizes="90vw"
@@ -325,9 +382,32 @@ export function ProductGallery({
             />
           </div>
 
-          <span className="absolute bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-sm text-white/60">
-            {current + 1}&nbsp;/&nbsp;{safe.length}&nbsp;·&nbsp;Tap outside to close
-          </span>
+          {/* Dot indicator inside fullscreen */}
+          {many && (
+            <div className="absolute bottom-5 left-1/2 -translate-x-1/2">
+              {useDots ? (
+                <div className="flex items-center gap-2">
+                  {safe.map((_, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); goTo(i); }}
+                      className={cn(
+                        "rounded-full transition-all duration-150",
+                        i === activeIdx
+                          ? "h-2 w-5 bg-accent"
+                          : "h-1.5 w-1.5 bg-white/50 hover:bg-white/80"
+                      )}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <span className="whitespace-nowrap text-sm text-white/60">
+                  {activeIdx + 1}&nbsp;/&nbsp;{safe.length}&nbsp;·&nbsp;Tap outside to close
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </>

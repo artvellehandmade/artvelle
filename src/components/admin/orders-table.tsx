@@ -13,6 +13,8 @@ import {
   MessageSquare,
   RefreshCw,
   ExternalLink,
+  Check,
+  MapPin,
 } from "lucide-react";
 import { formatINR, whatsappLink } from "@/lib/utils";
 import { CopyableId } from "@/components/admin/copy-id";
@@ -22,6 +24,8 @@ import {
   updateOrderTracking,
   shipOrderViaNimbus,
   syncOrderFromNimbusAction,
+  getCourierOptionsAction,
+  chooseCourierAction,
   cancelAndRestoreStock,
   confirmOrder,
   addOrderNote,
@@ -81,8 +85,27 @@ export type AdminOrder = {
   trackingNumber: string | null;
   trackingUrl: string | null;
   nimbusShipmentId: string | null;
+  nimbusCourierId: string | null;
+  nimbusCourierName: string | null;
+  deliveryStatus: string | null;
+  deliveryLocation: string | null;
+  deliveryStatusAt: string | null;
+  lastSyncedAt: string | null;
   note: string | null;
   createdAt: string;
+};
+
+type CourierOption = {
+  courierId: string;
+  name: string;
+  type: string | null;
+  tatDays: number | null;
+  chargeableGrams: number | null;
+  total: number;
+  forward: number;
+  rto: number;
+  cod: number;
+  surcharges: number;
 };
 
 const STATUSES = [
@@ -501,6 +524,10 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
         toast.success(
           `Booked — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
         );
+        // NimbusPost decides the carrier; if it overrode the choice, say so.
+        if (res.courierMismatch) {
+          toast.warning(res.courierMismatch, { duration: 10000 });
+        }
       }
       router.refresh();
     });
@@ -518,10 +545,54 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
           `Not booked in NimbusPost yet (status: ${res.orderStatus}).`,
           { duration: 6000 }
         );
+        router.refresh();
+        return;
+      }
+      if (res.outcome === "tracked") {
+        toast.success(
+          res.deliveryStatus
+            ? `Courier says: ${res.deliveryStatus}`
+            : "No new scan from the courier yet."
+        );
+        router.refresh();
         return;
       }
       toast.success(
         `Synced — AWB ${res.awb}${res.courier ? ` (${res.courier})` : ""}`
+      );
+      router.refresh();
+    });
+  }
+
+  // ---- Available couriers (reviewed before the draft is booked) ----
+  const [couriers, setCouriers] = useState<CourierOption[] | null>(null);
+  const [loadingCouriers, startCouriers] = useTransition();
+  const [choosing, startChoose] = useTransition();
+
+  function loadCouriers() {
+    if (couriers) {
+      setCouriers(null); // toggle closed
+      return;
+    }
+    startCouriers(async () => {
+      const res = await getCourierOptionsAction(order.id);
+      if (!res.ok) {
+        toast.error(res.error, { duration: 8000 });
+        return;
+      }
+      setCouriers(res.options);
+    });
+  }
+
+  function chooseCourier(option: CourierOption | null) {
+    startChoose(async () => {
+      await chooseCourierAction(
+        order.id,
+        option?.courierId ?? null,
+        option?.name ?? null
+      );
+      toast.success(
+        option ? `${option.name} selected for this order` : "Courier choice cleared"
       );
       router.refresh();
     });
@@ -562,6 +633,24 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
             )}
           </button>
 
+          <button
+            onClick={loadCouriers}
+            disabled={loadingCouriers || shipping}
+            className="inline-flex items-center gap-2 rounded-full border border-border px-4 py-2 text-xs font-medium disabled:opacity-50 cursor-pointer hover:bg-muted"
+            title="See every courier that will carry this parcel, with rates"
+          >
+            {loadingCouriers ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking…
+              </>
+            ) : (
+              <>
+                <Truck className="h-3.5 w-3.5" />{" "}
+                {couriers ? "Hide couriers" : "Available couriers & rates"}
+              </>
+            )}
+          </button>
+
           {staged && (
             <button
               onClick={syncFromNimbus}
@@ -580,6 +669,145 @@ function TrackingEditor({ order }: { order: AdminOrder }) {
               )}
             </button>
           )}
+        </div>
+      )}
+
+      {order.nimbusCourierName && !order.trackingNumber && (
+        <p className="mt-2 text-xs">
+          <span className="rounded-full bg-accent/15 px-2.5 py-1 text-accent">
+            Will book with {order.nimbusCourierName}
+          </span>{" "}
+          <button
+            onClick={() => chooseCourier(null)}
+            disabled={choosing}
+            className="cursor-pointer text-muted-foreground underline disabled:opacity-50"
+          >
+            clear
+          </button>
+        </p>
+      )}
+
+      {couriers && !order.trackingNumber && (
+        <div className="mt-3 overflow-hidden rounded-xl border border-border">
+          <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
+            <p className="text-xs font-medium">
+              {couriers.length} couriers serve this pincode
+            </p>
+            <p className="text-[11px] text-muted-foreground">
+              Rates are what your NimbusPost wallet gets charged
+            </p>
+          </div>
+          <div className="max-h-72 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border text-left text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Courier</th>
+                  <th className="px-3 py-2 font-medium">ETA</th>
+                  <th className="px-3 py-2 font-medium">Forward</th>
+                  <th className="px-3 py-2 font-medium">RTO</th>
+                  <th className="px-3 py-2 font-medium">COD</th>
+                  <th className="px-3 py-2 font-medium">Total</th>
+                  <th className="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {couriers.map((c, i) => {
+                  const picked = order.nimbusCourierId === c.courierId;
+                  return (
+                    <tr key={c.courierId} className={picked ? "bg-accent/5" : ""}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium">{c.name}</span>
+                        {i === 0 && (
+                          <span className="ml-1.5 rounded-full bg-success/15 px-1.5 py-0.5 text-[10px] text-success">
+                            cheapest
+                          </span>
+                        )}
+                        {c.type && (
+                          <span className="block text-[11px] text-muted-foreground">
+                            {c.type}
+                            {c.chargeableGrams
+                              ? ` · charged for ${c.chargeableGrams} g`
+                              : ""}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {c.tatDays ? `${c.tatDays} d` : "—"}
+                      </td>
+                      <td className="px-3 py-2">{formatINR(c.forward)}</td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {c.rto ? formatINR(c.rto) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">
+                        {c.cod ? formatINR(c.cod) : "—"}
+                      </td>
+                      <td className="px-3 py-2 font-semibold">
+                        {formatINR(c.total)}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          onClick={() => chooseCourier(picked ? null : c)}
+                          disabled={choosing}
+                          className={`cursor-pointer rounded-full border px-2.5 py-1 text-[11px] disabled:opacity-50 ${
+                            picked
+                              ? "border-accent bg-accent text-accent-foreground"
+                              : "border-border hover:bg-muted"
+                          }`}
+                        >
+                          {picked ? (
+                            <>
+                              <Check className="mr-1 inline h-3 w-3" />
+                              Chosen
+                            </>
+                          ) : (
+                            "Choose"
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {order.trackingNumber && (
+        <div className="mt-3 rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-xs">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="font-medium">
+              {order.deliveryStatus ?? "Awaiting first scan"}
+            </span>
+            {order.deliveryLocation && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                <MapPin className="h-3 w-3" /> {order.deliveryLocation}
+              </span>
+            )}
+            {order.deliveryStatusAt && (
+              <span className="text-muted-foreground">
+                {new Date(order.deliveryStatusAt).toLocaleString("en-IN")}
+              </span>
+            )}
+            <button
+              onClick={syncFromNimbus}
+              disabled={syncing}
+              className="ml-auto inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-[11px] hover:bg-muted disabled:opacity-50"
+            >
+              {syncing ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
+              Refresh now
+            </button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Updates automatically every 2 hours and whenever NimbusPost sends a
+            status webhook.
+            {order.lastSyncedAt &&
+              ` Last checked ${new Date(order.lastSyncedAt).toLocaleString("en-IN")}.`}
+          </p>
         </div>
       )}
       <div className="mt-3 grid gap-3 sm:grid-cols-3">

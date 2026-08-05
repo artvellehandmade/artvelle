@@ -313,7 +313,8 @@ select.input {
   left: 130%;
 }
 
-/* Card hover lift */
+/* Card hover lift — plus a press-in on tap so touch users get feedback
+   too (mobile has no :hover, so without this the cards feel dead). */
 .card-lift {
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
@@ -321,6 +322,13 @@ select.input {
 .card-lift:hover {
   transform: translateY(-6px);
   box-shadow: 0 24px 48px -20px color-mix(in srgb, var(--foreground) 22%, transparent);
+}
+.card-lift:active {
+  transform: scale(0.98);
+  transition-duration: 0.15s;
+}
+@media (hover: none) {
+  .card-lift:hover { transform: none; box-shadow: none; }
 }
 
 /* Elegant underline grow for nav links */

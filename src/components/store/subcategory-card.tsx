@@ -1,93 +1,163 @@
+"use client";
+
+import { useState, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Layers } from "lucide-react";
-import { formatINR } from "@/lib/utils";
+import { Star, Layers, ChevronLeft, ChevronRight } from "lucide-react";
+import { formatINR, cn } from "@/lib/utils";
 import type { SubcategoryTile } from "@/lib/catalog";
 
 /**
- * A group shown in place of the products inside it — the shopper sees one
- * "Resin Pooja Thali" tile rather than twenty near-identical thalis, and
- * clicking through lists the real pieces.
- *
- * Deliberately mirrors ProductCard's shape so a category page can mix the two
- * in one grid without the layout shifting.
+ * A group tile shown in place of the individual products it contains.
+ * Matches ProductCard's layout exactly: same CTA ("View Product"), same
+ * rating stub position, same swappable image area — so the two can sit in the same
+ * grid without visual inconsistency.
  */
-export function SubcategoryCard({
-  tile,
-  category,
-}: {
-  tile: SubcategoryTile;
-  category: string;
-}) {
+export function SubcategoryCard({ tile }: { tile: SubcategoryTile }) {
+  const category = tile.categoryName;
   const href = `/shop?category=${encodeURIComponent(category)}&sub=${tile.slug}`;
   const range =
     tile.priceMin === tile.priceMax
       ? formatINR(tile.priceMin)
       : `${formatINR(tile.priceMin)} – ${formatINR(tile.priceMax)}`;
 
+  const images = (tile.images ?? []).filter(Boolean);
+  const many = images.length > 1;
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activeIdx, setActiveIdx] = useState(0);
+
+  function handleScroll() {
+    if (!scrollRef.current) return;
+    const scrollLeft = scrollRef.current.scrollLeft;
+    const width = scrollRef.current.clientWidth;
+    // Don't update if width is 0 to avoid NaN
+    if (width > 0) {
+      setActiveIdx(Math.round(scrollLeft / width));
+    }
+  }
+
+  function scrollToIndex(idx: number, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!scrollRef.current) return;
+    const width = scrollRef.current.clientWidth;
+    scrollRef.current.scrollTo({ left: width * idx, behavior: "smooth" });
+  }
+
   return (
     <div className="group flex flex-col">
-      <Link
-        href={href}
-        className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted"
-      >
-        {tile.images[0] ? (
-          <>
-            <Image
-              src={tile.images[0]}
-              alt={tile.name}
-              fill
-              sizes="(max-width: 768px) 50vw, 25vw"
-              className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
-            />
-            {tile.images[1] && (
-              <Image
-                src={tile.images[1]}
-                alt={`${tile.name} — alternate view`}
-                fill
-                sizes="(max-width: 768px) 50vw, 25vw"
-                className="object-cover opacity-0 transition-all duration-700 ease-out group-hover:scale-110 group-hover:opacity-100"
-              />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/25 via-transparent to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-          </>
+      {/* ── Image area (Swappable gallery) ── */}
+      <div className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted">
+        <Link href={href} className="absolute inset-0 z-10" aria-label={tile.name} />
+        
+        {images.length > 0 ? (
+          <div 
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="no-scrollbar relative z-20 flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
+          >
+            {images.map((img, i) => (
+              <div key={i} className="relative h-full w-full shrink-0 snap-center">
+                <Image
+                  src={img}
+                  alt={`${tile.name} - image ${i + 1}`}
+                  fill
+                  sizes="(max-width: 768px) 50vw, 25vw"
+                  className="object-cover"
+                />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground">
             No image
           </div>
         )}
 
-        <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-[11px]">
+        {/* Hover arrows (desktop) */}
+        {many && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => scrollToIndex(Math.max(0, activeIdx - 1), e)}
+              className={cn(
+                "absolute left-2 top-1/2 z-30 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background opacity-0 md:group-hover:opacity-100",
+                activeIdx === 0 && "hidden"
+              )}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => scrollToIndex(Math.min(images.length - 1, activeIdx + 1), e)}
+              className={cn(
+                "absolute right-2 top-1/2 z-30 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full bg-background/80 text-foreground shadow-md backdrop-blur transition-all hover:scale-110 hover:bg-background opacity-0 md:group-hover:opacity-100",
+                activeIdx === images.length - 1 && "hidden"
+              )}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </>
+        )}
+
+        {/* Dot indicators (mobile & desktop) */}
+        {many && (
+          <div className="absolute bottom-2.5 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/20 px-2 py-1 backdrop-blur-sm">
+            {images.map((_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-1.5 rounded-full transition-all duration-300",
+                  i === activeIdx ? "w-3 bg-white" : "w-1.5 bg-white/60"
+                )}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Design count chip — top left */}
+        <span className="absolute left-2 top-2 z-30 inline-flex items-center gap-1 rounded-full bg-card/90 px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-[11px]">
           <Layers className="h-3 w-3" />
           {tile.productCount} designs
         </span>
+      </div>
 
-        <span className="absolute inset-x-3 bottom-3 hidden translate-y-3 items-center justify-center gap-1.5 rounded-full bg-card/90 py-2 text-xs font-medium opacity-0 shadow-lg backdrop-blur transition-all duration-500 group-hover:translate-y-0 group-hover:opacity-100 sm:flex">
-          View all {tile.productCount} <ArrowRight className="h-3.5 w-3.5" />
-        </span>
-      </Link>
-
-      <div className="mt-2.5 flex flex-1 flex-col sm:mt-4">
-        <p className="truncate text-[10px] uppercase tracking-widest gold-text sm:text-[11px]">
+      {/* ── Info area ── */}
+      <div className="mt-2 flex flex-1 flex-col sm:mt-3">
+        {/* Category */}
+        <p className="truncate text-[9px] uppercase tracking-widest gold-text sm:text-[10px]">
           {category}
         </p>
+
+        {/* Name */}
         <Link
           href={href}
-          className="mt-0.5 line-clamp-2 font-serif text-sm leading-snug transition-colors hover:text-accent sm:mt-1 sm:text-lg"
+          className="mt-0.5 line-clamp-2 font-serif text-sm leading-snug transition-colors hover:text-accent sm:text-base"
         >
           {tile.name}
         </Link>
-        <div className="mt-1 sm:mt-2">
+
+        {/* Rating stub row (parity with ProductCard) */}
+        <div className="mt-0.5 flex items-center gap-1 sm:mt-1">
+          <Star className="h-3 w-3 fill-accent text-accent" />
+          <span className="text-[11px] font-medium text-foreground/80">
+            {tile.productCount} designs
+          </span>
+        </div>
+
+        {/* Price range */}
+        <div className="mt-1">
           <span className="text-sm font-semibold sm:text-base">{range}</span>
         </div>
 
-        <div className="mt-2.5 sm:mt-4">
+        {/* CTA row — same "View Product" as ProductCard */}
+        <div className="mt-2 sm:mt-3">
           <Link
             href={href}
-            className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-full border border-border text-sm font-medium transition-colors hover:bg-muted sm:h-11"
+            className="flex h-9 w-full items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium transition-all duration-150 hover:border-foreground/40 hover:bg-muted active:scale-[0.97] sm:h-10 sm:text-sm"
           >
-            Browse designs
-            <ArrowRight className="h-4 w-4" />
+            View Product
           </Link>
         </div>
       </div>

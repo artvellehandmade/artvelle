@@ -188,6 +188,7 @@ export default async function AdminProducts({
                 <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Category</th>
+                  <th className="px-4 py-3 font-medium">Subcategory</th>
                   <th className="px-4 py-3 font-medium">Price</th>
                   <th className="px-4 py-3 font-medium">Stock</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -227,10 +228,14 @@ export default async function AdminProducts({
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {p.category}
-                      {p.subcategory && (
-                        <span className="mt-0.5 block text-xs opacity-70">
-                          ↳ {p.subcategory.name}
+                    </td>
+                    <td className="px-4 py-3">
+                      {p.subcategory ? (
+                        <span className="rounded-full bg-accent/10 px-2.5 py-1 text-xs text-foreground">
+                          {p.subcategory.name}
                         </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">{formatINR(p.price)}</td>

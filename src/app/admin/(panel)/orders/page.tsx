@@ -141,6 +141,12 @@ export default async function AdminOrders({
     trackingNumber: o.trackingNumber,
     trackingUrl: o.trackingUrl,
     nimbusShipmentId: o.nimbusShipmentId,
+    nimbusCourierId: o.nimbusCourierId,
+    nimbusCourierName: o.nimbusCourierName,
+    deliveryStatus: o.deliveryStatus,
+    deliveryLocation: o.deliveryLocation,
+    deliveryStatusAt: o.deliveryStatusAt?.toISOString() ?? null,
+    lastSyncedAt: o.lastSyncedAt?.toISOString() ?? null,
     note: o.note,
     createdAt: o.createdAt.toISOString(),
   }));

@@ -1,18 +1,23 @@
-// Server-side only: touches the filesystem and the database.
+// Server-side only: touches the filesystem, Vercel Blob and the database.
 import { readdir, stat } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
+import { list } from "@vercel/blob";
 import { prisma } from "./prisma";
 import manifest from "./media-manifest.json";
 
-/** One photo that lives in the repo under public/products/gallery. */
+/** Where a photo came from. All three are pickable and reusable alike. */
+export type PhotoSource = "repo" | "blob" | "external";
+
+/** One photo available to the picker. */
 export type Photo = {
-  /** Site-relative, URL-encoded — exactly the string stored on products. */
+  /** Exactly the string stored on products — repo path or absolute URL. */
   url: string;
   file: string;
-  /** Top folder, e.g. "Pooja Essentials". */
+  /** Top folder for repo photos, e.g. "Pooja Essentials"; a label otherwise. */
   category: string;
   /** Second folder, e.g. "Resin Pooja Thali". Empty when there isn't one. */
   group: string;
+  source: PhotoSource;
   size?: number;
 };
 
@@ -42,6 +47,7 @@ function describe(absPath: string): Photo {
     file: rel[rel.length - 1],
     category: rel.length >= 2 ? rel[0] : "",
     group: rel.length >= 3 ? rel.slice(1, -1).join(" / ") : "",
+    source: "repo",
   };
 }
 
@@ -69,7 +75,7 @@ async function walk(dir: string): Promise<string[]> {
  * generated at build time, which is what production uses because `public/` is
  * not readable from Vercel's serverless filesystem.
  */
-export async function listPhotos(): Promise<Photo[]> {
+export async function listRepoPhotos(): Promise<Photo[]> {
   const files = await walk(galleryDir());
   if (files.length > 0) {
     const photos: Photo[] = [];
@@ -82,7 +88,81 @@ export async function listPhotos(): Promise<Photo[]> {
     }
     return photos;
   }
-  return (manifest.photos ?? []) as Photo[];
+  return ((manifest.photos ?? []) as Photo[]).map((p) => ({
+    ...p,
+    source: "repo" as const,
+  }));
+}
+
+/**
+ * Everything in the Vercel Blob store — i.e. photos uploaded through the admin
+ * "Upload" button. Listed straight from Blob rather than inferred from the
+ * database, so an upload is pickable even before it is attached to anything.
+ */
+export async function listBlobPhotos(): Promise<Photo[]> {
+  if (!process.env.BLOB_READ_WRITE_TOKEN) return [];
+  try {
+    const photos: Photo[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await list({ cursor, limit: 1000 });
+      for (const b of page.blobs) {
+        if (!IMAGE_EXT.test(b.pathname)) continue;
+        photos.push({
+          url: b.url,
+          file: b.pathname.split("/").pop() || b.pathname,
+          category: "Uploaded",
+          group: "",
+          source: "blob",
+          size: b.size,
+        });
+      }
+      cursor = page.hasMore ? page.cursor : undefined;
+    } while (cursor);
+    return photos.sort((a, b) => a.file.localeCompare(b.file));
+  } catch (err) {
+    console.error("[media] blob listing failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Photos already attached to something but belonging to neither source —
+ * image URLs pasted into the admin by hand. Included so the picker really is
+ * every photo the store uses, and so a pasted URL can be reused elsewhere.
+ */
+async function listExternalPhotos(known: Set<string>): Promise<Photo[]> {
+  try {
+    const [products, subcategories, categories] = await Promise.all([
+      prisma.product.findMany({ select: { images: true } }),
+      prisma.subcategory.findMany({ select: { images: true } }),
+      prisma.category.findMany({ select: { imageUrl: true } }),
+    ]);
+    const urls = new Set<string>([
+      ...products.flatMap((p) => p.images),
+      ...subcategories.flatMap((s) => s.images),
+      ...categories.map((c) => c.imageUrl ?? ""),
+    ]);
+    return [...urls]
+      .filter((u) => u && !known.has(u))
+      .map((url) => ({
+        url,
+        file: decodeURIComponent(url.split("/").pop() ?? url).split("?")[0],
+        category: "Pasted links",
+        group: "",
+        source: "external" as const,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+/** Every photo the admin can pick from: repo + Blob uploads + pasted links. */
+export async function listPhotos(): Promise<Photo[]> {
+  const [repo, blob] = await Promise.all([listRepoPhotos(), listBlobPhotos()]);
+  const known = new Set([...repo, ...blob].map((p) => p.url));
+  const external = await listExternalPhotos(known);
+  return [...repo, ...blob, ...external];
 }
 
 /** Build the url → users map so the picker can show "used by 2 products". */

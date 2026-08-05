@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon, Layers, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Edit2, Check, X, Loader2, Image as ImageIcon, Layers, ChevronRight, Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { createCategory, updateCategory, deleteCategory } from "@/app/actions/admin";
@@ -14,12 +14,24 @@ type Category = {
   name: string;
   slug: string;
   imageUrl: string | null;
-  subcategoryCount: number;
+  subcategories: { id: string; name: string }[];
 };
 
 export function CategoryManager({ initialCategories }: { initialCategories: Category[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+
+  // Filter matches a category by its own name OR by any subcategory inside it,
+  // so searching "thali" finds the category that holds it.
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const categories = needle
+    ? initialCategories.filter(
+        (c) =>
+          c.name.toLowerCase().includes(needle) ||
+          c.subcategories.some((s) => s.name.toLowerCase().includes(needle))
+      )
+    : initialCategories;
 
   // Create form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -162,6 +174,32 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
         </form>
       )}
 
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter categories or subcategories…"
+          className="input h-10 pl-9 pr-9"
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery("")}
+            className="absolute right-2 top-1/2 grid h-7 w-7 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-muted-foreground hover:bg-muted"
+            aria-label="Clear filter"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      {needle && (
+        <p className="-mt-3 text-xs text-muted-foreground">
+          {categories.length} of {initialCategories.length} categories match
+          “{query.trim()}”
+        </p>
+      )}
+
       <div className="overflow-hidden rounded-2xl border border-border bg-card">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
@@ -175,14 +213,16 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {initialCategories.length === 0 ? (
+              {categories.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-5 py-8 text-center text-muted-foreground">
-                    No categories found. Add your first category using the button above.
+                    {needle
+                      ? `Nothing matches “${query.trim()}”.`
+                      : "No categories found. Add your first category using the button above."}
                   </td>
                 </tr>
               ) : (
-                initialCategories.map((cat) => {
+                categories.map((cat) => {
                   const isEditing = editingId === cat.id;
 
                   return (
@@ -215,18 +255,26 @@ export function CategoryManager({ initialCategories }: { initialCategories: Cate
                         )}
                       </td>
                       <td className="px-5 py-3">
-                        <Link
-                          href={`/admin/categories/${cat.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                        >
-                          <Layers className="h-3.5 w-3.5" />
-                          {cat.subcategoryCount === 0
-                            ? "Add subcategories"
-                            : `${cat.subcategoryCount} subcategor${
-                                cat.subcategoryCount === 1 ? "y" : "ies"
-                              }`}
-                          <ChevronRight className="h-3.5 w-3.5" />
-                        </Link>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          {cat.subcategories.map((s) => (
+                            <span
+                              key={s.id}
+                              className="rounded-full bg-accent/10 px-2.5 py-1 text-xs"
+                            >
+                              {s.name}
+                            </span>
+                          ))}
+                          <Link
+                            href={`/admin/categories/${cat.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                          >
+                            <Layers className="h-3.5 w-3.5" />
+                            {cat.subcategories.length === 0
+                              ? "Add subcategories"
+                              : "Manage"}
+                            <ChevronRight className="h-3.5 w-3.5" />
+                          </Link>
+                        </div>
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {isEditing ? (

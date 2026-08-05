@@ -17,6 +17,8 @@ export type SubcategoryTile = {
   id: string;
   name: string;
   slug: string;
+  /** Needed to build the link, since Shop-all mixes several categories. */
+  categoryName: string;
   /** Own cover photos, or borrowed from the products inside. */
   images: string[];
   priceMin: number;
@@ -57,21 +59,36 @@ type SubcategoryRow = {
   images: string[];
   priceMin: number | null;
   priceMax: number | null;
+  category: { name: string };
 };
+
+/** The columns every tile builder needs from a subcategory row. */
+const SUBCATEGORY_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  images: true,
+  priceMin: true,
+  priceMax: true,
+  category: { select: { name: true } },
+} as const;
 
 /**
  * Cover photos for a group. Its own pick wins; otherwise the first photo of
- * each of the first two products stands in — so a photo already attached to a
+ * each of the first few products stands in — so a photo already attached to a
  * product never has to be uploaded or re-picked for the group as well.
  */
-function coverImages(sub: SubcategoryRow, products: ProductDTO[]): string[] {
+function coverImages(
+  sub: { images: string[] },
+  products: ProductDTO[]
+): string[] {
   const own = sub.images.filter(Boolean);
-  if (own.length > 0) return own.slice(0, 2);
+  if (own.length > 0) return own.slice(0, 6);
   const borrowed: string[] = [];
   for (const p of products) {
     const first = p.images[0];
     if (first && !borrowed.includes(first)) borrowed.push(first);
-    if (borrowed.length === 2) break;
+    if (borrowed.length === 6) break;
   }
   return borrowed;
 }
@@ -83,6 +100,7 @@ function toTile(sub: SubcategoryRow, products: ProductDTO[]): SubcategoryTile {
     id: sub.id,
     name: sub.name,
     slug: sub.slug,
+    categoryName: sub.category.name,
     images: coverImages(sub, products),
     // A manual override on either end wins; the other end still comes from the
     // live products, so a half-filled override can't produce a broken range.
@@ -93,11 +111,40 @@ function toTile(sub: SubcategoryRow, products: ProductDTO[]): SubcategoryTile {
 }
 
 /**
- * What to render on a category page: a mix of group tiles and plain products.
+ * Fold a flat product list into what a shopper should actually see: one tile
+ * per group, one tile per ungrouped piece.
  *
  * `sort` only reorders the loose products — groups always lead, in their
  * configured order, so the shelf structure stays stable as stock changes.
  */
+function buildTiles(
+  products: ProductDTO[],
+  subs: SubcategoryRow[],
+  sort?: "newest" | "price-asc" | "price-desc" | "featured"
+): CategoryTile[] {
+  const tiles: CategoryTile[] = [];
+  const grouped = new Set<string>();
+
+  for (const sub of subs) {
+    const inside = products.filter((p) => p.subcategoryId === sub.id);
+    if (inside.length === 0) continue; // nothing to sell yet — hide it
+    for (const p of inside) grouped.add(p.id);
+    if (inside.length === 1) {
+      // Exactly one piece: it IS the product, not a group.
+      tiles.push({ kind: "product", product: inside[0] });
+    } else {
+      tiles.push(toTile(sub, inside));
+    }
+  }
+
+  const loose = products.filter((p) => !grouped.has(p.id));
+  sortProducts(loose, sort);
+  for (const p of loose) tiles.push({ kind: "product", product: p });
+
+  return tiles;
+}
+
+/** What to render on a category page: group tiles plus one-off products. */
 export async function getCategoryTiles(
   categoryName: string,
   sort?: "newest" | "price-asc" | "price-desc" | "featured"
@@ -126,42 +173,42 @@ export async function getCategoryTiles(
       ? await prisma.subcategory.findMany({
           where: { categoryId: category.id, isActive: true },
           orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            images: true,
-            priceMin: true,
-            priceMax: true,
-          },
+          select: SUBCATEGORY_SELECT,
         })
       : [];
-
-    const tiles: CategoryTile[] = [];
-    const grouped = new Set<string>();
-
-    for (const sub of subs) {
-      const inside = products.filter((p) => p.subcategoryId === sub.id);
-      if (inside.length === 0) continue; // nothing to sell yet — hide it
-      for (const p of inside) grouped.add(p.id);
-      if (inside.length === 1) {
-        // Exactly one piece: it IS the product, not a group.
-        tiles.push({ kind: "product", product: inside[0] });
-      } else {
-        tiles.push(toTile(sub, inside));
-      }
-    }
 
     // Anything not inside one of THIS category's groups sits on the page
     // directly — including a piece that only appears here as a secondary
     // category while its group lives elsewhere.
-    const loose = products.filter((p) => !grouped.has(p.id));
-    sortProducts(loose, sort);
-    for (const p of loose) tiles.push({ kind: "product", product: p });
-
-    return tiles;
+    return buildTiles(products, subs, sort);
   } catch (err) {
     console.error("[catalog] getCategoryTiles failed:", err);
+    return [];
+  }
+}
+
+/**
+ * Shop-all, folded the same way. Five thalis that belong to one group show up
+ * as the single "Resin Pooja Thali" tile here too — browsing the whole store
+ * should not mean scrolling past twenty near-identical listings.
+ */
+export async function getShopTiles(
+  sort?: "newest" | "price-asc" | "price-desc" | "featured"
+): Promise<CategoryTile[]> {
+  try {
+    const [products, subs] = await Promise.all([
+      prisma.product
+        .findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } })
+        .then((rows) => rows.map(toDTO)),
+      prisma.subcategory.findMany({
+        where: { isActive: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        select: SUBCATEGORY_SELECT,
+      }),
+    ]);
+    return buildTiles(products, subs, sort);
+  } catch (err) {
+    console.error("[catalog] getShopTiles failed:", err);
     return [];
   }
 }
@@ -201,15 +248,7 @@ export async function getSubcategoryView(
   try {
     const sub = await prisma.subcategory.findFirst({
       where: { slug: subSlug, isActive: true, category: { name: categoryName } },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        images: true,
-        priceMin: true,
-        priceMax: true,
-        category: { select: { name: true } },
-      },
+      select: SUBCATEGORY_SELECT,
     });
     if (!sub) return null;
 

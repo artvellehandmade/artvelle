@@ -93,7 +93,13 @@ model Order {
   trackingNumber  String? // AWB / tracking number
   trackingUrl     String? // optional courier tracking link
   nimbusShipmentId String? // NimbusPost shipment/order id, set when shipped via NimbusPost
-  deliveryStatus  String? // latest raw courier status from NimbusPost webhook (e.g. "In Transit")
+  // Courier the admin picked while reviewing rates, before the draft is booked.
+  nimbusCourierId   String?
+  nimbusCourierName String?
+  deliveryStatus  String? // latest raw courier status from NimbusPost (e.g. "In Transit")
+  deliveryLocation String? // where the parcel was last scanned
+  deliveryStatusAt DateTime? // when that status was reported by the courier
+  lastSyncedAt     DateTime? // last time the auto-sync polled NimbusPost
   statusHistory  Json     @default("[]") // [{ status, note, at }] appended on each admin update
   note          String?
   couponCode    String?

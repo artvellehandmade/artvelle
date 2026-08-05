@@ -2,7 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ShoppingBag, Minus, Plus, Check, Zap, Loader2, X } from "lucide-react";
+import {
+  ShoppingBag,
+  Minus,
+  Plus,
+  Check,
+  Zap,
+  Loader2,
+  HandHeart,
+  Truck,
+  ShieldCheck,
+  IndianRupee,
+} from "lucide-react";
 import { useCart } from "@/context/cart";
 import { useProductView } from "@/context/product-view";
 import { Button } from "@/components/ui/button";
@@ -20,37 +31,72 @@ import {
 } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 
+// ─── Trust badges row (lives inside the purchase section, near CTAs) ────────
+function TrustRow() {
+  const items = [
+    { icon: <HandHeart  className="h-4 w-4" />, label: "Handmade to Order" },
+    { icon: <Truck      className="h-4 w-4" />, label: "Ships Across India" },
+    { icon: <ShieldCheck className="h-4 w-4" />, label: "Secure Packaging" },
+    { icon: <IndianRupee className="h-4 w-4" />, label: "Cash on Delivery" },
+  ];
+  return (
+    <div className="grid grid-cols-4 gap-2 rounded-2xl border border-border p-4">
+      {items.map(({ icon, label }) => (
+        <div key={label} className="flex flex-col items-center gap-1.5 text-center">
+          <span className="gold-text">{icon}</span>
+          <span className="text-[10px] leading-tight text-muted-foreground sm:text-xs">
+            {label}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Diagonal line SVG for unavailable pills ─────────────────────────────────
+function StrikeThrough() {
+  return (
+    <svg
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      aria-hidden
+    >
+      <line
+        x1="0"
+        y1="100%"
+        x2="100%"
+        y2="0"
+        stroke="currentColor"
+        strokeWidth="1"
+        strokeOpacity="0.3"
+      />
+    </svg>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export function ProductPurchase({ product }: { product: ProductDTO }) {
   const { addItem, buyNow, leadInfo } = useCart();
-  const { selection, setSelection } = useProductView();
+  const { selection, setSelection }   = useProductView();
 
-  const variants = useMemo(() => normalizeVariants(product), [product]);
-  const [qty, setQty] = useState(1);
-  const [added, setAdded] = useState(false);
+  const variants  = useMemo(() => normalizeVariants(product), [product]);
+  const [qty, setQty]       = useState(1);
+  const [added, setAdded]   = useState(false);
   const [buying, setBuying] = useState(false);
 
-  // Nothing is pre-selected: the customer browses every photo, then narrows
-  // down. Buying is blocked until every option group has an answer.
-  const groups = useMemo(() => realOptionGroups(product.options), [product]);
+  const groups     = useMemo(() => realOptionGroups(product.options), [product]);
   const hasOptions = groups.length > 0;
-  const variant = effectiveVariant(product, selection);
-  const minPrice = minMatchingPrice(product, selection);
-  const unitPrice = variant ? variant.price : minPrice;
+  const variant    = effectiveVariant(product, selection);
+  const minPrice   = minMatchingPrice(product, selection);
+  const unitPrice  = variant ? variant.price : minPrice;
 
-  const missing = missingChoices(product.options, selection);
-  const noVariantAvailable =
-    variants.length > 0 && !variants.some((v) => v.available);
-  const soldOut = product.stock <= 0 || noVariantAvailable;
-  // Every group answered AND, where a variant matrix exists, that exact
-  // combination has to resolve to an available variant.
-  const unavailableCombo =
-    missing.length === 0 && variants.length > 0 && !variant;
-  const needsChoice = missing.length > 0 || unavailableCombo;
-  const canOrder = !soldOut && !needsChoice;
+  const missing          = missingChoices(product.options, selection);
+  const noVariantAvail   = variants.length > 0 && !variants.some((v) => v.available);
+  const soldOut          = product.stock <= 0 || noVariantAvail;
+  const unavailableCombo = missing.length === 0 && variants.length > 0 && !variant;
+  const needsChoice      = missing.length > 0 || unavailableCombo;
+  const canOrder         = !soldOut && !needsChoice;
 
   function toggle(groupName: string, value: string) {
-    // Clicking the chosen answer again clears it, so a customer can back out
-    // of a pick without reloading the page.
     if (selection[groupName] === value) {
       const next = { ...selection };
       delete next[groupName];
@@ -59,32 +105,26 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
     }
     if (!isChoiceEnabled(variants, product.options, groupName, value, selection))
       return;
-    // Set the choice, then drop any now-incompatible later options.
     setSelection(
-      pruneSelection(variants, product.options, {
-        ...selection,
-        [groupName]: value,
-      })
+      pruneSelection(variants, product.options, { ...selection, [groupName]: value })
     );
   }
 
-  /** "Size" · "Design and Size" · "Design, Size and Vatki" */
   function listNames(names: string[]) {
     if (names.length <= 1) return names[0] ?? "";
     return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
   }
 
   function buildItem() {
-    // Prefer the pinned variant's exact combo/photo/price.
     const combo = variant ? variant.combo : selection;
     return {
       productId: product.id,
-      slug: product.slug,
-      name: product.name,
-      image: variant?.images[0] ?? product.images[0] ?? "",
-      price: unitPrice,
-      stock: product.stock,
-      options: Object.keys(combo).length ? toSelectedOptions(combo) : undefined,
+      slug:      product.slug,
+      name:      product.name,
+      image:     variant?.images[0] ?? product.images[0] ?? "",
+      price:     unitPrice,
+      stock:     product.stock,
+      options:   Object.keys(combo).length ? toSelectedOptions(combo) : undefined,
     };
   }
 
@@ -105,86 +145,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Options — checkbox-style boxes; every group must be answered */}
-      {groups.map((group) => (
-        <div key={group.name}>
-          <p className="mb-2 flex flex-wrap items-center gap-x-2 text-sm font-medium">
-            <span>
-              {group.name}
-              <span className="text-danger"> *</span>
-            </span>
-            {selection[group.name] ? (
-              <>
-                <span className="font-normal text-muted-foreground">
-                  {selection[group.name]}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => toggle(group.name, selection[group.name])}
-                  className="inline-flex cursor-pointer items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-normal text-muted-foreground hover:bg-muted hover:text-foreground"
-                >
-                  <X className="h-3 w-3" /> clear
-                </button>
-              </>
-            ) : (
-              <span className="font-normal text-danger">Please select</span>
-            )}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {group.choices.map((choice) => {
-              const isActive = selection[group.name] === choice.label;
-              const enabled =
-                isActive ||
-                isChoiceEnabled(
-                  variants,
-                  product.options,
-                  group.name,
-                  choice.label,
-                  selection
-                );
-              return (
-                <motion.button
-                  key={choice.label}
-                  type="button"
-                  disabled={!enabled}
-                  whileTap={enabled ? { scale: 0.94 } : undefined}
-                  onClick={() => toggle(group.name, choice.label)}
-                  className={`relative flex items-center gap-2 rounded-lg border px-3.5 py-2 text-sm transition-colors ${
-                    isActive
-                      ? "border-accent bg-accent/10 text-foreground"
-                      : enabled
-                        ? "border-border hover:border-foreground/40"
-                        : "cursor-not-allowed border-dashed border-border text-muted-foreground/50"
-                  }`}
-                  title={
-                    !enabled
-                      ? "Not available in this combination"
-                      : isActive
-                        ? "Click again to unselect"
-                        : undefined
-                  }
-                >
-                  <span
-                    className={`grid h-4 w-4 place-items-center rounded border ${
-                      isActive
-                        ? "border-accent bg-accent text-accent-foreground"
-                        : "border-muted-foreground/40"
-                    }`}
-                  >
-                    {isActive && <Check className="h-3 w-3" />}
-                  </span>
-                  <span className={!enabled ? "line-through" : ""}>
-                    {choice.label}
-                  </span>
-                </motion.button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {/* Live price — "From" until a single variant is pinned down */}
+    <div className="space-y-5">
+      {/* ── Live price — always visible, "From" until a variant is pinned ── */}
       {hasOptions && (
         <div className="flex items-baseline gap-2">
           <span className="text-sm text-muted-foreground">
@@ -196,8 +158,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.2 }}
-              className="text-xl font-semibold"
+              transition={{ duration: 0.15 }}
+              className="text-2xl font-semibold"
             >
               {formatINR(unitPrice)}
             </motion.span>
@@ -205,25 +167,113 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
         </div>
       )}
 
-      {/* Quantity + Add / Buy */}
+      {/* ── Option groups — pill style ── */}
+      {groups.map((group) => (
+        <div key={group.name}>
+          {/* Group label + current pick */}
+          <p className="mb-2.5 flex flex-wrap items-center gap-x-2 text-sm font-medium">
+            <span>
+              {group.name}
+              <span className="text-danger"> *</span>
+            </span>
+            {selection[group.name] ? (
+              <span className="font-normal text-muted-foreground">
+                — {selection[group.name]}
+              </span>
+            ) : (
+              <span className="font-normal text-danger text-xs">Select one</span>
+            )}
+          </p>
+
+          {/* Pill grid */}
+          <div className="flex flex-wrap gap-2">
+            {group.choices.map((choice) => {
+              const isActive = selection[group.name] === choice.label;
+              const enabled  =
+                isActive ||
+                isChoiceEnabled(
+                  variants,
+                  product.options,
+                  group.name,
+                  choice.label,
+                  selection
+                );
+
+              return (
+                <motion.button
+                  key={choice.label}
+                  type="button"
+                  disabled={!enabled}
+                  whileTap={enabled ? { scale: 0.96 } : undefined}
+                  onClick={() => toggle(group.name, choice.label)}
+                  aria-pressed={isActive}
+                  aria-label={`${group.name}: ${choice.label}${!enabled ? " (unavailable)" : ""}`}
+                  title={
+                    !enabled
+                      ? "Not available in this combination"
+                      : isActive
+                      ? "Click to unselect"
+                      : undefined
+                  }
+                  className={[
+                    // Base — minimum 44 px touch target, pill shape
+                    "relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center",
+                    "rounded-full border px-4 text-sm font-medium",
+                    "transition-all duration-150 select-none",
+                    // States
+                    isActive
+                      ? "border-accent bg-accent text-accent-foreground shadow-sm"
+                      : enabled
+                      ? "border-border bg-background hover:border-foreground/40 hover:bg-muted cursor-pointer"
+                      : "cursor-not-allowed border-dashed border-border/60 text-muted-foreground/50",
+                  ].join(" ")}
+                >
+                  {/* Diagonal line on unavailable pills */}
+                  {!enabled && <StrikeThrough />}
+
+                  {/* Label */}
+                  <span className="relative z-10">{choice.label}</span>
+
+                  {/* Check mark for active */}
+                  {isActive && (
+                    <motion.span
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      className="relative z-10 ml-1.5 flex h-4 w-4 items-center justify-center"
+                    >
+                      <Check className="h-3.5 w-3.5" />
+                    </motion.span>
+                  )}
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      {/* ── Validation banners ── */}
+      {missing.length > 0 && (
+        <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
+          Please select {listNames(missing)} to continue.
+        </p>
+      )}
+      {unavailableCombo && (
+        <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
+          That combination isn&apos;t available — try a different one.
+        </p>
+      )}
+
+      {/* ── Action section ── */}
       {soldOut ? (
         <Button variant="outline" disabled className="w-full" size="lg">
-          {noVariantAvailable ? "Out of stock" : "Sold out"}
+          {noVariantAvail ? "Out of stock" : "Sold out"}
         </Button>
       ) : (
         <div className="space-y-3">
-          {missing.length > 0 && (
-            <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
-              Select {listNames(missing)} to continue.
-            </p>
-          )}
-          {unavailableCombo && (
-            <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
-              That combination isn&apos;t available — try a different one.
-            </p>
-          )}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="inline-flex h-12 items-center rounded-full border border-border">
+          {/* Quantity + Add to Cart */}
+          <div className="flex items-center gap-3">
+            {/* Quantity stepper */}
+            <div className="inline-flex h-12 shrink-0 items-center rounded-full border border-border">
               <button
                 type="button"
                 onClick={() => setQty((q) => Math.max(1, q - 1))}
@@ -232,7 +282,7 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
               >
                 <Minus className="h-4 w-4" />
               </button>
-              <span className="w-10 text-center text-sm tabular-nums">{qty}</span>
+              <span className="w-8 text-center text-sm tabular-nums">{qty}</span>
               <button
                 type="button"
                 onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
@@ -242,10 +292,12 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                 <Plus className="h-4 w-4" />
               </button>
             </div>
+
+            {/* Add to Cart */}
             <Button
               onClick={onAdd}
               size="lg"
-              className="min-w-[10rem] flex-1"
+              className="flex-1"
               disabled={needsChoice}
             >
               {added ? (
@@ -254,13 +306,13 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
                 </>
               ) : (
                 <>
-                  <ShoppingBag className="h-4 w-4" /> Add to cart
+                  <ShoppingBag className="h-4 w-4" /> Add to Cart
                 </>
               )}
             </Button>
           </div>
 
-          {/* Buy now + WhatsApp — always a single row */}
+          {/* Buy Now + WhatsApp */}
           <div className="flex items-center gap-2.5">
             <Button
               onClick={onBuy}
@@ -274,9 +326,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
               ) : (
                 <Zap className="h-4 w-4" />
               )}
-              {/* No price until the selection is real — a "from" price on a
-                  Buy button reads as the price you are about to pay. */}
-              Buy now{needsChoice ? "" : ` · ${formatINR(unitPrice * qty)}`}
+              Buy Now
+              {!needsChoice && ` · ${formatINR(unitPrice * qty)}`}
             </Button>
             <WhatsAppProductButton
               product={product}
@@ -286,6 +337,9 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
           </div>
         </div>
       )}
+
+      {/* ── Trust badges — immediately below CTAs ── */}
+      <TrustRow />
     </div>
   );
 }

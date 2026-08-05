@@ -247,11 +247,23 @@ export async function createDraftOrder(input: ShipmentInput): Promise<string> {
   return String(data.order_id);
 }
 
-/** Book an existing draft → allocates the courier and generates the AWB. */
-export async function shipDraft(nimbusOrderId: string): Promise<ShipmentResult> {
+/**
+ * Book an existing draft → allocates the courier and generates the AWB.
+ *
+ * Pass `courierId` (a `courierId` from {@link listCourierOptions}) to book with
+ * a specific courier; omit it and NimbusPost picks. The caller should compare
+ * the returned `courierName` with what was asked for — see `dispatchOrder`.
+ */
+export async function shipDraft(
+  nimbusOrderId: string,
+  courierId?: string | null
+): Promise<ShipmentResult> {
   const data = await np<Booking>("/v2/shipments/book", {
     method: "POST",
-    body: JSON.stringify({ order_id: nimbusOrderId }),
+    body: JSON.stringify({
+      order_id: nimbusOrderId,
+      ...(courierId ? { courier_id: courierId } : {}),
+    }),
   });
   return readBooking(data);
 }
@@ -358,23 +370,64 @@ export type RateInput = {
 };
 
 type ServiceabilityCourier = {
+  courierId?: string;
+  courierCode?: string;
   courierName?: string;
-  result?: { totalPaise?: number };
+  courierDisplayName?: string;
+  courierType?: string;
+  zone?: string;
+  tatDays?: number;
+  result?: {
+    chargeableGrams?: number;
+    totalPaise?: number;
+    forward?: { totalPaise?: number };
+    rto?: { totalPaise?: number };
+    cod?: { totalPaise?: number };
+    surcharges?: { totalPaise?: number };
+  };
+};
+
+/** One bookable courier for an order, with the numbers the admin reviews. */
+export type CourierOption = {
+  courierId: string;
+  name: string;
+  /** "surface" | "air" | "ndd" … — how it travels. */
+  type: string | null;
+  /** Working days NimbusPost expects delivery to take. */
+  tatDays: number | null;
+  chargeableGrams: number | null;
+  /** All in rupees. `total` is what the wallet is charged to ship forward. */
+  total: number;
+  forward: number;
+  rto: number;
+  cod: number;
+  surcharges: number;
+};
+
+const paise = (n: unknown) => {
+  const v = Number(n);
+  return Number.isFinite(v) && v > 0 ? Math.ceil(v / 100) : 0;
 };
 
 /**
- * Cheapest serviceable courier rate in RUPEES, or null when nothing services
- * the pincode. Never throws — the checkout must not break on a rating hiccup.
+ * Every courier that will carry this parcel, cheapest first.
+ *
+ * NimbusPost has no per-order rate endpoint, so this re-quotes serviceability
+ * from the order's own pincode, weight and payment mode — the same inputs the
+ * draft was built from, which is why the numbers match what booking charges.
+ * Never throws: shipping quotes must not take a page down.
  */
-export async function calculateShippingRate(input: RateInput): Promise<number | null> {
-  if (!isNimbusPostConfigured()) return null;
+export async function listCourierOptions(
+  input: RateInput
+): Promise<CourierOption[]> {
+  if (!isNimbusPostConfigured()) return [];
 
   try {
     const wh = await resolveWarehouse();
     const pickupPincode = String(wh.address?.pincode ?? "").replace(/\D/g, "");
     if (pickupPincode.length !== 6) {
       console.error("NimbusPost: pickup warehouse has no valid pincode.");
-      return null;
+      return [];
     }
 
     const data = await np<{ available?: ServiceabilityCourier[] }>("/v2/serviceability", {
@@ -385,6 +438,7 @@ export async function calculateShippingRate(input: RateInput): Promise<number | 
         paymentMode: input.paymentType,
         packages: [
           {
+            // GRAMS on this endpoint — see the header note.
             weight: Math.max(
               Math.round(input.weightGrams || 0),
               num(process.env.NIMBUSPOST_DEFAULT_WEIGHT, 500)
@@ -398,15 +452,32 @@ export async function calculateShippingRate(input: RateInput): Promise<number | 
       }),
     });
 
-    const rates = (data.available ?? [])
-      .map((c) => Number(c.result?.totalPaise))
-      .filter((n) => Number.isFinite(n) && n > 0);
-
-    if (!rates.length) return null;
-    // Paise → rupees, rounded up so we never under-charge ourselves.
-    return Math.ceil(Math.min(...rates) / 100);
+    return (data.available ?? [])
+      .filter((c) => c.courierId && Number(c.result?.totalPaise) > 0)
+      .map((c) => ({
+        courierId: String(c.courierId),
+        name: c.courierName ?? c.courierDisplayName ?? c.courierCode ?? "Courier",
+        type: c.courierType ?? null,
+        tatDays: Number.isFinite(Number(c.tatDays)) ? Number(c.tatDays) : null,
+        chargeableGrams: Number(c.result?.chargeableGrams) || null,
+        total: paise(c.result?.totalPaise),
+        forward: paise(c.result?.forward?.totalPaise),
+        rto: paise(c.result?.rto?.totalPaise),
+        cod: paise(c.result?.cod?.totalPaise),
+        surcharges: paise(c.result?.surcharges?.totalPaise),
+      }))
+      .sort((a, b) => a.total - b.total);
   } catch (error) {
-    console.error("NimbusPost rate calculation error:", error);
-    return null;
+    console.error("NimbusPost serviceability error:", error);
+    return [];
   }
+}
+
+/**
+ * Cheapest serviceable courier rate in RUPEES, or null when nothing services
+ * the pincode. Used to price shipping at checkout.
+ */
+export async function calculateShippingRate(input: RateInput): Promise<number | null> {
+  const options = await listCourierOptions(input);
+  return options.length ? options[0].total : null;
 }
