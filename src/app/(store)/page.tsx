@@ -21,10 +21,10 @@ export const dynamic = "force-dynamic";
 
 // Real studio photos used in the hero collage.
 const HERO_IMAGES = [
-  galleryImg("Pooja Essentials/Resin Pooja Thali/pooja-thali-1.jpg"),
-  galleryImg("Personalised Gifts/Resin Photo Frame/photo-frame-1.jpg"),
-  galleryImg("Tableware and Dining/Ring Platter/ring-platter-1.jpg"),
-  galleryImg("Wedding Preservation/Varmala and Flower Preservation/varmala-1.jpg"),
+  galleryImg("Pooja Essentials/Resin Pooja Thali/hero.webp"),
+  galleryImg("Personalised Gifts/Resin Photo Frame/hero.webp"),
+  galleryImg("Tableware and Dining/Ring Platter/hero.webp"),
+  galleryImg("Wedding Preservation/Varmala and Flower Preservation/hero.webp"),
 ];
 
 /* Style the final word of the headline in shimmering gold italic */
@@ -222,7 +222,7 @@ export default async function HomePage() {
                 className="card-lift group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
-                  src={cat.imageUrl ?? HERO_IMAGES[0]}
+                  src={decodeURI(cat.imageUrl ?? HERO_IMAGES[0])}
                   alt={cat.name}
                   fill
                   sizes="(max-width:768px) 50vw, 16vw"
@@ -365,7 +365,7 @@ export default async function HomePage() {
             <div className="relative">
               <div className="relative aspect-[5/4] overflow-hidden rounded-3xl bg-muted shadow-2xl">
                 <Image
-                  src={galleryImg("Home Decor/Resin Name Plate/name-plate-1.jpg")}
+                  src={decodeURI(galleryImg("Home Decor/Resin Name Plate/hero.webp"))}
                   alt="Our studio"
                   fill
                   sizes="(max-width:768px) 100vw, 50vw"
@@ -438,7 +438,7 @@ function HeroTile({ src, ratio }: { src: string; ratio: string }) {
       className={`relative ${ratio} overflow-hidden rounded-2xl bg-muted shadow-lg ring-1 ring-black/5`}
     >
       <Image
-        src={src}
+        src={decodeURI(src)}
         alt="Resin art"
         fill
         sizes="(max-width:768px) 50vw, 25vw"

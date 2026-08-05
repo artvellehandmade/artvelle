@@ -104,7 +104,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
               return (
               <Link href={`/product/${product.slug}`} key={url} className="relative h-full w-full flex-shrink-0 snap-center snap-always block">
                 <Image
-                  src={url}
+                  src={decodeURI(url)}
                   alt={alt}
                   fill
                   className="object-cover transition-transform duration-500 group-hover:scale-105"

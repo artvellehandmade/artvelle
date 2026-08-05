@@ -189,7 +189,7 @@ export function ProductGallery({
             >
               {current ? (
                 <Image
-                  src={current}
+                  src={decodeURI(current)}
                   alt={currentAlt}
                   fill
                   className="pointer-events-none select-none object-contain"
@@ -326,7 +326,7 @@ export function ProductGallery({
                   >
                     {img && (
                       <Image
-                        src={img}
+                        src={decodeURI(img)}
                         alt={product.media?.find(m => m.url === img)?.alt || `${name} thumbnail ${i + 1}`}
                         fill
                         sizes="80px"
@@ -383,7 +383,7 @@ export function ProductGallery({
             onClick={(e) => e.stopPropagation()}
           >
             <Image
-              src={current}
+              src={decodeURI(current)}
               alt={currentAlt}
               className="object-contain"
               fill
