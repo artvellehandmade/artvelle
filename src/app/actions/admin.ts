@@ -143,7 +143,7 @@ export async function createProduct(input: ProductInput) {
   return { ok: true as const, id: product.id };
 }
 
-async function syncProductImages(productId: string, data: ProductInput) {
+async function syncProductImages(productId: string, data: z.infer<typeof productSchema>) {
   const urls = new Set<string>();
   data.images.forEach(img => urls.add(img));
   data.variants.forEach(v => v.images.forEach(img => urls.add(img)));
