@@ -58,7 +58,7 @@ export function SubcategoryCard({ tile }: { tile: SubcategoryTile }) {
             className="no-scrollbar relative z-20 flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
           >
             {images.map((img, i) => (
-              <div key={i} className="relative h-full w-full shrink-0 snap-center">
+              <Link href={href} key={i} className="relative h-full w-full shrink-0 snap-center block">
                 <Image
                   src={img}
                   alt={`${tile.name} - image ${i + 1}`}
@@ -66,7 +66,7 @@ export function SubcategoryCard({ tile }: { tile: SubcategoryTile }) {
                   sizes="(max-width: 768px) 50vw, 25vw"
                   className="object-cover"
                 />
-              </div>
+              </Link>
             ))}
           </div>
         ) : (

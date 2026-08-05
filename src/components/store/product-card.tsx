@@ -100,7 +100,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
             className="no-scrollbar relative z-20 flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
           >
             {images.map((img, i) => (
-              <div key={i} className="relative h-full w-full shrink-0 snap-center">
+              <Link href={`/product/${product.slug}`} key={i} className="relative h-full w-full shrink-0 snap-center block">
                 <Image
                   src={img}
                   alt={`${product.name} - image ${i + 1}`}
@@ -108,7 +108,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
                   sizes="(max-width: 768px) 50vw, 25vw"
                   className="object-cover"
                 />
-              </div>
+              </Link>
             ))}
           </div>
         ) : (
