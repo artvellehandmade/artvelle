@@ -99,17 +99,19 @@ export function ProductCard({ product }: { product: ProductDTO }) {
             onScroll={handleScroll}
             className="no-scrollbar relative z-20 flex h-full w-full snap-x snap-mandatory overflow-x-auto scroll-smooth"
           >
-            {images.map((img, i) => (
-              <Link href={`/product/${product.slug}`} key={i} className="relative h-full w-full shrink-0 snap-center block">
+            {images.map((url, i) => {
+              const alt = product.media?.find((m) => m.url === url)?.alt || product.name;
+              return (
+              <Link href={`/product/${product.slug}`} key={url} className="relative h-full w-full flex-shrink-0 snap-center snap-always block">
                 <Image
-                  src={img}
-                  alt={`${product.name} - image ${i + 1}`}
+                  src={url}
+                  alt={alt}
                   fill
-                  sizes="(max-width: 768px) 50vw, 25vw"
-                  className="object-cover"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                 />
               </Link>
-            ))}
+            )})}
           </div>
         ) : (
           <div className="absolute inset-0 grid place-items-center text-muted-foreground text-sm">

@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import type { ProductDTO } from "./types";
+import type { ProductDTO, MediaDTO } from "./types";
 import { toDTO } from "./products";
 
 /**
@@ -24,6 +24,7 @@ export type SubcategoryTile = {
   priceMin: number;
   priceMax: number;
   productCount: number;
+  media?: MediaDTO[];
 };
 
 export type ProductTile = { kind: "product"; product: ProductDTO };
@@ -71,6 +72,7 @@ const SUBCATEGORY_SELECT = {
   priceMin: true,
   priceMax: true,
   category: { select: { name: true } },
+  subcategoryImages: { include: { media: true } },
 } as const;
 
 /**
@@ -102,6 +104,13 @@ function toTile(sub: SubcategoryRow, products: ProductDTO[]): SubcategoryTile {
     slug: sub.slug,
     categoryName: sub.category.name,
     images: coverImages(sub, products),
+    media: (sub as any).subcategoryImages?.map((si: any) => ({
+      id: si.media.id,
+      url: si.media.url,
+      alt: si.media.alt,
+      width: si.media.width,
+      height: si.media.height,
+    })),
     // A manual override on either end wins; the other end still comes from the
     // live products, so a half-filled override can't produce a broken range.
     priceMin: sub.priceMin ?? auto.min,
@@ -166,6 +175,7 @@ export async function getCategoryTiles(
           ],
         },
         orderBy: { createdAt: "desc" },
+        include: { productImages: { include: { media: true } } },
       })
     ).map(toDTO);
 

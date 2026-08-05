@@ -4,6 +4,10 @@
     {
       "path": "/api/cron/nimbus-sync",
       "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/cron/purge-media",
+      "schedule": "0 0 * * 0"
     }
   ]
 }

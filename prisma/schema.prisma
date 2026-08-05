@@ -61,6 +61,8 @@ model Product {
   @@index([secondaryCategory])
   @@index([subcategoryId])
   @@index([isActive])
+
+  productImages     ProductImage[]
 }
 
 // -------- Orders --------
@@ -240,11 +242,11 @@ model Subcategory {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  // Slugs only need to be unique inside their own category, so two categories
-  // can both have a "Photo Frame" group.
   @@unique([categoryId, slug])
   @@index([categoryId])
   @@index([isActive])
+
+  subcategoryImages SubcategoryImage[]
 }
 
 // -------- Customer Reviews --------
@@ -279,4 +281,46 @@ model Coupon {
   updatedAt      DateTime @updatedAt
 
   @@index([isActive])
+}
+
+// -------- Media --------
+model Media {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  file      String
+  alt       String?
+  width     Int?
+  height    Int?
+  size      Int?
+  source    String   // "repo", "blob", "external"
+  createdAt DateTime @default(now())
+
+  productImages     ProductImage[]
+  subcategoryImages SubcategoryImage[]
+}
+
+model ProductImage {
+  id         String  @id @default(cuid())
+  productId  String
+  mediaId    String
+  variantId  String? // Null = Common Image, String = Variant specific
+  isPrimary  Boolean @default(false)
+  sortOrder  Int     @default(0)
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  media   Media   @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+  
+  @@unique([productId, mediaId, variantId])
+}
+
+model SubcategoryImage {
+  id            String      @id @default(cuid())
+  subcategoryId String
+  mediaId       String
+  sortOrder     Int         @default(0)
+
+  subcategory   Subcategory @relation(fields: [subcategoryId], references: [id], onDelete: Cascade)
+  media         Media       @relation(fields: [mediaId], references: [id], onDelete: Restrict)
+
+  @@unique([subcategoryId, mediaId])
 }

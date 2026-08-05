@@ -38,6 +38,14 @@ export type CartItem = {
   note?: string;
 };
 
+export type MediaDTO = {
+  id: string;
+  url: string;
+  alt: string | null;
+  width: number | null;
+  height: number | null;
+};
+
 export type ProductDTO = {
   id: string;
   name: string;
@@ -54,6 +62,7 @@ export type ProductDTO = {
   price: number;
   compareAtPrice: number | null;
   images: string[];
+  media?: MediaDTO[];
   stock: number;
   paymentModes: PaymentMode[];
   advancePercent: number | null;

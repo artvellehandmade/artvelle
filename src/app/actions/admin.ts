@@ -136,8 +136,64 @@ export async function createProduct(input: ProductInput) {
       slug,
     },
   });
+
+  await syncProductImages(product.id, data);
+
   revalidateStore();
   return { ok: true as const, id: product.id };
+}
+
+async function syncProductImages(productId: string, data: ProductInput) {
+  const urls = new Set<string>();
+  data.images.forEach(img => urls.add(img));
+  data.variants.forEach(v => v.images.forEach(img => urls.add(img)));
+
+  // Ensure Media exists
+  for (const url of Array.from(urls)) {
+    if (!url) continue;
+    const file = url.split("/").pop() || url;
+    await prisma.media.upsert({
+      where: { url },
+      update: {},
+      create: { url, file, source: "repo" },
+    });
+  }
+
+  // Clear old relations
+  await prisma.productImage.deleteMany({ where: { productId } });
+
+  // Re-create common images
+  let sortOrder = 0;
+  for (const url of data.images) {
+    if (!url) continue;
+    const media = await prisma.media.findUnique({ where: { url } });
+    if (media) {
+      await prisma.productImage.create({
+        data: { productId, mediaId: media.id, variantId: null, sortOrder: sortOrder++ }
+      });
+    }
+  }
+
+  // Re-create variant images (using a string representation of the combo as variantId)
+  for (const v of data.variants) {
+    const variantId = JSON.stringify(v.combo); // temporary variant ID since variants are JSON
+    let vSort = 0;
+    for (const url of v.images) {
+      if (!url) continue;
+      const media = await prisma.media.findUnique({ where: { url } });
+      if (media) {
+        // Prevent duplicate (same image, same variant)
+        const existing = await prisma.productImage.findFirst({
+          where: { productId, mediaId: media.id, variantId }
+        });
+        if (!existing) {
+          await prisma.productImage.create({
+            data: { productId, mediaId: media.id, variantId, sortOrder: vSort++ }
+          });
+        }
+      }
+    }
+  }
 }
 
 export async function updateProduct(id: string, input: ProductInput) {
@@ -167,10 +223,12 @@ export async function updateProduct(id: string, input: ProductInput) {
       heightCm: data.heightCm ?? null,
       shippingType: data.shippingType,
       shippingFee: data.shippingFee,
-      shippingMarkup: data.shippingMarkup,
       slug,
     },
   });
+
+  await syncProductImages(id, data);
+
   revalidateStore();
   revalidatePath(`/product/${slug}`);
   return { ok: true as const };

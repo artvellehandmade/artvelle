@@ -160,6 +160,7 @@ export function ProductGallery({
 
   const many    = safe.length > 1;
   const current = safe[activeIdx] ?? "";
+  const currentAlt = product.media?.find(m => m.url === current)?.alt || name;
 
   // ── Dot / counter indicator ──────────────────────────────────────────────
   const useDots = safe.length <= 6;
@@ -189,7 +190,7 @@ export function ProductGallery({
               {current ? (
                 <Image
                   src={current}
-                  alt={name}
+                  alt={currentAlt}
                   fill
                   className="pointer-events-none select-none object-contain"
                   sizes="(max-width:768px) 100vw, 45vw"
@@ -326,9 +327,9 @@ export function ProductGallery({
                     {img && (
                       <Image
                         src={img}
-                        alt={`${name} view ${i + 1}`}
+                        alt={product.media?.find(m => m.url === img)?.alt || `${name} thumbnail ${i + 1}`}
                         fill
-                        sizes="64px"
+                        sizes="80px"
                         className="object-cover"
                         loading={i <= 5 ? "eager" : "lazy"}
                       />
@@ -383,10 +384,11 @@ export function ProductGallery({
           >
             <Image
               src={current}
-              alt={name}
-              fill
-              sizes="90vw"
+              alt={currentAlt}
               className="object-contain"
+              fill
+              sizes="100vw"
+              quality={90}
               priority
             />
           </div>

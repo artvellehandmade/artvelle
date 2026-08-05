@@ -10,9 +10,16 @@ import type {
 import { searchProducts } from "./search";
 
 /** Normalise a Prisma product row into a ProductDTO (coerces the JSON columns). */
-export function toDTO(p: Product): ProductDTO {
+export function toDTO(p: Product & { productImages?: { media: any }[] }): ProductDTO {
   return {
     ...p,
+    media: p.productImages?.map((pi) => ({
+      id: pi.media.id,
+      url: pi.media.url,
+      alt: pi.media.alt,
+      width: pi.media.width,
+      height: pi.media.height,
+    })),
     options: Array.isArray(p.options)
       ? (p.options as unknown as ProductOption[])
       : [],
@@ -66,6 +73,7 @@ export async function getProducts(query: ShopQuery = {}): Promise<ProductDTO[]> 
       await prisma.product.findMany({
         where: { AND: and },
         orderBy: orderBy(query.sort),
+        include: { productImages: { include: { media: true } } },
       })
     ).map(toDTO);
 
@@ -90,6 +98,7 @@ export async function searchCatalogue(
       await prisma.product.findMany({
         where: { isActive: true },
         orderBy: { isFeatured: "desc" },
+        include: { productImages: { include: { media: true } } },
       })
     ).map(toDTO);
     return searchProducts(products, q, limit);
@@ -126,8 +135,12 @@ export async function getProductBySlug(
   slug: string
 ): Promise<ProductDTO | null> {
   try {
-    const product = await prisma.product.findUnique({ where: { slug } });
-    return product ? toDTO(product) : null;
+    const product = await prisma.product.findUnique({
+      where: { slug },
+      include: { productImages: { include: { media: true } } },
+    });
+    if (!product || !product.isActive) return null;
+    return toDTO(product);
   } catch (err) {
     console.error("[products] getProductBySlug failed:", err);
     return null;
