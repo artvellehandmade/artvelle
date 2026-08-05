@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, ZoomIn, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProductView } from "@/context/product-view";
-import { selectionForImage, resolveVariant } from "@/lib/variants";
+import { selectionForImage, matchingVariants } from "@/lib/variants";
 import type { ProductDTO, Variant } from "@/lib/types";
 
 // ─── Gallery helpers ──────────────────────────────────────────────────────────
@@ -29,9 +29,17 @@ function buildGallery(
 ): string[] {
   const common = (product.images ?? []).filter(Boolean);
 
-  // Resolve the currently pinned variant (needs every option group answered).
-  const pinned = variants.length ? resolveVariant(variants, selection) : null;
-  const variantImgs = (pinned?.images ?? []).filter(Boolean);
+  // If the user has made ANY selection, aggregate images from all variants
+  // that still match this (possibly partial) selection.
+  const variantImgs: string[] = [];
+  if (variants.length && Object.keys(selection).length > 0) {
+    const matched = matchingVariants(variants, selection);
+    for (const v of matched) {
+      for (const img of v.images) {
+        if (img && !variantImgs.includes(img)) variantImgs.push(img);
+      }
+    }
+  }
 
   // Merge: common first, then any variant-specific images not already listed.
   const merged: string[] = [...common];
@@ -73,10 +81,11 @@ export function ProductGallery({
   }, [safe.length]);
 
   // Bidirectional sync: when selection changes (via ProductPurchase pills),
-  // if the selected variant has its own image, jump to it.
+  // if the selected variant (even partially selected) has its own image, jump to it.
   useEffect(() => {
-    const pinned = variants.length ? resolveVariant(variants, selection) : null;
-    const variantFirstImg = pinned?.images?.[0];
+    if (Object.keys(selection).length === 0) return;
+    const matched = variants.length ? matchingVariants(variants, selection) : [];
+    const variantFirstImg = matched[0]?.images?.[0];
     if (variantFirstImg) {
       const idx = safe.indexOf(variantFirstImg);
       if (idx !== -1 && idx !== activeIdx) {
