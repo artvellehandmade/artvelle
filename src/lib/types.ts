@@ -84,6 +84,8 @@ export type MediaDTO = {
   height: number | null;
   slot?: string;
   variantValue?: string | null;
+  /** Position within its (variant/common) group; used to order the gallery. */
+  sortOrder?: number;
   // Variant tagging metadata
   variantAttribute?: string | null;
   subcategoryName?: string | null;

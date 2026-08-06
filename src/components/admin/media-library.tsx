@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
@@ -40,6 +40,32 @@ type Photo = {
 type PhotoUse = { kind: string; id: string; name: string; slot?: string };
 type Library = { photos: Photo[]; usage: Record<string, PhotoUse[]> };
 
+// Classification options served by GET /api/admin/taxonomy.
+type TaxSubcategory = { name: string; slug: string };
+type TaxCategory = { name: string; slug: string; subcategories: TaxSubcategory[] };
+type Taxonomy = {
+  categories: TaxCategory[];
+  variantAttributes: Record<string, string[]>;
+};
+
+/**
+ * Build a <select> option list from `options`, de-duped and order-preserving,
+ * that always includes the photo's currently-stored `current` value — so
+ * pre-existing tags are never dropped from the dropdown or silently changed.
+ */
+function withCurrent(options: string[], current?: string | null): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const o of options) {
+    if (o && !seen.has(o)) {
+      seen.add(o);
+      out.push(o);
+    }
+  }
+  if (current && !seen.has(current)) out.push(current);
+  return out;
+}
+
 export function MediaLibrary() {
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
@@ -54,13 +80,55 @@ export function MediaLibrary() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null);
 
+  // Classification dropdown options (categories + variant attribute values).
+  const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null);
+  // UI-only scoping category for the Info panel: narrows the Subcategory
+  // options. Does NOT persist (Media has no category column).
+  const [catFilter, setCatFilter] = useState<string>("");
+
+  // Pagination — the API is capped at `PAGE_SIZE` per request; "Load more"
+  // fetches the next page and appends it.
+  const PAGE_SIZE = 100;
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+
+  // Upload plumbing
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  /** Loads the first page of media, replacing whatever is on screen. */
   const fetchLibrary = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/admin/media");
+      const res = await fetch(`/api/admin/media?page=1&limit=${PAGE_SIZE}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load photos");
-      setLibrary(data);
+      setLibrary({ photos: data.photos, usage: data.usage });
+      setTotal(data.total ?? data.photos.length);
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** Fetches the next page and appends it to the current list. */
+  const loadMore = async () => {
+    const next = page + 1;
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/media?page=${next}&limit=${PAGE_SIZE}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load photos");
+      setLibrary((prev) =>
+        prev
+          ? { photos: [...prev.photos, ...data.photos], usage: { ...prev.usage, ...data.usage } }
+          : { photos: data.photos, usage: data.usage }
+      );
+      setTotal(data.total ?? 0);
+      setPage(next);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -72,10 +140,67 @@ export function MediaLibrary() {
     fetchLibrary();
   }, []);
 
+  // Load classification options once. Non-fatal if it fails — the panel just
+  // falls back to whatever value the photo already carries.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/taxonomy");
+        if (!res.ok) return;
+        setTaxonomy(await res.json());
+      } catch {
+        /* ignore — dropdowns degrade to the stored value only */
+      }
+    })();
+  }, []);
+
   const activePhoto = useMemo(() => {
     if (!activePhotoId || !library) return null;
     return library.photos.find(p => p.id === activePhotoId) || null;
   }, [activePhotoId, library]);
+
+  // Derive the scoping Category from the selected photo's subcategory whenever
+  // the selection or taxonomy changes. `library` is intentionally omitted so a
+  // manual category choice survives subsequent subcategory edits (which mutate
+  // `library` but not the active photo id).
+  useEffect(() => {
+    if (!activePhotoId || !taxonomy) {
+      setCatFilter("");
+      return;
+    }
+    const photo = library?.photos.find((p) => p.id === activePhotoId);
+    const sub = photo?.subcategoryName;
+    const parent = sub
+      ? taxonomy.categories.find((c) => c.subcategories.some((s) => s.name === sub))
+      : undefined;
+    setCatFilter(parent?.name ?? "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePhotoId, taxonomy]);
+
+  // Subcategory options = subcategories of the chosen Category, or ALL when no
+  // category is scoped. Always keeps the photo's stored value selectable.
+  const subcatOptions = useMemo(() => {
+    const cats = taxonomy
+      ? catFilter
+        ? taxonomy.categories.filter((c) => c.name === catFilter)
+        : taxonomy.categories
+      : [];
+    const names = cats.flatMap((c) => c.subcategories.map((s) => s.name));
+    return withCurrent(names, activePhoto?.subcategoryName);
+  }, [taxonomy, catFilter, activePhoto?.subcategoryName]);
+
+  // Variant attribute names, auto-collected from products.
+  const attrOptions = useMemo(() => {
+    const base = taxonomy ? Object.keys(taxonomy.variantAttributes) : [];
+    return withCurrent(base, activePhoto?.variantAttribute);
+  }, [taxonomy, activePhoto?.variantAttribute]);
+
+  // Values for the currently-selected variant attribute (empty when none).
+  const valueOptions = useMemo(() => {
+    const attr = activePhoto?.variantAttribute || "";
+    const base = taxonomy && attr ? (taxonomy.variantAttributes[attr] ?? []) : [];
+    return withCurrent(base, activePhoto?.variantValue);
+  }, [taxonomy, activePhoto?.variantAttribute, activePhoto?.variantValue]);
 
   const allTags = useMemo(() => {
     if (!library) return [];
@@ -115,7 +240,17 @@ export function MediaLibrary() {
     setSelectedIds(next);
   };
 
-  const updatePhoto = async (id: string, updates: Partial<Photo>) => {
+  /** Optimistically merge changes into local state so inputs stay responsive. */
+  const mergeLocal = (id: string, updates: Partial<Photo>) => {
+    setLibrary(prev =>
+      prev
+        ? { ...prev, photos: prev.photos.map(p => (p.id === id ? { ...p, ...updates } : p)) }
+        : prev
+    );
+  };
+
+  /** Persist metadata to the server. Only toasts on success when `notify` is set. */
+  const persist = async (id: string, updates: Partial<Photo>, notify = false) => {
     try {
       const res = await fetch(`/api/admin/media/${id}`, {
         method: "PATCH",
@@ -123,17 +258,93 @@ export function MediaLibrary() {
         headers: { "Content-Type": "application/json" }
       });
       if (!res.ok) throw new Error("Failed to update");
-      setLibrary(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          photos: prev.photos.map(p => p.id === id ? { ...p, ...updates } : p)
-        };
-      });
-      toast.success("Updated");
+      if (notify) toast.success("Updated");
     } catch (err: any) {
       toast.error(err.message);
     }
+  };
+
+  // Debounce metadata edits so typing "Pink" is one PATCH, not four.
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingRef = useRef<{ id: string; updates: Partial<Photo> } | null>(null);
+
+  /** Updates local state immediately and debounces the PATCH by 500ms. */
+  const editMeta = (id: string, updates: Partial<Photo>) => {
+    mergeLocal(id, updates);
+    const prev = pendingRef.current;
+    pendingRef.current = {
+      id,
+      updates: prev && prev.id === id ? { ...prev.updates, ...updates } : updates
+    };
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const p = pendingRef.current;
+      pendingRef.current = null;
+      debounceRef.current = null;
+      if (p) void persist(p.id, p.updates);
+    }, 500);
+  };
+
+  /** Sends each chosen file to /api/upload, then refreshes the library. */
+  const handleUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploading(true);
+    let ok = 0;
+    for (const file of Array.from(files)) {
+      try {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || "Upload failed");
+        ok++;
+      } catch (err: any) {
+        toast.error(`${file.name}: ${err.message}`);
+      }
+    }
+    setUploading(false);
+    if (ok > 0) toast.success(`Uploaded ${ok} image${ok !== 1 ? "s" : ""}`);
+    await fetchLibrary();
+  };
+
+  /** Deletes a media row; surfaces the 409 "in use" message via toast. */
+  const deletePhoto = async (id: string) => {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/media/${id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not delete image");
+      toast.success("Image deleted");
+      setActivePhotoId(null);
+      await fetchLibrary();
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  /** Adds a role/tag to the active photo and persists it via PATCH. */
+  const addTerm = (kind: "roles" | "tags") => {
+    if (!activePhoto) return;
+    const label = kind === "roles" ? "role (e.g. hero, thumbnail)" : "tag";
+    const value = window.prompt(`Add ${label}`)?.trim();
+    if (!value) return;
+    const current = activePhoto[kind];
+    if (current.includes(value)) return;
+    const next = [...current, value];
+    const update: Partial<Photo> = kind === "roles" ? { roles: next } : { tags: next };
+    mergeLocal(activePhoto.id, update);
+    void persist(activePhoto.id, update, true);
+  };
+
+  /** Removes a role/tag from the active photo and persists it via PATCH. */
+  const removeTerm = (kind: "roles" | "tags", value: string) => {
+    if (!activePhoto) return;
+    const next = activePhoto[kind].filter(v => v !== value);
+    const update: Partial<Photo> = kind === "roles" ? { roles: next } : { tags: next };
+    mergeLocal(activePhoto.id, update);
+    void persist(activePhoto.id, update, true);
   };
 
   if (loading && !library) {
@@ -238,8 +449,24 @@ export function MediaLibrary() {
             <Button variant="outline" size="sm" onClick={() => fetchLibrary()}>
               <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} /> Refresh
             </Button>
-            <Button size="sm">
-              <Upload className="w-4 h-4 mr-2" /> Upload
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={async (e) => {
+                await handleUpload(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Button size="sm" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+              {uploading ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              {uploading ? "Uploading…" : "Upload"}
             </Button>
           </div>
         </div>
@@ -252,6 +479,7 @@ export function MediaLibrary() {
               <p>No media found.</p>
             </div>
           ) : (
+            <>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
               {visible.map(photo => {
                 const uses = library?.usage[photo.url] || [];
@@ -310,6 +538,20 @@ export function MediaLibrary() {
                 );
               })}
             </div>
+
+            {/* Count + Load more (paginated) */}
+            <div className="mt-6 flex flex-col items-center gap-2">
+              <p className="text-xs text-muted-foreground">
+                {visible.length} shown · {library?.photos.length ?? 0} of {total} loaded
+              </p>
+              {library && library.photos.length < total && (
+                <Button variant="outline" size="sm" onClick={loadMore} disabled={loading}>
+                  {loading && <RefreshCw className="w-4 h-4 mr-2 animate-spin" />}
+                  Load more
+                </Button>
+              )}
+            </div>
+            </>
           )}
         </div>
       </div>
@@ -356,43 +598,66 @@ export function MediaLibrary() {
                 <div className="space-y-3">
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category (Derived)</label>
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={activePhoto.category || ""}
                       disabled
-                      className="input h-7 px-2 text-xs w-full mt-1 bg-muted/50 cursor-not-allowed" 
+                      className="input h-7 px-2 text-xs w-full mt-1 bg-muted/50 cursor-not-allowed"
                     />
                   </div>
                   <div>
+                    {/* Scoping-only: narrows the Subcategory list. Not persisted. */}
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category</label>
+                    <select
+                      value={catFilter}
+                      onChange={(e) => setCatFilter(e.target.value)}
+                      className="input h-7 px-2 text-xs w-full mt-1"
+                    >
+                      <option value="">— none —</option>
+                      {(taxonomy?.categories ?? []).map((c) => (
+                        <option key={c.slug} value={c.name}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Subcategory</label>
-                    <input 
-                      type="text" 
+                    <select
                       value={activePhoto.subcategoryName || ""}
-                      onChange={(e) => updatePhoto(activePhoto.id, { subcategoryName: e.target.value || null })}
-                      className="input h-7 px-2 text-xs w-full mt-1" 
-                      placeholder="e.g. Resin Pooja Thali"
-                    />
+                      onChange={(e) => editMeta(activePhoto.id, { subcategoryName: e.target.value || null })}
+                      className="input h-7 px-2 text-xs w-full mt-1"
+                    >
+                      <option value="">— none —</option>
+                      {subcatOptions.map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Variant Attr</label>
-                      <input 
-                        type="text" 
+                      <select
                         value={activePhoto.variantAttribute || ""}
-                        onChange={(e) => updatePhoto(activePhoto.id, { variantAttribute: e.target.value || null })}
-                        className="input h-7 px-2 text-xs w-full mt-1" 
-                        placeholder="e.g. Design"
-                      />
+                        onChange={(e) => editMeta(activePhoto.id, { variantAttribute: e.target.value || null })}
+                        className="input h-7 px-2 text-xs w-full mt-1"
+                      >
+                        <option value="">— none —</option>
+                        {attrOptions.map((a) => (
+                          <option key={a} value={a}>{a}</option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Variant Value</label>
-                      <input 
-                        type="text" 
+                      <select
                         value={activePhoto.variantValue || ""}
-                        onChange={(e) => updatePhoto(activePhoto.id, { variantValue: e.target.value || null })}
-                        className="input h-7 px-2 text-xs w-full mt-1" 
-                        placeholder="e.g. Pink"
-                      />
+                        onChange={(e) => editMeta(activePhoto.id, { variantValue: e.target.value || null })}
+                        className="input h-7 px-2 text-xs w-full mt-1"
+                      >
+                        <option value="">— none —</option>
+                        {valueOptions.map((v) => (
+                          <option key={v} value={v}>{v}</option>
+                        ))}
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -402,9 +667,21 @@ export function MediaLibrary() {
                 <p className="text-muted-foreground text-xs mb-2">Roles (System Level)</p>
                 <div className="flex flex-wrap gap-1.5">
                   {activePhoto.roles.map(r => (
-                    <span key={r} className="px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs">{r}</span>
+                    <span key={r} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-accent/10 text-accent text-xs">
+                      {r}
+                      <button
+                        onClick={() => removeTerm("roles", r)}
+                        className="hover:text-danger"
+                        aria-label={`Remove role ${r}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
-                  <button className="px-2 py-0.5 rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted">
+                  <button
+                    onClick={() => addTerm("roles")}
+                    className="px-2 py-0.5 rounded-md border border-dashed border-border text-xs text-muted-foreground hover:bg-muted"
+                  >
                     + Add Role
                   </button>
                 </div>
@@ -414,9 +691,21 @@ export function MediaLibrary() {
                 <p className="text-muted-foreground text-xs mb-2">Tags</p>
                 <div className="flex flex-wrap gap-1.5">
                   {activePhoto.tags.map(t => (
-                    <span key={t} className="px-2 py-0.5 rounded-full border border-border bg-muted/50 text-xs">{t}</span>
+                    <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-border bg-muted/50 text-xs">
+                      {t}
+                      <button
+                        onClick={() => removeTerm("tags", t)}
+                        className="hover:text-danger"
+                        aria-label={`Remove tag ${t}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
                   ))}
-                  <button className="px-2 py-0.5 rounded-full border border-dashed border-border text-xs text-muted-foreground hover:bg-muted">
+                  <button
+                    onClick={() => addTerm("tags")}
+                    className="px-2 py-0.5 rounded-full border border-dashed border-border text-xs text-muted-foreground hover:bg-muted"
+                  >
                     + Add Tag
                   </button>
                 </div>
@@ -447,12 +736,13 @@ export function MediaLibrary() {
             </div>
             
             <div className="pt-4 mt-auto">
-              <Button 
-                variant="danger" 
-                className="w-full" 
-                disabled={(library?.usage[activePhoto.url] || []).length > 0}
+              <Button
+                variant="danger"
+                className="w-full"
+                disabled={deleting || (library?.usage[activePhoto.url] || []).length > 0}
+                onClick={() => deletePhoto(activePhoto.id)}
               >
-                Delete Image
+                {deleting ? "Deleting…" : "Delete Image"}
               </Button>
               {(library?.usage[activePhoto.url] || []).length > 0 && (
                 <p className="text-center text-[10px] text-muted-foreground mt-2">Cannot delete image while it is in use.</p>

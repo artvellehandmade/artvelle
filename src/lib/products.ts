@@ -6,11 +6,42 @@ import type {
   VariantPrice,
   Variant,
   PaymentMode,
+  Attribute,
+  SellableVariant,
 } from "./types";
+import { deriveVariantModel } from "./variants";
 import { searchProducts } from "./search";
 
 /** Normalise a Prisma product row into a ProductDTO (coerces the JSON columns). */
-export function toDTO(p: Product & { productImages?: { media: any }[] }): ProductDTO {
+export function toDTO(
+  p: Product & {
+    productImages?: {
+      slot: string;
+      variantValue: string | null;
+      sortOrder: number;
+      media: any;
+    }[];
+  }
+): ProductDTO {
+  const storedAttributes = Array.isArray(p.attributes)
+    ? (p.attributes as unknown as Attribute[])
+    : [];
+  const storedSellable = Array.isArray(p.sellableVariants)
+    ? (p.sellableVariants as unknown as SellableVariant[])
+    : [];
+  // Products saved before the admin model was bridged to the storefront read model
+  // have empty attributes/sellableVariants. Derive them on read from options/variants
+  // so every existing product works without needing a re-save.
+  const derived =
+    storedAttributes.length === 0
+      ? deriveVariantModel({
+          options: p.options,
+          variants: p.variants,
+          price: p.price,
+          stock: p.stock,
+        })
+      : null;
+
   return {
     ...p,
     media: p.productImages?.map((pi) => ({
@@ -19,6 +50,11 @@ export function toDTO(p: Product & { productImages?: { media: any }[] }): Produc
       alt: pi.media.alt,
       width: pi.media.width,
       height: pi.media.height,
+      // Relational gallery metadata — the storefront's source of truth for
+      // ordering (sortOrder) and per-variant scoping (variantValue).
+      slot: pi.slot,
+      variantValue: pi.variantValue,
+      sortOrder: pi.sortOrder,
     })),
     options: Array.isArray(p.options)
       ? (p.options as unknown as ProductOption[])
@@ -33,10 +69,10 @@ export function toDTO(p: Product & { productImages?: { media: any }[] }): Produc
       ? p.paymentModes
       : ["prepaid", "cod"]) as PaymentMode[],
     // New rule engine fields — stored as JSON, cast to proper types
-    attributes: Array.isArray(p.attributes) ? (p.attributes as any) : [],
+    attributes: derived ? derived.attributes : storedAttributes,
     propertyModules: (p.propertyModules as any) ?? {},
     rules: (p.rules as any) ?? {},
-    sellableVariants: Array.isArray(p.sellableVariants) ? (p.sellableVariants as any) : [],
+    sellableVariants: derived ? derived.sellableVariants : storedSellable,
   };
 }
 
@@ -78,7 +114,12 @@ export async function getProducts(query: ShopQuery = {}): Promise<ProductDTO[]> 
       await prisma.product.findMany({
         where: { AND: and },
         orderBy: orderBy(query.sort),
-        include: { productImages: { include: { media: true } } },
+        include: {
+          productImages: {
+            include: { media: true },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
       })
     ).map(toDTO);
 
@@ -103,7 +144,12 @@ export async function searchCatalogue(
       await prisma.product.findMany({
         where: { isActive: true },
         orderBy: { isFeatured: "desc" },
-        include: { productImages: { include: { media: true } } },
+        include: {
+          productImages: {
+            include: { media: true },
+            orderBy: { sortOrder: "asc" },
+          },
+        },
       })
     ).map(toDTO);
     return searchProducts(products, q, limit);
@@ -142,7 +188,12 @@ export async function getProductBySlug(
   try {
     const product = await prisma.product.findUnique({
       where: { slug },
-      include: { productImages: { include: { media: true } } },
+      include: {
+        productImages: {
+          include: { media: true },
+          orderBy: { sortOrder: "asc" },
+        },
+      },
     });
     if (!product || !product.isActive) return null;
     return toDTO(product);

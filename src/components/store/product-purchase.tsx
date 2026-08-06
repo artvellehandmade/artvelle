@@ -64,26 +64,35 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   
   const attributes = (product.attributes || []) as Attribute[];
   const hasOptions = attributes.length > 0;
+  const sellable = (product.sellableVariants || []) as SellableVariant[];
 
   const [qty, setQty]       = useState(1);
   const [added, setAdded]   = useState(false);
   const [buying, setBuying] = useState(false);
 
+  const selKey    = comboKey(selection);
+  const matched   = sellable.find((v) => v.id === selKey);
   const unitPrice = priceForSelection(product as any, selection);
-  const minMax = priceRange(product as any);
+  const minMax    = priceRange(product as any);
 
-  const missing = attributes.filter(g => !selection[g.name]).map(g => g.name);
-  const soldOut = product.stock <= 0;
+  const missing = attributes.filter((g) => !selection[g.name]).map((g) => g.name);
   const needsChoice = missing.length > 0;
-  const canOrder = !soldOut && !needsChoice;
+  // A fully-chosen combo can still be turned off by the admin's availability toggle.
+  const comboUnavailable =
+    hasOptions && !needsChoice && matched != null && !matched.available;
+  const variantStock = matched ? matched.stock : product.stock;
+  const soldOut = (hasOptions ? variantStock : product.stock) <= 0;
+  const canOrder = !soldOut && !needsChoice && !comboUnavailable;
+
+  // Reset quantity whenever the customer switches variant.
+  useEffect(() => {
+    setQty(1);
+  }, [selKey]);
 
   function toggle(groupName: string, value: string) {
-    if (selection[groupName] === value) {
-      const next = { ...selection };
-      delete next[groupName];
-      setSelection(next);
-      return;
-    }
+    // Keep a complete selection at all times — clicking the already-active choice
+    // is a no-op so the product never drops back into a non-orderable state.
+    if (selection[groupName] === value) return;
     if (!isChoiceEnabled(groupName, value, product)) return;
     setSelection(repairSelection(attributes, { ...selection, [groupName]: value }));
   }
@@ -94,25 +103,17 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   }
 
   function buildItem() {
-    const key = comboKey(selection);
-    const variants = (product.sellableVariants || []) as SellableVariant[];
-    const match = variants.find(v => v.id === key);
-    
-    let activeImage = product.images[0] ?? "";
-    if (match && match.images && match.images.length > 0) {
-      activeImage = match.images[0];
-    }
-    
+    const activeImage = matched?.images?.[0] ?? product.images[0] ?? "";
     // Convert selection Record to SelectedOption[]
     const selectedOptions = Object.entries(selection).map(([name, value]) => ({ name, value }));
-    
+
     return {
       productId: product.id,
       slug:      product.slug,
       name:      product.name,
       image:     activeImage,
       price:     unitPrice,
-      stock:     product.stock,
+      stock:     variantStock,
       options:   selectedOptions.length > 0 ? selectedOptions : undefined,
     };
   }
@@ -214,8 +215,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             <span className="w-8 text-center text-sm font-medium">{qty}</span>
             <button
               type="button"
-              onClick={() => setQty(Math.min(product.stock, qty + 1))}
-              disabled={qty >= product.stock}
+              onClick={() => setQty(Math.min(variantStock, qty + 1))}
+              disabled={qty >= variantStock}
               className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30"
               aria-label="Increase quantity"
             >
@@ -252,6 +253,8 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
             <p className="text-center text-sm font-medium text-danger">Sold out</p>
           ) : needsChoice ? (
             <p className="text-center text-sm font-medium text-accent">Please select {listNames(missing)}</p>
+          ) : comboUnavailable ? (
+            <p className="text-center text-sm font-medium text-danger">This combination is unavailable</p>
           ) : (
             <p className="text-center text-sm font-medium text-green-600">In stock, ready to ship</p>
           )}

@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { useProductView } from "@/context/product-view";
 import { cn } from "@/lib/utils";
 import type { ProductDTO, MediaDTO } from "@/lib/types";
-import { imagesForSelection } from "@/lib/variants";
+import { galleryForSelection } from "@/lib/variants";
+import { comboKey } from "@/lib/options";
 
 export function ProductGallery({
   product,
@@ -16,16 +17,25 @@ export function ProductGallery({
   media: MediaDTO[];
 }) {
   const { selection } = useProductView();
-  
-  // Use the new rule-based engine to determine the correct gallery
-  const activeImages = imagesForSelection(product, selection);
+
+  // Resolve the gallery for the current selection from the relational media
+  // rows (source of truth), de-duplicated (the same photo can legitimately be
+  // picked into more than one source).
+  const selKey = comboKey(selection);
+  const activeImages = useMemo(
+    () => Array.from(new Set(galleryForSelection(product, selection))),
+    [product, selection]
+  );
 
   const [activeIndex, setActiveIndex] = useState(0);
   const [direction, setDirection] = useState(0);
 
+  // Snap back to the first photo only when the selected variant actually changes.
+  // (Keying the reset on the array reference re-fired on every render as soon as
+  // the source returned a fresh array — breaking next/prev navigation.)
   useEffect(() => {
     setActiveIndex(0);
-  }, [activeImages]);
+  }, [selKey]);
 
   if (!activeImages.length) {
     return (
@@ -37,7 +47,7 @@ export function ProductGallery({
     );
   }
 
-  const currentUrl = activeImages[activeIndex];
+  const currentUrl = activeImages[Math.min(activeIndex, activeImages.length - 1)];
   const isVideo = currentUrl?.match(/\.(mp4|webm|mov)$/i);
 
   function paginate(newDirection: number) {

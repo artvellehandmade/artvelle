@@ -8,6 +8,7 @@ import { getSettings } from "@/lib/settings";
 import { sendOrderStatusEmail } from "@/lib/email";
 import { isLeadStatus } from "@/lib/leads";
 import { slugify } from "@/lib/utils";
+import { deriveVariantModel } from "@/lib/variants";
 import {
   chooseCourierForOrder,
   createDraftForOrder,
@@ -73,6 +74,9 @@ const productSchema = z.object({
   sellableVariants: z.any().optional(),
   variantPrices: z.any().optional(),
   variants: z.any().optional(),
+  // Clean preview/gallery/common media split from the editor's Media tab:
+  // { previews: Record<visualValue,string>, galleries: Record<visualValue,string[]>, common: string[] }.
+  media: z.any().optional(),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
   // Which checkout modes this product supports (subset of the 4 modes).
@@ -102,6 +106,12 @@ export async function createProduct(input: ProductInput) {
   }
   const data = parsed.data;
   const slug = await ensureUniqueSlug(data.name);
+  const { attributes, sellableVariants } = deriveVariantModel({
+    options: data.options,
+    variants: (data as { variants?: unknown }).variants,
+    price: data.price,
+    stock: data.stock,
+  });
 
   const product = await prisma.product.create({
     data: {
@@ -110,10 +120,10 @@ export async function createProduct(input: ProductInput) {
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options ?? [],
-      attributes: data.attributes ?? [],
+      attributes,
       propertyModules: data.propertyModules ?? {},
       rules: data.rules ?? {},
-      sellableVariants: data.sellableVariants ?? [],
+      sellableVariants,
       variantPrices: data.variantPrices ?? [],
       variants: data.variants ?? [],
       paymentModes: data.paymentModes,
@@ -135,13 +145,44 @@ export async function createProduct(input: ProductInput) {
   return { ok: true as const, id: product.id };
 }
 
+/**
+ * Persist ProductImage rows from the editor's clean preview/gallery/common media
+ * split (`data.media`), and upsert a Media row for every referenced url.
+ *
+ * Row contract (matches the storefront reader):
+ *  - Each visual variant value V (the FIRST option's chosen value, e.g. "Pink"):
+ *      preview → slot="preview", variantValue=V, sortOrder=0 (when a preview exists)
+ *      gallery → slot="gallery", variantValue=V, sortOrder=0..n
+ *  - Common gallery → slot="common", variantValue=null, sortOrder=0..n
+ *  - Deduped to respect @@unique([productId, mediaId, variantValue]).
+ * When no media split is present, product-level images fall back to slot="common".
+ */
 async function syncProductImages(productId: string, data: z.infer<typeof productSchema>) {
-  const urls = new Set<string>();
-  data.images.forEach(img => urls.add(img));
-  ((data as any).variants || []).forEach((v: any) => (v.images || []).forEach((img: any) => urls.add(img)));
-  ((data as any).sellableVariants || []).forEach((v: any) => (v.images || []).forEach((img: any) => urls.add(img)));
+  const media = (data as { media?: unknown }).media as
+    | { previews?: Record<string, string>; galleries?: Record<string, string[]>; common?: string[] }
+    | undefined;
+  // The editor always sends a media object, but it's empty for products without
+  // visual variants — in that case fall back to writing the flat image list.
+  const hasMediaContent =
+    !!media &&
+    ((media.common?.length ?? 0) > 0 ||
+      Object.values(media.galleries ?? {}).some((a) => (a?.length ?? 0) > 0) ||
+      Object.keys(media.previews ?? {}).length > 0);
 
-  // Ensure Media exists
+  // 1) Ensure a Media row exists for every referenced url.
+  const urls = new Set<string>();
+  data.images.forEach((img) => img && urls.add(img));
+  if (media) {
+    Object.values(media.previews ?? {}).forEach((u) => u && urls.add(u));
+    Object.values(media.galleries ?? {}).forEach((arr) =>
+      (arr ?? []).forEach((u) => u && urls.add(u))
+    );
+    (media.common ?? []).forEach((u) => u && urls.add(u));
+  }
+  ((data as any).variants || []).forEach((v: any) =>
+    (v.images || []).forEach((img: any) => img && urls.add(img))
+  );
+
   for (const url of Array.from(urls)) {
     if (!url) continue;
     const file = url.split("/").pop() || url;
@@ -152,53 +193,73 @@ async function syncProductImages(productId: string, data: z.infer<typeof product
     });
   }
 
-  // Clear old relations
+  // Map url → mediaId so we don't re-query per row.
+  const mediaRows = await prisma.media.findMany({
+    where: { url: { in: Array.from(urls).filter(Boolean) } },
+    select: { id: true, url: true },
+  });
+  const idByUrl = new Map(mediaRows.map((m) => [m.url, m.id]));
+
+  // 2) Rebuild the relations.
   await prisma.productImage.deleteMany({ where: { productId } });
 
-  // Re-create common images
-  let sortOrder = 0;
-  for (const url of data.images) {
-    if (!url) continue;
-    const media = await prisma.media.findUnique({ where: { url } });
-    if (media) {
-      await prisma.productImage.create({
-        data: { productId, mediaId: media.id, variantValue: null, sortOrder: sortOrder++, slot: sortOrder === 1 && data.variants.length === 0 ? "hero" : "gallery" }
-      });
+  // Build the desired rows, deduped by (variantValue, mediaId) so the
+  // @@unique constraint is never violated (a preview that also appears in its
+  // gallery is kept once, as the preview).
+  type Row = { mediaId: string; variantValue: string | null; slot: string; sortOrder: number };
+  const rows: Row[] = [];
+  const seen = new Set<string>(); // key = `${variantValue ?? ""}::${mediaId}`
+  const push = (mediaId: string, variantValue: string | null, slot: string, sortOrder: number) => {
+    const key = `${variantValue ?? ""}::${mediaId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    rows.push({ mediaId, variantValue, slot, sortOrder });
+    return true;
+  };
+
+  if (hasMediaContent && media) {
+    const galleries = media.galleries ?? {};
+    const previews = media.previews ?? {};
+    // Every visual value that has a gallery and/or a preview.
+    const values = new Set<string>([
+      ...Object.keys(galleries),
+      ...Object.keys(previews),
+    ]);
+    for (const val of values) {
+      const preview = previews[val];
+      if (preview) {
+        const id = idByUrl.get(preview);
+        if (id) push(id, val, "preview", 0);
+      }
+      let gs = 0;
+      for (const url of galleries[val] ?? []) {
+        const id = idByUrl.get(url);
+        if (!id) continue;
+        if (push(id, val, "gallery", gs)) gs += 1;
+      }
+    }
+    // Common gallery — shown for every variant.
+    let cs = 0;
+    for (const url of media.common ?? []) {
+      const id = idByUrl.get(url);
+      if (!id) continue;
+      if (push(id, null, "common", cs)) cs += 1;
+    }
+  } else {
+    // No clean media split — treat product images as common.
+    let cs = 0;
+    for (const url of data.images) {
+      const id = idByUrl.get(url);
+      if (!id) continue;
+      if (push(id, null, "common", cs)) cs += 1;
     }
   }
 
-  // Re-create variant images — keyed by the visual variant value (first option value)
-  for (const v of data.variants) {
-    // Use the first combo value as the visual variant identifier (e.g. "Pink")
-    const variantValue = (Object.values(v.combo ?? {})[0] as string | undefined) ?? null;
-    let vSort = 0;
-
-    // Save preview image if exists
-    if (v.previewImage) {
-      const media = await prisma.media.findUnique({ where: { url: v.previewImage } });
-      if (media) {
-        try {
-          await prisma.productImage.create({
-            data: { productId, mediaId: media.id, variantValue, slot: "preview", sortOrder: vSort++ }
-          });
-        } catch { /* duplicate, skip */ }
-      }
-    }
-
-    // Save gallery images
-    for (const url of v.images) {
-      if (!url) continue;
-      const media = await prisma.media.findUnique({ where: { url } });
-      if (media) {
-        const existing = await prisma.productImage.findFirst({
-          where: { productId, mediaId: media.id, variantValue }
-        });
-        if (!existing) {
-          await prisma.productImage.create({
-            data: { productId, mediaId: media.id, variantValue, slot: "gallery", sortOrder: vSort++ }
-          });
-        }
-      }
+  for (const row of rows) {
+    try {
+      await prisma.productImage.create({ data: { productId, ...row } });
+    } catch {
+      /* duplicate / race — skip */
     }
   }
 }
@@ -211,6 +272,12 @@ export async function updateProduct(id: string, input: ProductInput) {
   }
   const data = parsed.data;
   const slug = await ensureUniqueSlug(data.name, id);
+  const { attributes, sellableVariants } = deriveVariantModel({
+    options: data.options,
+    variants: (data as { variants?: unknown }).variants,
+    price: data.price,
+    stock: data.stock,
+  });
 
   await prisma.product.update({
     where: { id },
@@ -220,10 +287,10 @@ export async function updateProduct(id: string, input: ProductInput) {
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
       options: data.options ?? [],
-      attributes: data.attributes ?? [],
+      attributes,
       propertyModules: data.propertyModules ?? {},
       rules: data.rules ?? {},
-      sellableVariants: data.sellableVariants ?? [],
+      sellableVariants,
       variantPrices: data.variantPrices ?? [],
       variants: data.variants ?? [],
       paymentModes: data.paymentModes,

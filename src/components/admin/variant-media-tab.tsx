@@ -1,31 +1,28 @@
 "use client";
 
 /**
- * VariantMediaTab — the new "Media" section inside the product form's variant module.
+ * VariantMediaTab — the "Media" section inside the product form's Variants tab.
  *
- * Replaces the old flat "Photos" column in the variant table.
  * Divides management into 3 focused sections:
  *
  *   1. Variant Previews   — one hero preview per visual variant value
- *   2. Design Galleries   — per-value galleries (accordion, reorderable)
- *   3. Common Gallery     — images shared across ALL variants (packaging, lifestyle…)
+ *   2. Design Galleries   — per-value galleries (accordion, drag-to-reorder),
+ *                           each with a read-only "Final gallery" preview
+ *   3. Common Gallery     — images shared across ALL variants (drag-to-reorder)
  *
- * The frontend gallery renders:  selectedDesignGallery + commonGallery
+ * The storefront gallery renders:  selectedDesignGallery + commonGallery
+ * (this is exactly what the per-variant "Final gallery" preview shows).
  */
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import Image from "next/image";
-import { toast } from "sonner";
 import {
   ChevronDown,
   ChevronRight,
   GripVertical,
-  Sparkles,
-  Trash2,
   X,
 } from "lucide-react";
 import { PhotoPicker } from "@/components/admin/photo-picker";
-import { cn } from "@/lib/utils";
 import type { ProductOption } from "@/lib/types";
 
 export type VisualGalleryState = {
@@ -44,6 +41,18 @@ type Props = {
   productCategory?: string;
   productSubcategory?: string;
 };
+
+/** Sentinel scope for the common gallery when tracking a drag. */
+const COMMON_SCOPE = "__common__";
+
+/** Reorder helper — move `from` to `to`, returning a new array. */
+function reorder(list: string[], from: number, to: number): string[] {
+  if (to < 0 || to >= list.length || from === to) return list;
+  const next = [...list];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  return next;
+}
 
 export function VariantMediaTab({
   options,
@@ -67,7 +76,8 @@ export function VariantMediaTab({
     new Set(visualValues.slice(0, 1)) // open first by default
   );
 
-  const [autoFilling, setAutoFilling] = useState<string | null>(null);
+  // Which image is being dragged: { scope: variantValue | COMMON_SCOPE, index }.
+  const [drag, setDrag] = useState<{ scope: string; index: number } | null>(null);
 
   function toggleSection(val: string) {
     setOpenSections((prev) => {
@@ -109,60 +119,20 @@ export function VariantMediaTab({
     setCommon(state.common.filter((u) => u !== url));
   }
 
-  // ---- Auto Fill ----
-  const autoFill = useCallback(
-    async (variantValue: string) => {
-      if (autoFilling) return;
-      setAutoFilling(variantValue);
-      try {
-        const params = new URLSearchParams({ limit: "100" });
-        if (productCategory) params.set("category", productCategory);
-        if (productSubcategory) params.set("subcategoryName", productSubcategory);
-        params.set("variantValue", variantValue);
+  // ---- Drag-and-drop reordering ----
+  function onDropInGallery(variantValue: string, target: number) {
+    if (drag && drag.scope === variantValue) {
+      setGallery(variantValue, reorder(state.galleries[variantValue] ?? [], drag.index, target));
+    }
+    setDrag(null);
+  }
 
-        const resp = await fetch(`/api/admin/media?${params}`);
-        const data = await resp.json();
-        if (!resp.ok) throw new Error(data.error);
-
-        const designUrls: string[] = data.photos.map((p: { url: string }) => p.url);
-
-        // Also pull common images (no variant tag, same category)
-        const commonParams = new URLSearchParams({ limit: "100", variantValue: "__common__" });
-        if (productCategory) commonParams.set("category", productCategory);
-        if (productSubcategory) commonParams.set("subcategoryName", productSubcategory);
-        const commonResp = await fetch(`/api/admin/media?${commonParams}`);
-        const commonData = await commonResp.json();
-        const commonUrls: string[] = (commonData.photos ?? []).map((p: { url: string }) => p.url);
-
-        // Merge into state: preserve existing manual picks, add new ones
-        const existingGallery = state.galleries[variantValue] ?? [];
-        const newGallery = [...new Set([...existingGallery, ...designUrls])];
-        const existingCommon = state.common ?? [];
-        const newCommon = [...new Set([...existingCommon, ...commonUrls])];
-
-        onChange({
-          ...state,
-          galleries: { ...state.galleries, [variantValue]: newGallery },
-          common: newCommon,
-          previews: {
-            ...state.previews,
-            ...(newGallery[0] && !state.previews[variantValue]
-              ? { [variantValue]: newGallery[0] }
-              : {}),
-          },
-        });
-
-        toast.success(
-          `Auto-filled ${designUrls.length} design image${designUrls.length !== 1 ? "s" : ""} + ${commonUrls.length} common image${commonUrls.length !== 1 ? "s" : ""}`
-        );
-      } catch (err: unknown) {
-        toast.error(err instanceof Error ? err.message : "Auto-fill failed");
-      } finally {
-        setAutoFilling(null);
-      }
-    },
-    [autoFilling, productCategory, productSubcategory, state, onChange]
-  );
+  function onDropInCommon(target: number) {
+    if (drag && drag.scope === COMMON_SCOPE) {
+      setCommon(reorder(state.common, drag.index, target));
+    }
+    setDrag(null);
+  }
 
   if (visualValues.length === 0) {
     return (
@@ -232,13 +202,14 @@ export function VariantMediaTab({
       <div>
         <SectionHeader
           title="Design Galleries"
-          description="Assign a gallery to each design. All sizes/combos sharing this design will use these images."
+          description="Assign a gallery to each design. All sizes/combos sharing this design will use these images. Drag photos to reorder."
         />
         <div className="mt-3 space-y-2">
           {visualValues.map((val) => {
             const gallery = state.galleries[val] ?? [];
-            const isOpen  = openSections.has(val);
-            const isFilling = autoFilling === val;
+            const isOpen = openSections.has(val);
+            // The storefront shows this design's gallery followed by the common gallery.
+            const finalGallery = [...gallery, ...state.common];
 
             return (
               <div key={val} className="overflow-hidden rounded-xl border border-border">
@@ -263,20 +234,6 @@ export function VariantMediaTab({
                   <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
                     {/* Actions row */}
                     <div className="flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => autoFill(val)}
-                        disabled={!!autoFilling}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-xs font-medium transition-all",
-                          isFilling
-                            ? "border-accent/40 bg-accent/10 text-accent"
-                            : "border-accent/50 text-accent hover:bg-accent/5"
-                        )}
-                      >
-                        <Sparkles className={cn("h-3.5 w-3.5", isFilling && "animate-pulse")} />
-                        {isFilling ? "Auto-filling…" : "Auto Fill"}
-                      </button>
                       <PhotoPicker
                         selected={gallery}
                         onChange={(imgs) => setGallery(val, imgs)}
@@ -287,21 +244,34 @@ export function VariantMediaTab({
                       />
                     </div>
 
-                    {/* Gallery grid */}
+                    {/* Gallery grid (drag to reorder) */}
                     {gallery.length > 0 ? (
                       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                         {gallery.map((img, i) => (
                           <div
                             key={img}
-                            className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted"
+                            draggable
+                            onDragStart={() => setDrag({ scope: val, index: i })}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => onDropInGallery(val, i)}
+                            onDragEnd={() => setDrag(null)}
+                            className={`group relative aspect-square cursor-move overflow-hidden rounded-lg border bg-muted transition-all ${
+                              drag?.scope === val && drag.index === i
+                                ? "border-accent opacity-40 ring-2 ring-accent"
+                                : "border-border"
+                            }`}
                           >
                             <Image
                               src={decodeURI(img)}
                               alt={`${val} image ${i + 1}`}
                               fill
                               sizes="80px"
-                              className="object-cover"
+                              className="pointer-events-none object-cover"
                             />
+                            {/* Drag handle hint */}
+                            <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                              <GripVertical className="h-3 w-3" />
+                            </span>
                             {/* Set as preview button */}
                             {state.previews[val] !== img && (
                               <button
@@ -321,7 +291,7 @@ export function VariantMediaTab({
                             <button
                               type="button"
                               onClick={() => removeFromGallery(val, img)}
-                              className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger"
+                              className="absolute right-1 bottom-1 grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger"
                               aria-label="Remove"
                             >
                               <X className="h-3 w-3" />
@@ -331,9 +301,44 @@ export function VariantMediaTab({
                       </div>
                     ) : (
                       <p className="rounded-lg bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                        No images yet — use Auto Fill or Pick Photos.
+                        No images yet — use Pick Photos.
                       </p>
                     )}
+
+                    {/* Read-only "Final gallery" = this design's gallery + common */}
+                    <div>
+                      <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Final gallery preview ({finalGallery.length})
+                      </p>
+                      {finalGallery.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          {finalGallery.map((img, i) => (
+                            <div
+                              key={`${img}-${i}`}
+                              className="relative h-12 w-12 overflow-hidden rounded-md border border-border bg-muted"
+                              title={i < gallery.length ? "Design image" : "Common image"}
+                            >
+                              <Image
+                                src={decodeURI(img)}
+                                alt={`Final ${i + 1}`}
+                                fill
+                                sizes="48px"
+                                className="object-cover"
+                              />
+                              {i >= gallery.length && (
+                                <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[7px] leading-tight text-white">
+                                  common
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Nothing yet — this design has no images and there are no common images.
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -346,7 +351,7 @@ export function VariantMediaTab({
       <div>
         <SectionHeader
           title="Common Gallery"
-          description="These images always appear, regardless of which design is selected — packaging, lifestyle, dimensions, etc."
+          description="These images always appear, regardless of which design is selected — packaging, lifestyle, dimensions, etc. Drag to reorder."
         />
         <div className="mt-3 space-y-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -364,15 +369,28 @@ export function VariantMediaTab({
               {state.common.map((img, i) => (
                 <div
                   key={img}
-                  className="group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted"
+                  draggable
+                  onDragStart={() => setDrag({ scope: COMMON_SCOPE, index: i })}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => onDropInCommon(i)}
+                  onDragEnd={() => setDrag(null)}
+                  className={`group relative aspect-square cursor-move overflow-hidden rounded-lg border bg-muted transition-all ${
+                    drag?.scope === COMMON_SCOPE && drag.index === i
+                      ? "border-accent opacity-40 ring-2 ring-accent"
+                      : "border-border"
+                  }`}
                 >
                   <Image
                     src={decodeURI(img)}
                     alt={`Common image ${i + 1}`}
                     fill
                     sizes="80px"
-                    className="object-cover"
+                    className="pointer-events-none object-cover"
                   />
+                  {/* Drag handle hint */}
+                  <span className="absolute left-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                    <GripVertical className="h-3 w-3" />
+                  </span>
                   <button
                     type="button"
                     onClick={() => removeFromCommon(img)}

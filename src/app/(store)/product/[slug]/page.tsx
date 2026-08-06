@@ -7,10 +7,11 @@ import { getProductCrumb } from "@/lib/catalog";
 import { formatINR } from "@/lib/utils";
 import { ProductGallery } from "@/components/store/product-gallery";
 import { ProductPurchase } from "@/components/store/product-purchase";
+import { ProductPrice } from "@/components/store/product-price";
 import { ProductCard } from "@/components/store/product-card";
 import { DescriptionCollapse } from "@/components/store/description-collapse";
 import { ProductViewProvider } from "@/context/product-view";
-import { priceRange } from "@/lib/variants";
+import { priceRange, firstAvailableSelection } from "@/lib/variants";
 import { getSettings } from "@/lib/settings";
 import { siteUrl } from "@/lib/site-url";
 
@@ -47,7 +48,10 @@ export async function generateMetadata({
     .join(" ")
     .slice(0, 158);
 
-  const images    = product.images.filter(Boolean);
+  // Prefer the relational gallery (source of truth) for share images; fall back
+  // to the legacy product.images array.
+  const mediaUrls = (product.media ?? []).map((m) => m.url).filter(Boolean);
+  const images    = mediaUrls.length ? mediaUrls : product.images.filter(Boolean);
   const canonical = `/product/${product.slug}`;
 
   return {
@@ -96,22 +100,15 @@ export default async function ProductPage({
     getProductCrumb(product.subcategoryId),
   ]);
 
-  const discount =
-    product.compareAtPrice && product.compareAtPrice > product.price
-      ? Math.round(
-          ((product.compareAtPrice - product.price) / product.compareAtPrice) * 100
-        )
-      : 0;
-
-
   const range     = priceRange(product);
-  const hasRange  = range.min !== range.max;
   const { rating, count } = stubRating(product.name);
+  const initialSelection = firstAvailableSelection(product);
 
   const base            = siteUrl();
   const productUrl      = `${base}/product/${product.slug}`;
-  const absoluteImages  = product.images
-    .filter(Boolean)
+  // JSON-LD images: prefer the relational gallery, fall back to product.images.
+  const mediaUrls       = (product.media ?? []).map((m) => m.url).filter(Boolean);
+  const absoluteImages  = (mediaUrls.length ? mediaUrls : product.images.filter(Boolean))
     .map((src) => (src.startsWith("http") ? src : `${base}${src}`));
 
   const jsonLd = {
@@ -193,7 +190,7 @@ export default async function ProductPage({
         <span className="truncate text-foreground">{product.name}</span>
       </nav>
 
-      <ProductViewProvider>
+      <ProductViewProvider initial={initialSelection}>
         <div className="grid items-start gap-8 md:grid-cols-2 md:gap-12 lg:gap-16">
           {/* ── Gallery — sticky on desktop ── */}
           <div className="md:sticky md:top-24 md:self-start min-w-0">
@@ -231,24 +228,8 @@ export default async function ProductPage({
               <span className="text-sm text-muted-foreground">({count} reviews)</span>
             </div>
 
-            {/* Price */}
-            <div className="mt-3 flex items-baseline gap-3">
-              <span className="text-2xl font-semibold md:text-3xl">
-                {hasRange
-                  ? `${formatINR(range.min)} – ${formatINR(range.max)}`
-                  : formatINR(range.min)}
-              </span>
-              {!hasRange && discount > 0 && (
-                <>
-                  <span className="text-lg text-muted-foreground line-through">
-                    {formatINR(product.compareAtPrice!)}
-                  </span>
-                  <span className="rounded-full bg-accent px-2.5 py-0.5 text-xs font-medium text-accent-foreground">
-                    Save {discount}%
-                  </span>
-                </>
-              )}
-            </div>
+            {/* Price — tracks the selected variant (client component) */}
+            <ProductPrice product={product} />
 
             {/* Stock status */}
             <p className="mt-2 text-sm">

@@ -76,6 +76,8 @@ export async function GET(req: Request) {
         variantAttribute: m.variantAttribute,
         variantValue:    m.variantValue,
         subcategoryName: m.subcategoryName,
+        tags:            m.tags,
+        roles:           m.roles,
         size:            m.size,
         width:           m.width,
         height:          m.height,
