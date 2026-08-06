@@ -150,7 +150,10 @@ export async function createProduct(input: ProductInput) {
  * split (`data.media`), and upsert a Media row for every referenced url.
  *
  * Row contract (matches the storefront reader):
- *  - Each visual variant value V (the FIRST option's chosen value, e.g. "Pink"):
+ *  - Each visual variant value V is a value of the product's image-driving option
+ *    (Product.propertyModules.images[0], e.g. "Pink"). The editor already keys
+ *    `media.galleries` / `media.previews` on those values, so we use their keys
+ *    directly rather than assuming any particular option:
  *      preview → slot="preview", variantValue=V, sortOrder=0 (when a preview exists)
  *      gallery → slot="gallery", variantValue=V, sortOrder=0..n
  *  - Common gallery → slot="common", variantValue=null, sortOrder=0..n

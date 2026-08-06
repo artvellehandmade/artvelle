@@ -25,18 +25,18 @@ type Props = {
 };
 
 /** Which top-level tab of the editor is showing. */
-type EditorTab = "basic" | "pricing" | "options" | "variants";
-/** Sub-tab inside the "Variants" tab. */
-type VariantTab = "pricing" | "media";
+type EditorTab = "optvar" | "pricing" | "media";
 
 /**
  * ProductForm — the admin product editor.
  *
- * Organised into top-level tabs (Basic Info / Pricing & Stock / Options /
- * Variants). The "Variants" tab has two sub-tabs: a combination pricing/stock
- * table and the visual-variant Media manager. Pricing uses a "Discount %" model
- * (compareAtPrice is derived from it) and, when variants exist, the product
- * price is the minimum available variant price.
+ * A persistent section (Basic Info, Organisation, Images, Checkout modes,
+ * Shipping) sits above three top-level tabs: "Options & Variants" (the option
+ * builder + combination generation), "Price & Stock" (base price / discount /
+ * stock plus the per-combination pricing table) and "Media" (the visual-variant
+ * gallery manager). Pricing uses a "Discount %" model (compareAtPrice is derived
+ * from it) and, when variants exist, the product price is the minimum available
+ * variant price.
  */
 export function ProductForm({
   product,
@@ -52,9 +52,8 @@ export function ProductForm({
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
-  // Which tab / sub-tab is visible.
-  const [tab, setTab] = useState<EditorTab>("basic");
-  const [variantTab, setVariantTab] = useState<VariantTab>("pricing");
+  // Which top-level tab is visible.
+  const [tab, setTab] = useState<EditorTab>("optvar");
 
   // Derive the "Discount %" field from an existing compare-at price:
   // discount = compareAtPrice > price ? round((cap - price) / cap * 100) : 0.
@@ -114,6 +113,11 @@ export function ProductForm({
   const [options, setOptions] = useState<ProductOption[]>(
     product?.options ?? []
   );
+  // Which option's values drive the per-variant image galleries (Media tab).
+  // Persisted as Product.propertyModules.images = [name]; defaults to first option.
+  const [imageOption, setImageOption] = useState<string>(
+    product?.propertyModules?.images?.[0] ?? ""
+  );
 
   // ---- Variants (Flipkart-style: price / stock / availability per combo) ----
   type VariantEntry = { available: boolean; price: string; stock: string };
@@ -167,15 +171,21 @@ export function ProductForm({
     const galleries: Record<string, string[]> = {};
     const previews: Record<string, string> = {};
     const commonSet = new Set<string>();
+    // Galleries are keyed by the image-driving option's value. Use the stored
+    // choice (propertyModules.images) when present, else the first option.
+    const imgOpt =
+      product?.propertyModules?.images?.[0] ?? product?.options?.[0]?.name ?? "";
     if (product?.variants?.length) {
       for (const v of product.variants) {
-        const firstVal = Object.values(v.combo ?? {})[0];
-        if (firstVal && v.images?.length) {
-          galleries[firstVal] = galleries[firstVal] ?? [];
+        const visualVal = imgOpt
+          ? v.combo?.[imgOpt]
+          : Object.values(v.combo ?? {})[0];
+        if (visualVal && v.images?.length) {
+          galleries[visualVal] = galleries[visualVal] ?? [];
           for (const img of v.images) {
-            if (!galleries[firstVal].includes(img)) galleries[firstVal].push(img);
+            if (!galleries[visualVal].includes(img)) galleries[visualVal].push(img);
           }
-          if (!previews[firstVal]) previews[firstVal] = v.images[0];
+          if (!previews[visualVal]) previews[visualVal] = v.images[0];
         }
       }
     }
@@ -197,6 +207,13 @@ export function ProductForm({
         .filter((g) => g.name && g.values.length > 0),
     [options]
   );
+
+  // The effective image-driving option: the admin's choice if it still exists,
+  // else the first option. Empty string when the product has no options.
+  const imageDrivingOption = useMemo(() => {
+    const names = optionMatrix.map((o) => o.name);
+    return imageOption && names.includes(imageOption) ? imageOption : names[0] ?? "";
+  }, [imageOption, optionMatrix]);
 
   // All combinations of the current options (recomputed as options change).
   const combos = useMemo(() => allCombinations(optionMatrix), [optionMatrix]);
@@ -392,13 +409,11 @@ export function ProductForm({
     // Required fields live on different tabs, so validate here and jump the
     // admin to the offending tab (HTML5 required can't fire on unmounted tabs).
     if (!form.name.trim()) {
-      setTab("basic");
       toast.error("Name is required");
       setSaving(false);
       return;
     }
     if (!form.description.trim()) {
-      setTab("basic");
       toast.error("Description is required");
       setSaving(false);
       return;
@@ -429,16 +444,36 @@ export function ProductForm({
       }))
       .filter((g) => g.name && g.choices.length > 0);
 
+    // Keep only the galleries/previews for the image-driving option's values, so
+    // orphaned keys (left over from switching which option controls images) are
+    // never persisted. syncProductImages keys ProductImage.variantValue on these.
+    const imageValues = new Set(
+      optionMatrix.find((o) => o.name === imageDrivingOption)?.values ?? []
+    );
+    const cleanGalleries: Record<string, string[]> = {};
+    for (const [val, imgs] of Object.entries(visualGallery.galleries)) {
+      if (imageValues.has(val) && imgs.length) cleanGalleries[val] = imgs;
+    }
+    const cleanPreviews: Record<string, string> = {};
+    for (const [val, url] of Object.entries(visualGallery.previews)) {
+      if (imageValues.has(val) && url) cleanPreviews[val] = url;
+    }
+    const cleanMedia: VisualGalleryState = {
+      galleries: cleanGalleries,
+      previews: cleanPreviews,
+      common: visualGallery.common,
+    };
+
     // Build the variant matrix. Images per combo are derived from the visual
-    // gallery: all combos sharing the same first option value (e.g. "Pink") get
-    // that value's Design Gallery + the common gallery. Blank price/stock is
-    // sent through as "" so deriveVariantModel inherits the product's values.
+    // gallery: all combos sharing the same image-driving value (e.g. "Pink") get
+    // that value's gallery + the common gallery. Blank price/stock is sent
+    // through as "" so deriveVariantModel inherits the product's values.
     const variants = hasVariants
       ? combos.map((combo) => {
           const v = variantOf(comboKey(combo));
-          // Infer the visual value from the first option in this combo.
-          const visualVal = Object.values(combo)[0] ?? null;
-          const designImages = visualVal ? (visualGallery.galleries[visualVal] ?? []) : [];
+          // The visual value is this combo's choice for the image-driving option.
+          const visualVal = (imageDrivingOption ? combo[imageDrivingOption] : null) ?? null;
+          const designImages = visualVal ? (cleanGalleries[visualVal] ?? []) : [];
           const comboImages = [...designImages, ...visualGallery.common];
           return {
             combo,
@@ -446,19 +481,26 @@ export function ProductForm({
             stock: v.stock === "" ? "" : Number(v.stock) || 0,
             available: v.available,
             images: comboImages,
-            previewImage: visualVal ? (visualGallery.previews[visualVal] ?? null) : null,
+            previewImage: visualVal ? (cleanPreviews[visualVal] ?? null) : null,
           };
         })
       : [];
 
     // Derive a flat images array for the product (unique gallery images).
     const allVariantImages = new Set<string>();
-    for (const gal of Object.values(visualGallery.galleries)) {
+    for (const gal of Object.values(cleanGalleries)) {
       for (const img of gal) allVariantImages.add(img);
     }
     for (const img of visualGallery.common) allVariantImages.add(img);
     // Fall back to the old `images` state if gallery is empty (e.g. product with no variants).
     const derivedImages = allVariantImages.size > 0 ? [...allVariantImages] : images;
+
+    // Persist which option drives the image galleries (storefront reader contract:
+    // Product.propertyModules.images = [optionName]). Preserve any other modules.
+    const propertyModules = {
+      ...(product?.propertyModules ?? {}),
+      images: imageDrivingOption ? [imageDrivingOption] : [],
+    };
 
     // Product price is the min available variant price when variants exist,
     // otherwise the entered base. Discount % round-trips through compareAtPrice.
@@ -473,6 +515,8 @@ export function ProductForm({
       secondaryCategory: form.secondaryCategory || null,
       subcategoryId: form.subcategoryId || null,
       options: cleanOptions,
+      // Which option controls the image galleries (storefront reader contract).
+      propertyModules,
       variantPrices: [], // superseded by `variants`
       variants,
       price,
@@ -485,7 +529,7 @@ export function ProductForm({
         .filter(Boolean),
       images: derivedImages,
       // Clean preview/gallery/common split so the server can persist ProductImage rows.
-      media: visualGallery,
+      media: cleanMedia,
       isFeatured: form.isFeatured,
       isActive: form.isActive,
       paymentModes: (paymentModes.length ? paymentModes : ["prepaid", "cod"]) as (
@@ -527,35 +571,16 @@ export function ProductForm({
   }
 
   const TABS: { id: EditorTab; label: string }[] = [
-    { id: "basic", label: "Basic Info" },
-    { id: "pricing", label: "Pricing & Stock" },
-    { id: "options", label: "Options" },
-    { id: "variants", label: "Variants" },
+    { id: "optvar", label: "Options & Variants" },
+    { id: "pricing", label: "Price & Stock" },
+    { id: "media", label: "Media" },
   ];
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
-      {/* ── Tab bar ── */}
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => setTab(t.id)}
-            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
-              tab === t.id
-                ? "border-accent text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Basic Info ── */}
-      {tab === "basic" && (
-        <div className="grid gap-6 lg:grid-cols-2">
+      {/* ── Persistent section — Basic Info, Organisation, Images, Checkout
+          modes and Shipping stay visible above the tab bar. ── */}
+      <div className="grid gap-6 lg:grid-cols-2">
           <Card title="Product details">
             <label className="block">
               <span className="label">Name *</span>
@@ -779,90 +804,11 @@ export function ProductForm({
               </div>
               <p className="text-xs text-muted-foreground">
                 Drag photos to reorder them (or use the arrows on hover). The first
-                image is used as the cover. When you use the Variants → Media tab,
-                the product gallery is built from those design galleries instead.
+                image is used as the cover. When you use the <b>Media</b> tab, the
+                product gallery is built from those variant galleries instead.
               </p>
             </Card>
           </div>
-        </div>
-      )}
-
-      {/* ── Pricing & Stock ── */}
-      {tab === "pricing" && (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Card title="Pricing & stock">
-            <label className="block">
-              <span className="label">Price (₹) *</span>
-              <input
-                type="number"
-                min={0}
-                value={form.price}
-                onChange={(e) => set("price", e.target.value)}
-                className="input"
-              />
-              <span className="mt-1 block text-xs text-muted-foreground">
-                {hasVariants
-                  ? "Base price — inherited by any variant set to \"Use Product Price\"."
-                  : "The product's selling price."}
-              </span>
-            </label>
-
-            {hasVariants && (
-              <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
-                <span className="label">Product price (from variants)</span>
-                <p className="text-lg font-semibold">{formatINR(effectivePrice)}</p>
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  Lowest price across available combinations — shown to shoppers as
-                  the &ldquo;from&rdquo; price.
-                </span>
-              </div>
-            )}
-
-            <label className="block">
-              <span className="label">Discount %</span>
-              <div className="relative">
-                <input
-                  type="number"
-                  min={0}
-                  max={99}
-                  value={form.discount}
-                  onChange={(e) => set("discount", e.target.value)}
-                  className="input pr-8"
-                  placeholder="0"
-                />
-                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                  %
-                </span>
-              </div>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                Shows a &ldquo;Save X%&rdquo; badge. We store the implied original
-                price ({formatINR(effectivePrice)} at{" "}
-                {Math.min(99, Math.max(0, Number(form.discount) || 0))}% off ={" "}
-                {(() => {
-                  const p = Math.max(0, Math.round(effectivePrice));
-                  const d = Math.min(99, Math.max(0, Number(form.discount) || 0));
-                  return formatINR(d > 0 ? Math.round(p / (1 - d / 100)) : p);
-                })()}
-                ). Leave 0 for no discount.
-              </span>
-            </label>
-
-            <label className="block">
-              <span className="label">Stock *</span>
-              <input
-                type="number"
-                min={0}
-                value={form.stock}
-                onChange={(e) => set("stock", e.target.value)}
-                className="input"
-              />
-              {hasVariants && (
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Default stock — variants with a blank stock inherit this number.
-                </span>
-              )}
-            </label>
-          </Card>
 
           <Card title="Checkout modes">
             <p className="text-xs text-muted-foreground">
@@ -999,16 +945,113 @@ export function ProductForm({
             </Card>
           </div>
         </div>
+
+      {/* ── Tab bar ── */}
+      <div className="flex flex-wrap gap-1 border-b border-border">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`-mb-px rounded-t-lg border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+              tab === t.id
+                ? "border-accent text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Price & Stock ── */}
+      {tab === "pricing" && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Card title="Pricing & stock">
+            <label className="block">
+              <span className="label">Price (₹) *</span>
+              <input
+                type="number"
+                min={0}
+                value={form.price}
+                onChange={(e) => set("price", e.target.value)}
+                className="input"
+              />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {hasVariants
+                  ? "Base price — inherited by any variant set to \"Use Product Price\"."
+                  : "The product's selling price."}
+              </span>
+            </label>
+
+            {hasVariants && (
+              <div className="rounded-xl border border-border bg-muted/40 px-4 py-3">
+                <span className="label">Product price (from variants)</span>
+                <p className="text-lg font-semibold">{formatINR(effectivePrice)}</p>
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  Lowest price across available combinations — shown to shoppers as
+                  the &ldquo;from&rdquo; price.
+                </span>
+              </div>
+            )}
+
+            <label className="block">
+              <span className="label">Discount %</span>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  value={form.discount}
+                  onChange={(e) => set("discount", e.target.value)}
+                  className="input pr-8"
+                  placeholder="0"
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                  %
+                </span>
+              </div>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Shows a &ldquo;Save X%&rdquo; badge. We store the implied original
+                price ({formatINR(effectivePrice)} at{" "}
+                {Math.min(99, Math.max(0, Number(form.discount) || 0))}% off ={" "}
+                {(() => {
+                  const p = Math.max(0, Math.round(effectivePrice));
+                  const d = Math.min(99, Math.max(0, Number(form.discount) || 0));
+                  return formatINR(d > 0 ? Math.round(p / (1 - d / 100)) : p);
+                })()}
+                ). Leave 0 for no discount.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="label">Stock *</span>
+              <input
+                type="number"
+                min={0}
+                value={form.stock}
+                onChange={(e) => set("stock", e.target.value)}
+                className="input"
+              />
+              {hasVariants && (
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Default stock — variants with a blank stock inherit this number.
+                </span>
+              )}
+            </label>
+          </Card>
+        </div>
       )}
 
-      {/* ── Options ── */}
-      {tab === "options" && (
+      {/* ── Options & Variants ── */}
+      {tab === "optvar" && (
         <Card title="Options">
           <p className="-mt-1 text-xs text-muted-foreground">
             Let customers choose e.g. <b>Size</b> or <b>Vatki</b>.{" "}
             {useVariants ? (
               <>
-                Prices, stock and photos come from the <b>Variants</b> tab.
+                Prices and stock come from the <b>Price &amp; Stock</b> tab; photos
+                from the <b>Media</b> tab.
               </>
             ) : (
               <>Each choice can add to the price (leave 0 for no change).</>
@@ -1093,34 +1136,20 @@ export function ProductForm({
           >
             <Plus className="h-4 w-4" /> Add an option (Size, Type…)
           </button>
+
+          {combos.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              {combos.length} combination{combos.length !== 1 ? "s" : ""} generated
+              from these options. Set each one&apos;s price, stock and availability
+              in the <b>Price &amp; Stock</b> tab.
+            </p>
+          )}
         </Card>
       )}
 
-      {/* ── Variants ── */}
-      {tab === "variants" && (
-        <div className="space-y-4">
-          {/* Sub-tab bar */}
-          <div className="flex gap-2">
-            {([
-              { id: "pricing" as VariantTab, label: "Pricing & Stock" },
-              { id: "media" as VariantTab, label: "Media" },
-            ]).map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setVariantTab(s.id)}
-                className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
-                  variantTab === s.id
-                    ? "border-transparent bg-foreground text-background"
-                    : "border-border text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-
-          {variantTab === "pricing" && (
+      {/* ── Price & Stock: the per-combination table (renders in the same tab
+          as the base pricing card above). ── */}
+      {tab === "pricing" && (
             <Card title="Variant pricing & stock">
               {optionMatrix.length === 0 ? (
                 <p className="rounded-lg bg-muted/60 px-4 py-3 text-xs text-muted-foreground">
@@ -1341,29 +1370,50 @@ export function ProductForm({
             </Card>
           )}
 
-          {variantTab === "media" && (
-            <Card title="Media">
-              <p className="-mt-1 mb-4 text-xs text-muted-foreground">
-                Manage photos by <b>design</b> only — not by combination.
-                Every size + bowl combination sharing the same design will
-                automatically use that design&apos;s gallery. Images with no variant
-                tag go in the Common Gallery (packaging, lifestyle, dimensions).
-              </p>
-              <VariantMediaTab
-                options={options}
-                state={visualGallery}
-                onChange={setVisualGallery}
-                productCategory={form.category}
-                productSubcategory={
-                  subcategories.find((s) => s.id === form.subcategoryId)?.name
-                }
-              />
-            </Card>
+      {/* ── Media ── */}
+      {tab === "media" && (
+        <Card title="Media">
+          {optionMatrix.length > 1 && (
+            <label className="block max-w-xs">
+              <span className="label">Which option controls the images?</span>
+              <select
+                value={imageDrivingOption}
+                onChange={(e) => setImageOption(e.target.value)}
+                className="input"
+              >
+                {optionMatrix.map((o) => (
+                  <option key={o.name} value={o.name}>
+                    {o.name}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Galleries below are organised by this option&apos;s values. Combos
+                that differ only by the other options reuse the same photos.
+              </span>
+            </label>
           )}
-        </div>
+          <p className="-mt-1 mb-4 text-xs text-muted-foreground">
+            Manage photos by <b>{imageDrivingOption || "variant"}</b> — not by every
+            combination. Every combination sharing the same{" "}
+            {imageDrivingOption || "value"} automatically uses that value&apos;s
+            gallery. Images with no variant tag go in the Common Gallery (packaging,
+            lifestyle, dimensions).
+          </p>
+          <VariantMediaTab
+            options={options}
+            visualOptionName={imageDrivingOption}
+            state={visualGallery}
+            onChange={setVisualGallery}
+            productCategory={form.category}
+            productSubcategory={
+              subcategories.find((s) => s.id === form.subcategoryId)?.name
+            }
+          />
+        </Card>
       )}
 
-      {/* ── Actions (always visible) ── */}
+      {/* ── Actions (save / cancel — always visible) ── */}
       <div className="flex gap-3">
         <Button type="submit" disabled={saving} className="flex-1 sm:flex-none" size="lg">
           {saving ? (

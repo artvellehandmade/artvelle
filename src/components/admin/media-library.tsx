@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ProductSearchCombobox } from "./product-search";
 
 type Photo = {
   id: string;
@@ -43,9 +42,19 @@ type Library = { photos: Photo[]; usage: Record<string, PhotoUse[]> };
 // Classification options served by GET /api/admin/taxonomy.
 type TaxSubcategory = { name: string; slug: string };
 type TaxCategory = { name: string; slug: string; subcategories: TaxSubcategory[] };
+// One product with its own variant attributes → values, used to scope the
+// cascade so the Attribute/Value selects show only that product's options.
+type TaxProduct = {
+  id: string;
+  name: string;
+  category: string;
+  subcategoryName: string | null;
+  variantAttributes: Record<string, string[]>;
+};
 type Taxonomy = {
   categories: TaxCategory[];
   variantAttributes: Record<string, string[]>;
+  products: TaxProduct[];
 };
 
 // A saved combination of every sidebar/search filter, persisted to
@@ -121,6 +130,10 @@ export function MediaLibrary() {
   // UI-only scoping category for the Info panel: narrows the Subcategory
   // options. Does NOT persist (Media has no category column).
   const [catFilter, setCatFilter] = useState<string>("");
+  // UI-only product scope for the Info panel: picks which product's variant
+  // attributes/values populate the cascade below. Does NOT persist (Media has
+  // no product column) — it only narrows the Attribute/Value dropdowns.
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
 
   // Pagination — the API is capped at `PAGE_SIZE` per request; "Load more"
   // fetches the next page and appends it.
@@ -277,6 +290,7 @@ export function MediaLibrary() {
   // manual category choice survives subsequent subcategory edits (which mutate
   // `library` but not the active photo id).
   useEffect(() => {
+    setSelectedProductId(""); // new photo → drop any product scope
     if (!activePhotoId || !taxonomy) {
       setCatFilter("");
       return;
@@ -302,18 +316,53 @@ export function MediaLibrary() {
     return withCurrent(names, activePhoto?.subcategoryName);
   }, [taxonomy, catFilter, activePhoto?.subcategoryName]);
 
-  // Variant attribute names, auto-collected from products.
-  const attrOptions = useMemo(() => {
-    const base = taxonomy ? Object.keys(taxonomy.variantAttributes) : [];
-    return withCurrent(base, activePhoto?.variantAttribute);
-  }, [taxonomy, activePhoto?.variantAttribute]);
+  // The product chosen as the variant scope, resolved from taxonomy.products.
+  const selectedProduct = useMemo(
+    () => taxonomy?.products?.find((p) => p.id === selectedProductId) ?? null,
+    [taxonomy, selectedProductId]
+  );
 
-  // Values for the currently-selected variant attribute (empty when none).
+  // Products offered in the Product scope select: filtered by the scoped
+  // Category and (when set) the photo's Subcategory. All from taxonomy.products.
+  const productOptions = useMemo(() => {
+    const all = taxonomy?.products ?? [];
+    const sub = activePhoto?.subcategoryName || "";
+    return all.filter((p) => {
+      if (catFilter && p.category !== catFilter) return false;
+      if (sub && p.subcategoryName !== sub) return false;
+      return true;
+    });
+  }, [taxonomy, catFilter, activePhoto?.subcategoryName]);
+
+  // Drop the product scope once the current filters exclude it.
+  useEffect(() => {
+    if (selectedProductId && !productOptions.some((p) => p.id === selectedProductId)) {
+      setSelectedProductId("");
+    }
+  }, [productOptions, selectedProductId]);
+
+  // Variant attribute names: the scoped product's own keys when a product is
+  // chosen, otherwise the global set auto-collected across all products.
+  const attrOptions = useMemo(() => {
+    const base = selectedProduct
+      ? Object.keys(selectedProduct.variantAttributes)
+      : taxonomy
+        ? Object.keys(taxonomy.variantAttributes)
+        : [];
+    return withCurrent(base, activePhoto?.variantAttribute);
+  }, [selectedProduct, taxonomy, activePhoto?.variantAttribute]);
+
+  // Values for the currently-selected variant attribute — scoped to the chosen
+  // product when set, else the global values for that attribute (empty when none).
   const valueOptions = useMemo(() => {
     const attr = activePhoto?.variantAttribute || "";
-    const base = taxonomy && attr ? (taxonomy.variantAttributes[attr] ?? []) : [];
+    let base: string[] = [];
+    if (attr) {
+      if (selectedProduct) base = selectedProduct.variantAttributes[attr] ?? [];
+      else if (taxonomy) base = taxonomy.variantAttributes[attr] ?? [];
+    }
     return withCurrent(base, activePhoto?.variantValue);
-  }, [taxonomy, activePhoto?.variantAttribute, activePhoto?.variantValue]);
+  }, [selectedProduct, taxonomy, activePhoto?.variantAttribute, activePhoto?.variantValue]);
 
   const allTags = useMemo(() => {
     if (!library) return [];
@@ -504,6 +553,48 @@ export function MediaLibrary() {
     <div className="flex h-full">
       {/* Left Filters Sidebar */}
       <div className="w-64 shrink-0 border-r border-border bg-card overflow-y-auto hidden md:block p-4 space-y-6">
+        {/* Saved filter presets */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Saved Filters</h3>
+            <button
+              onClick={clearFilters}
+              className="text-[10px] text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="space-y-1">
+            {presets.length === 0 && (
+              <p className="text-xs text-muted-foreground px-2 py-1">No saved presets yet.</p>
+            )}
+            {presets.map((preset) => (
+              <div key={preset.name} className="flex items-center gap-1">
+                <button
+                  onClick={() => applyPreset(preset)}
+                  className="flex-1 text-left px-2 py-1.5 text-sm rounded-md transition-colors hover:bg-muted text-muted-foreground truncate"
+                  title={`Apply "${preset.name}"`}
+                >
+                  {preset.name}
+                </button>
+                <button
+                  onClick={() => deletePreset(preset.name)}
+                  className="p-1 rounded-md hover:bg-muted text-muted-foreground shrink-0"
+                  aria-label={`Delete preset ${preset.name}`}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              onClick={saveCurrentPreset}
+              className="w-full mt-1 px-2 py-1.5 text-xs rounded-md border border-dashed border-border text-muted-foreground hover:bg-muted"
+            >
+              + Save current filters
+            </button>
+          </div>
+        </div>
+
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Source</h3>
           <div className="space-y-1">
@@ -533,6 +624,54 @@ export function MediaLibrary() {
             ))}
           </div>
         </div>
+
+        {allSubcategories.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Subcategory</h3>
+            <select
+              value={filterSubcategory}
+              onChange={(e) => setFilterSubcategory(e.target.value)}
+              className="input h-8 px-2 text-xs w-full"
+            >
+              <option value="All">All Subcategories</option>
+              {allSubcategories.map((s) => (
+                <option key={s} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {allVariantAttrs.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Variant Attribute</h3>
+            <select
+              value={filterVariantAttr}
+              onChange={(e) => { setFilterVariantAttr(e.target.value); setFilterVariantValue("All"); }}
+              className="input h-8 px-2 text-xs w-full"
+            >
+              <option value="All">All Attributes</option>
+              {allVariantAttrs.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {allVariantValues.length > 0 && (
+          <div>
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">Variant Value</h3>
+            <select
+              value={filterVariantValue}
+              onChange={(e) => setFilterVariantValue(e.target.value)}
+              className="input h-8 px-2 text-xs w-full"
+            >
+              <option value="All">All Values</option>
+              {allVariantValues.map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {allRoles.length > 0 && (
           <div>
@@ -744,22 +883,10 @@ export function MediaLibrary() {
 
               <div className="pt-4 border-t border-border">
                 <p className="text-muted-foreground text-xs mb-2">Smart Categorization</p>
-                <div className="mb-4">
-                  <ProductSearchCombobox onSelect={(product) => {
-                    setCatFilter(product.category);
-                    const updates: Partial<Photo> = { 
-                      subcategoryName: product.subcategoryName || null 
-                    };
-                    if (product.options && product.options.length > 0) {
-                      updates.variantAttribute = product.options[0].name;
-                      if (product.options[0].choices.length > 0) {
-                        updates.variantValue = product.options[0].choices[0].label;
-                      }
-                    }
-                    editMeta(activePhoto.id, updates);
-                  }} />
-                  <p className="text-[10px] text-muted-foreground mt-1 text-center">Search to auto-fill tags below</p>
-                </div>
+                <p className="text-[10px] text-muted-foreground mb-3">
+                  Cascade: Category → Subcategory → Product → Variant. Every list is
+                  drawn from live store data.
+                </p>
                 <div className="space-y-3">
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category (Derived)</label>
@@ -794,6 +921,25 @@ export function MediaLibrary() {
                       <option value="">— none —</option>
                       {subcatOptions.map((s) => (
                         <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    {/* Scoping-only: picks which product's variants populate the
+                        Attribute/Value selects below. Not persisted (Media has
+                        no product column). */}
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Product</label>
+                    <select
+                      value={selectedProductId}
+                      onChange={(e) => setSelectedProductId(e.target.value)}
+                      className="input h-7 px-2 text-xs w-full mt-1"
+                      disabled={productOptions.length === 0}
+                    >
+                      <option value="">
+                        {productOptions.length === 0 ? "— no products in scope —" : "— all products —"}
+                      </option>
+                      {productOptions.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>

@@ -12,6 +12,9 @@ export const dynamic = "force-dynamic";
  *   - categories: store categories (ordered) each with their subcategories
  *   - variantAttributes: attrName → sorted unique values, auto-collected from
  *     ALL products by merging their `attributes` and `options` JSON.
+ *   - products: each product with its category, subcategory name and its own
+ *     variantAttributes (attrName → sorted values), so the Media Library can
+ *     cascade Category → Subcategory → Product → Attribute → Value.
  *
  * Admin-guarded with the same session check as the other admin/media routes.
  */
@@ -32,23 +35,41 @@ export async function GET() {
       subcategories: c.subcategories.map((s) => ({ name: s.name, slug: s.slug })),
     }));
 
+    // subcategoryId → name, so each product can carry its group name without
+    // a per-row join. Reuses the categories query above (which includes the
+    // full subcategory rows, `id` among them).
+    const subcatName = new Map<string, string>();
+    for (const c of categoryRows) {
+      for (const s of c.subcategories) subcatName.set(s.id, s.name);
+    }
+
     // --- Variant attributes, merged from every product ---
     // `attributes` shape: [{ name, values: [] }]
     // `options`    shape: [{ name, choices: [{ label }] }]
     // Both are free-form JSON, so every access is defensive.
-    const products = await prisma.product.findMany({
-      select: { attributes: true, options: true },
+    const productRows = await prisma.product.findMany({
+      select: {
+        id: true,
+        name: true,
+        category: true,
+        subcategoryId: true,
+        attributes: true,
+        options: true,
+      },
     });
 
-    const collected: Record<string, Set<string>> = {};
-    const add = (name: unknown, value: unknown) => {
-      const n = String(name ?? "").trim();
-      const v = String(value ?? "").trim();
-      if (!n || !v) return;
-      (collected[n] ??= new Set<string>()).add(v);
-    };
-
-    for (const p of products) {
+    // Collect a product's { attribute → values } into `into`. Used both
+    // per-product and for the global merge below.
+    const collectVariants = (
+      p: { attributes: unknown; options: unknown },
+      into: Record<string, Set<string>>
+    ) => {
+      const add = (name: unknown, value: unknown) => {
+        const n = String(name ?? "").trim();
+        const v = String(value ?? "").trim();
+        if (!n || !v) return;
+        (into[n] ??= new Set<string>()).add(v);
+      };
       // attributes → { name, values: [] }
       const attrs = Array.isArray(p.attributes) ? (p.attributes as any[]) : [];
       for (const a of attrs) {
@@ -61,14 +82,35 @@ export async function GET() {
         const choices = Array.isArray(o?.choices) ? (o.choices as any[]) : [];
         for (const c of choices) add(o?.name, c?.label);
       }
-    }
+    };
 
-    const variantAttributes: Record<string, string[]> = {};
-    for (const [name, set] of Object.entries(collected)) {
-      variantAttributes[name] = Array.from(set).sort((x, y) => x.localeCompare(y));
-    }
+    // Turn a collected map into attrName → sorted unique values.
+    const sortCollected = (collected: Record<string, Set<string>>) => {
+      const out: Record<string, string[]> = {};
+      for (const [name, set] of Object.entries(collected)) {
+        out[name] = Array.from(set).sort((x, y) => x.localeCompare(y));
+      }
+      return out;
+    };
 
-    return NextResponse.json({ categories, variantAttributes });
+    // Per-product variant data + the global merge in a single pass.
+    const globalCollected: Record<string, Set<string>> = {};
+    const products = productRows.map((p) => {
+      collectVariants(p, globalCollected);
+      const perCollected: Record<string, Set<string>> = {};
+      collectVariants(p, perCollected);
+      return {
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        subcategoryName: p.subcategoryId ? subcatName.get(p.subcategoryId) ?? null : null,
+        variantAttributes: sortCollected(perCollected),
+      };
+    });
+
+    const variantAttributes = sortCollected(globalCollected);
+
+    return NextResponse.json({ categories, variantAttributes, products });
   } catch (err) {
     console.error("[api/admin/taxonomy] failed:", err);
     return NextResponse.json({ error: "Could not load taxonomy" }, { status: 500 });

@@ -1,17 +1,22 @@
 "use client";
 
 /**
- * VariantMediaTab — the "Media" section inside the product form's Variants tab.
+ * VariantMediaTab — the "Media" tab of the product form.
  *
- * Divides management into 3 focused sections:
+ * Photos are organised by the values of the product's image-driving option
+ * (`visualOptionName`, e.g. "Design" or "Size"). Divides management into 3
+ * focused sections:
  *
  *   1. Variant Previews   — one hero preview per visual variant value
- *   2. Design Galleries   — per-value galleries (accordion, drag-to-reorder),
+ *   2. Variant Galleries  — per-value galleries (accordion, drag-to-reorder),
  *                           each with a read-only "Final gallery" preview
  *   3. Common Gallery     — images shared across ALL variants (drag-to-reorder)
  *
- * The storefront gallery renders:  selectedDesignGallery + commonGallery
- * (this is exactly what the per-variant "Final gallery" preview shows).
+ * Order rule: the Final gallery for a value = that value's photos (in the
+ * admin's drag order) THEN the common photos (in their drag order). This is the
+ * default and only ordering — reorder WITHIN each group by dragging; common
+ * photos are never interleaved into the middle of the variant photos. The
+ * order is persisted via ProductImage.sortOrder (see syncProductImages).
  */
 
 import { useState } from "react";
@@ -65,11 +70,13 @@ export function VariantMediaTab({
   // Determine which option is the "visual" one (drives gallery)
   const visualOption = options.find((o) =>
     visualOptionName
-      ? o.name.toLowerCase() === visualOptionName.toLowerCase()
+      ? o.name.trim().toLowerCase() === visualOptionName.trim().toLowerCase()
       : true
   ) ?? options[0];
 
   const visualValues = visualOption?.choices.map((c) => c.label).filter(Boolean) ?? [];
+  // Human label for the image-driving option, used in the section copy.
+  const visualName = visualOption?.name?.trim() || "variant";
 
   // Track which accordion sections are open
   const [openSections, setOpenSections] = useState<Set<string>>(() =>
@@ -148,7 +155,7 @@ export function VariantMediaTab({
       <div>
         <SectionHeader
           title="Variant Previews"
-          description="One preview thumbnail per design — shown on the variant picker."
+          description={`One preview thumbnail per ${visualName} — shown on the variant picker.`}
         />
         <div className="mt-3 flex flex-wrap gap-3">
           {visualValues.map((val) => {
@@ -198,17 +205,19 @@ export function VariantMediaTab({
         </div>
       </div>
 
-      {/* ── Section 2: Design Galleries ── */}
+      {/* ── Section 2: Variant Galleries ── */}
       <div>
         <SectionHeader
-          title="Design Galleries"
-          description="Assign a gallery to each design. All sizes/combos sharing this design will use these images. Drag photos to reorder."
+          title={`${visualName} Galleries`}
+          description={`Assign a gallery to each ${visualName} value. Every combination sharing it uses these photos. Drag photos to reorder.`}
         />
         <div className="mt-3 space-y-2">
           {visualValues.map((val) => {
             const gallery = state.galleries[val] ?? [];
             const isOpen = openSections.has(val);
-            // The storefront shows this design's gallery followed by the common gallery.
+            // Default (and only) order: this value's gallery first, then the
+            // common gallery. Reorder within each group by dragging; common
+            // photos are never interleaved into the middle of the variant photos.
             const finalGallery = [...gallery, ...state.common];
 
             return (
@@ -316,7 +325,7 @@ export function VariantMediaTab({
                             <div
                               key={`${img}-${i}`}
                               className="relative h-12 w-12 overflow-hidden rounded-md border border-border bg-muted"
-                              title={i < gallery.length ? "Design image" : "Common image"}
+                              title={i < gallery.length ? `${visualName} image` : "Common image"}
                             >
                               <Image
                                 src={decodeURI(img)}
