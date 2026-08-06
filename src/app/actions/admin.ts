@@ -1085,3 +1085,35 @@ export async function changeAdminPassword(newPassword: string) {
   });
   return { ok: true as const };
 }
+
+// -------- Media Library Smart Tagging --------
+export async function searchProductsAction(query: string) {
+  await requireAdmin();
+  if (!query || query.length < 2) return [];
+
+  const products = await prisma.product.findMany({
+    where: {
+      name: { contains: query, mode: "insensitive" }
+    },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      subcategory: {
+        select: {
+          name: true
+        }
+      },
+      options: true
+    },
+    take: 10
+  });
+
+  return products.map(p => ({
+    id: p.id,
+    name: p.name,
+    category: p.category,
+    subcategoryName: p.subcategory?.name || null,
+    options: p.options as { name: string; choices: { label: string }[] }[] | null
+  }));
+}

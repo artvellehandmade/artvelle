@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-
+import { ProductSearchCombobox } from "./product-search";
 
 type Photo = {
   id: string;
@@ -48,6 +48,22 @@ type Taxonomy = {
   variantAttributes: Record<string, string[]>;
 };
 
+// A saved combination of every sidebar/search filter, persisted to
+// localStorage so admins can re-apply common views in one click.
+type FilterPreset = {
+  name: string;
+  q: string;
+  source: string;
+  role: string;
+  tag: string;
+  usage: string;
+  subcategory: string;
+  variantAttr: string;
+  variantValue: string;
+};
+
+const PRESETS_KEY = "artvelle:media-filter-presets";
+
 /**
  * Build a <select> option list from `options`, de-duped and order-preserving,
  * that always includes the photo's currently-stored `current` value — so
@@ -66,6 +82,19 @@ function withCurrent(options: string[], current?: string | null): string[] {
   return out;
 }
 
+/**
+ * Coerce raw API rows into render-safe photos. `tags` and `roles` are JSON
+ * columns that can come back `null`, which would crash the `.forEach`/`.map`/
+ * `.includes` calls used on every render — so they are forced to arrays here.
+ */
+function normalizePhotos(rows: unknown): Photo[] {
+  return (Array.isArray(rows) ? rows : []).map((p: any) => ({
+    ...p,
+    tags: Array.isArray(p?.tags) ? p.tags : [],
+    roles: Array.isArray(p?.roles) ? p.roles : []
+  })) as Photo[];
+}
+
 export function MediaLibrary() {
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,6 +105,13 @@ export function MediaLibrary() {
   const [filterRole, setFilterRole] = useState<string>("All");
   const [filterTag, setFilterTag] = useState<string>("All");
   const [filterUsage, setFilterUsage] = useState<string>("All");
+  // Meta-tag (classification) filters — find product images by their metadata.
+  const [filterSubcategory, setFilterSubcategory] = useState<string>("All");
+  const [filterVariantAttr, setFilterVariantAttr] = useState<string>("All");
+  const [filterVariantValue, setFilterVariantValue] = useState<string>("All");
+
+  // Saved filter presets, hydrated from localStorage on mount.
+  const [presets, setPresets] = useState<FilterPreset[]>([]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [activePhotoId, setActivePhotoId] = useState<string | null>(null);
@@ -104,8 +140,9 @@ export function MediaLibrary() {
       const res = await fetch(`/api/admin/media?page=1&limit=${PAGE_SIZE}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load photos");
-      setLibrary({ photos: data.photos, usage: data.usage });
-      setTotal(data.total ?? data.photos.length);
+      const photos = normalizePhotos(data.photos);
+      setLibrary({ photos, usage: data.usage ?? {} });
+      setTotal(data.total ?? photos.length);
       setPage(1);
     } catch (err: any) {
       toast.error(err.message);
@@ -122,10 +159,12 @@ export function MediaLibrary() {
       const res = await fetch(`/api/admin/media?page=${next}&limit=${PAGE_SIZE}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Could not load photos");
+      const more = normalizePhotos(data.photos);
+      const moreUsage = data.usage ?? {};
       setLibrary((prev) =>
         prev
-          ? { photos: [...prev.photos, ...data.photos], usage: { ...prev.usage, ...data.usage } }
-          : { photos: data.photos, usage: data.usage }
+          ? { photos: [...prev.photos, ...more], usage: { ...prev.usage, ...moreUsage } }
+          : { photos: more, usage: moreUsage }
       );
       setTotal(data.total ?? 0);
       setPage(next);
@@ -153,6 +192,80 @@ export function MediaLibrary() {
       }
     })();
   }, []);
+
+  // Hydrate saved presets once, client-side only (localStorage is undefined
+  // during SSR, so guard against `typeof window`).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(PRESETS_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(parsed)) setPresets(parsed as FilterPreset[]);
+    } catch {
+      /* ignore malformed/blocked storage */
+    }
+  }, []);
+
+  /** Writes presets to state and localStorage together. */
+  const savePresets = (next: FilterPreset[]) => {
+    setPresets(next);
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(PRESETS_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore — storage may be full or blocked */
+    }
+  };
+
+  /** Snapshots the current filter combination under a prompted name. */
+  const saveCurrentPreset = () => {
+    const name = window.prompt("Name this filter preset")?.trim();
+    if (!name) return;
+    const preset: FilterPreset = {
+      name,
+      q,
+      source: filterSource,
+      role: filterRole,
+      tag: filterTag,
+      usage: filterUsage,
+      subcategory: filterSubcategory,
+      variantAttr: filterVariantAttr,
+      variantValue: filterVariantValue
+    };
+    // Overwrite any preset with the same name; keep the list to a sane length.
+    const next = [...presets.filter((p) => p.name !== name), preset].slice(-8);
+    savePresets(next);
+    toast.success(`Saved preset "${name}"`);
+  };
+
+  /** Re-applies a saved preset to every filter in one click. */
+  const applyPreset = (p: FilterPreset) => {
+    setQ(p.q ?? "");
+    setFilterSource(p.source ?? "All");
+    setFilterRole(p.role ?? "All");
+    setFilterTag(p.tag ?? "All");
+    setFilterUsage(p.usage ?? "All");
+    setFilterSubcategory(p.subcategory ?? "All");
+    setFilterVariantAttr(p.variantAttr ?? "All");
+    setFilterVariantValue(p.variantValue ?? "All");
+  };
+
+  /** Drops a saved preset by name. */
+  const deletePreset = (name: string) => {
+    savePresets(presets.filter((p) => p.name !== name));
+  };
+
+  /** Resets every filter and the search box to their defaults. */
+  const clearFilters = () => {
+    setQ("");
+    setFilterSource("All");
+    setFilterRole("All");
+    setFilterTag("All");
+    setFilterUsage("All");
+    setFilterSubcategory("All");
+    setFilterVariantAttr("All");
+    setFilterVariantValue("All");
+  };
 
   const activePhoto = useMemo(() => {
     if (!activePhotoId || !library) return null;
@@ -216,13 +329,49 @@ export function MediaLibrary() {
     return Array.from(roles).sort();
   }, [library]);
 
+  // Meta-tag filter options: union of taxonomy values and what the loaded
+  // media actually carry, so both known and legacy values are selectable.
+  const allSubcategories = useMemo(() => {
+    const set = new Set<string>();
+    (taxonomy?.categories ?? []).forEach(c => c.subcategories.forEach(s => set.add(s.name)));
+    (library?.photos ?? []).forEach(p => { if (p.subcategoryName) set.add(p.subcategoryName); });
+    return Array.from(set).sort();
+  }, [taxonomy, library]);
+
+  const allVariantAttrs = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(taxonomy?.variantAttributes ?? {}).forEach(a => set.add(a));
+    (library?.photos ?? []).forEach(p => { if (p.variantAttribute) set.add(p.variantAttribute); });
+    return Array.from(set).sort();
+  }, [taxonomy, library]);
+
+  // Values are scoped to the selected variant attribute when one is active.
+  const allVariantValues = useMemo(() => {
+    const set = new Set<string>();
+    const attrs = taxonomy?.variantAttributes ?? {};
+    if (filterVariantAttr !== "All") {
+      (attrs[filterVariantAttr] ?? []).forEach(v => set.add(v));
+    } else {
+      Object.values(attrs).forEach(list => list.forEach(v => set.add(v)));
+    }
+    (library?.photos ?? []).forEach(p => {
+      if (!p.variantValue) return;
+      if (filterVariantAttr !== "All" && p.variantAttribute !== filterVariantAttr) return;
+      set.add(p.variantValue);
+    });
+    return Array.from(set).sort();
+  }, [taxonomy, library, filterVariantAttr]);
+
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return (library?.photos ?? []).filter((p) => {
       if (filterSource !== "All" && p.source !== filterSource) return false;
       if (filterRole !== "All" && !p.roles.includes(filterRole)) return false;
       if (filterTag !== "All" && !p.tags.includes(filterTag)) return false;
-      
+      if (filterSubcategory !== "All" && p.subcategoryName !== filterSubcategory) return false;
+      if (filterVariantAttr !== "All" && p.variantAttribute !== filterVariantAttr) return false;
+      if (filterVariantValue !== "All" && p.variantValue !== filterVariantValue) return false;
+
       const uses = library?.usage[p.url] || [];
       if (filterUsage === "Unused" && uses.length > 0) return false;
       if (filterUsage === "Used" && uses.length === 0) return false;
@@ -231,7 +380,7 @@ export function MediaLibrary() {
       const searchable = `${p.file} ${p.tags.join(" ")} ${p.roles.join(" ")}`.toLowerCase();
       return searchable.includes(needle);
     });
-  }, [library, q, filterSource, filterRole, filterTag, filterUsage]);
+  }, [library, q, filterSource, filterRole, filterTag, filterUsage, filterSubcategory, filterVariantAttr, filterVariantValue]);
 
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
@@ -595,6 +744,22 @@ export function MediaLibrary() {
 
               <div className="pt-4 border-t border-border">
                 <p className="text-muted-foreground text-xs mb-2">Smart Categorization</p>
+                <div className="mb-4">
+                  <ProductSearchCombobox onSelect={(product) => {
+                    setCatFilter(product.category);
+                    const updates: Partial<Photo> = { 
+                      subcategoryName: product.subcategoryName || null 
+                    };
+                    if (product.options && product.options.length > 0) {
+                      updates.variantAttribute = product.options[0].name;
+                      if (product.options[0].choices.length > 0) {
+                        updates.variantValue = product.options[0].choices[0].label;
+                      }
+                    }
+                    editMeta(activePhoto.id, updates);
+                  }} />
+                  <p className="text-[10px] text-muted-foreground mt-1 text-center">Search to auto-fill tags below</p>
+                </div>
                 <div className="space-y-3">
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category (Derived)</label>

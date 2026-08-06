@@ -1,4 +1,4 @@
-import type { Attribute, MediaDTO, SellableVariant } from "./types";
+import type { Attribute, MediaDTO, PropertyDependencies, SellableVariant } from "./types";
 import { comboKey } from "./options";
 
 export type Selection = Record<string, string>;
@@ -117,8 +117,10 @@ export function imagesForSelection(
  * Resolves the storefront gallery for a selection from the relational
  * ProductImage rows (`product.media`) — the intended source of truth.
  *
- * The "visual variant" is the first attribute (`attributes[0]`); its selected
- * value scopes the gallery. Result = media tagged with that value (ordered by
+ * The "visual variant" attribute is dynamic: it's the first attribute driving
+ * images (`propertyModules.images[0]`), falling back to the first attribute
+ * (`attributes[0]`) when no image dependencies are declared. Its selected value
+ * scopes the gallery. Result = media tagged with that value (ordered by
  * sortOrder) followed by the common media (`variantValue == null`, ordered by
  * sortOrder), de-duplicated by url. Falls back to `imagesForSelection` (the
  * legacy sellableVariants JSON → `product.images`) when there are no media rows
@@ -130,13 +132,19 @@ export function galleryForSelection(
     images: string[];
     media?: MediaDTO[];
     attributes?: Attribute[];
+    propertyModules?: PropertyDependencies;
     sellableVariants?: any;
   },
   selected: Selection
 ): string[] {
   const media = product.media ?? [];
   if (media.length > 0) {
-    const visualName = product.attributes?.[0]?.name;
+    // Visual attribute is dynamic: prefer the first image-driving property, then
+    // fall back to the first attribute. Guard against a non-array `images`.
+    const pmImages = product.propertyModules?.images;
+    const visualName =
+      (Array.isArray(pmImages) ? pmImages[0] : undefined) ??
+      product.attributes?.[0]?.name;
     const visualVal = visualName ? selected[visualName] : undefined;
 
     // Defensive: the query already orders by sortOrder, but never trust the
