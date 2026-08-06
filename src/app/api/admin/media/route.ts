@@ -71,6 +71,9 @@ export async function GET(req: Request) {
         id:              m.id,
         url:             m.url,
         file:            m.file,
+        // "Image Name" in the admin UI — a human-editable display name,
+        // independent of the on-disk filename.
+        alt:             m.alt,
         category:        cat,
         group,
         variantAttribute: m.variantAttribute,

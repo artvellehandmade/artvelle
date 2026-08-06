@@ -22,6 +22,9 @@ type Photo = {
   id: string;
   url: string;
   file: string;
+  // Human-editable display name ("Image Name" in the UI) — independent of
+  // the on-disk filename. Nullable: falls back to the filename when unset.
+  alt?: string | null;
   category: string;
   group: string;
   source: "repo" | "blob" | "external";
@@ -808,7 +811,7 @@ export function MediaLibrary() {
                     
                     {/* Info Overlay */}
                     <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-8 pointer-events-none">
-                      <p className="text-white text-xs truncate drop-shadow-md">{photo.file.split('/').pop()}</p>
+                      <p className="text-white text-xs truncate drop-shadow-md">{photo.alt || photo.file.split('/').pop()}</p>
                       <div className="flex items-center gap-2 mt-1">
                         {uses.length > 0 && (
                           <span className="text-[10px] text-white/80 bg-white/20 rounded px-1.5 py-0.5 backdrop-blur-sm">
@@ -866,10 +869,21 @@ export function MediaLibrary() {
             
             <div className="space-y-4 text-sm">
               <div>
+                <label className="text-muted-foreground text-xs mb-1 block">Image Name</label>
+                <input
+                  type="text"
+                  value={activePhoto.alt ?? ""}
+                  placeholder={activePhoto.file.split('/').pop()}
+                  onChange={(e) => editMeta(activePhoto.id, { alt: e.target.value || null })}
+                  className="input h-8 px-2 text-sm w-full"
+                />
+              </div>
+
+              <div>
                 <p className="text-muted-foreground text-xs mb-1">Filename</p>
                 <p className="break-all">{activePhoto.file.split('/').pop()}</p>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-muted-foreground text-xs mb-1">Source</p>
