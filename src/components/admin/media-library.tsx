@@ -325,24 +325,57 @@ export function MediaLibrary() {
     [taxonomy, selectedProductId]
   );
 
-  // Products offered in the Product scope select: filtered by the scoped
-  // Category and (when set) the photo's Subcategory. All from taxonomy.products.
-  const productOptions = useMemo(() => {
-    const all = taxonomy?.products ?? [];
-    const sub = activePhoto?.subcategoryName || "";
-    return all.filter((p) => {
-      if (catFilter && p.category !== catFilter) return false;
-      if (sub && p.subcategoryName !== sub) return false;
-      return true;
-    });
-  }, [taxonomy, catFilter, activePhoto?.subcategoryName]);
-
-  // Drop the product scope once the current filters exclude it.
-  useEffect(() => {
-    if (selectedProductId && !productOptions.some((p) => p.id === selectedProductId)) {
-      setSelectedProductId("");
+  // Product-first flow: the Product select always offers EVERY product,
+  // grouped by category, so the admin can start from the product they know.
+  // Choosing one auto-fills Category (scope) + Subcategory below.
+  const productGroups = useMemo(() => {
+    const all = [...(taxonomy?.products ?? [])].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
+    const map = new Map<string, TaxProduct[]>();
+    for (const p of all) {
+      const key = p.category || "Uncategorised";
+      const list = map.get(key);
+      if (list) list.push(p);
+      else map.set(key, [p]);
     }
-  }, [productOptions, selectedProductId]);
+    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [taxonomy]);
+
+  /**
+   * Product picked in the Info panel: scope the variant dropdowns to it AND
+   * auto-detect the photo's classification from the product itself —
+   * Category (scoping select) + Subcategory (persisted). Variant attr/value
+   * are kept when they exist on the chosen product, cleared when they don't.
+   */
+  const chooseProduct = (id: string) => {
+    setSelectedProductId(id);
+    if (!id || !activePhoto) return;
+    const prod = taxonomy?.products?.find((p) => p.id === id);
+    if (!prod) return;
+
+    setCatFilter(prod.category || "");
+
+    const updates: Partial<Photo> = {};
+    if (prod.subcategoryName && prod.subcategoryName !== activePhoto.subcategoryName) {
+      updates.subcategoryName = prod.subcategoryName;
+    }
+    const attrs = prod.variantAttributes ?? {};
+    const curAttr = activePhoto.variantAttribute || "";
+    if (curAttr && !(curAttr in attrs)) {
+      // Stored attribute doesn't exist on this product — clear both.
+      updates.variantAttribute = null;
+      updates.variantValue = null;
+    } else if (
+      curAttr &&
+      activePhoto.variantValue &&
+      !(attrs[curAttr] ?? []).includes(activePhoto.variantValue)
+    ) {
+      // Attribute matches but the stored value isn't one of this product's.
+      updates.variantValue = null;
+    }
+    if (Object.keys(updates).length > 0) editMeta(activePhoto.id, updates);
+  };
 
   // Variant attribute names: the scoped product's own keys when a product is
   // chosen, otherwise the global set auto-collected across all products.
@@ -898,10 +931,34 @@ export function MediaLibrary() {
               <div className="pt-4 border-t border-border">
                 <p className="text-muted-foreground text-xs mb-2">Smart Categorization</p>
                 <p className="text-[10px] text-muted-foreground mb-3">
-                  Cascade: Category → Subcategory → Product → Variant. Every list is
-                  drawn from live store data.
+                  Pick a Product first — Category &amp; Subcategory are auto-detected
+                  from it, and the Variant dropdowns show only that product&apos;s
+                  options. Or set them manually below.
                 </p>
                 <div className="space-y-3">
+                  <div>
+                    {/* Product-first: choosing a product auto-fills Category +
+                        Subcategory and scopes the Variant selects. The product
+                        itself is not persisted (Media has no product column). */}
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Product</label>
+                    <select
+                      value={selectedProductId}
+                      onChange={(e) => chooseProduct(e.target.value)}
+                      className="input h-7 px-2 text-xs w-full mt-1"
+                      disabled={productGroups.length === 0}
+                    >
+                      <option value="">
+                        {productGroups.length === 0 ? "— no products —" : "— select a product —"}
+                      </option>
+                      {productGroups.map(([cat, prods]) => (
+                        <optgroup key={cat} label={cat}>
+                          {prods.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  </div>
                   <div>
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category (Derived)</label>
                     <input
@@ -912,7 +969,8 @@ export function MediaLibrary() {
                     />
                   </div>
                   <div>
-                    {/* Scoping-only: narrows the Subcategory list. Not persisted. */}
+                    {/* Scoping-only: narrows the Subcategory list. Auto-set when a
+                        product is chosen. Not persisted. */}
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Category</label>
                     <select
                       value={catFilter}
@@ -935,25 +993,6 @@ export function MediaLibrary() {
                       <option value="">— none —</option>
                       {subcatOptions.map((s) => (
                         <option key={s} value={s}>{s}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    {/* Scoping-only: picks which product's variants populate the
-                        Attribute/Value selects below. Not persisted (Media has
-                        no product column). */}
-                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Product</label>
-                    <select
-                      value={selectedProductId}
-                      onChange={(e) => setSelectedProductId(e.target.value)}
-                      className="input h-7 px-2 text-xs w-full mt-1"
-                      disabled={productOptions.length === 0}
-                    >
-                      <option value="">
-                        {productOptions.length === 0 ? "— no products in scope —" : "— all products —"}
-                      </option>
-                      {productOptions.map((p) => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
                   </div>

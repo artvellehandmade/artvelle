@@ -1,34 +1,87 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+/**
+ * PhotoPicker — modal for choosing images from the Media Library, mirroring the
+ * standalone Media Library page's filter UX so admins learn one set of controls.
+ *
+ * Layout: left filter sidebar (Source · Usage · Subcategory · Variant Attribute
+ * · Variant Value · Roles · Tags), top search + refresh toolbar, grid of
+ * photos, "Load more" pagination, footer with selection count + Done.
+ *
+ * Filters are applied client-side against a paged fetch of `/api/admin/media`
+ * (same endpoint MediaLibrary uses). Smart defaults from `preferVariantValue`
+ * and `preferSubcategory` pre-select the corresponding sidebar filter when the
+ * picker opens, so opening it from a variant gallery lands on that variant's
+ * photos with a single click to clear.
+ */
+
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Check, Images, Loader2, Search, Tag, X } from "lucide-react";
+import {
+  Check,
+  HardDrive,
+  Images,
+  Loader2,
+  RefreshCw,
+  Search,
+  Tag,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import type { MediaLibraryItem } from "@/lib/types";
 
-type Library = { photos: MediaLibraryItem[]; usage: Record<string, { kind: string; id: string; name: string; slot?: string }[]>; total: number };
+// A single photo row — same shape MediaLibrary uses. `tags` and `roles` can
+// come back null from the API, so callers must coerce to arrays before use.
+type Photo = {
+  id: string;
+  url: string;
+  file: string;
+  alt?: string | null;
+  category: string;
+  group: string;
+  source: "repo" | "blob" | "external";
+  tags: string[];
+  roles: string[];
+  size?: number;
+  width?: number;
+  height?: number;
+  createdAt: string;
+  variantAttribute?: string | null;
+  variantValue?: string | null;
+  subcategoryName?: string | null;
+};
 
-// Repo folders sort alphabetically; these two synthetic buckets go last.
-const LAST = ["Uploaded", "Pasted links"];
+type PhotoUse = { kind: string; id: string; name: string; slot?: string };
+type Library = { photos: Photo[]; usage: Record<string, PhotoUse[]>; total?: number };
 
-/**
- * Picks any photo the store already has: the gallery committed to the repo,
- * anything uploaded to Vercel Blob, and any image URL pasted in by hand.
- *
- * When `preferVariantValue` is provided, the picker defaults to that value's
- * images first and shows a smart-filter badge so the admin knows the context.
- */
+type TaxSubcategory = { name: string; slug: string };
+type TaxCategory = { name: string; slug: string; subcategories: TaxSubcategory[] };
+type Taxonomy = {
+  categories: TaxCategory[];
+  variantAttributes: Record<string, string[]>;
+};
+
+const PAGE_SIZE = 100;
+
+/** Force JSON `null` tags/roles into arrays so `.includes`/`.forEach` never crash. */
+function normalizePhotos(rows: unknown): Photo[] {
+  return (Array.isArray(rows) ? rows : []).map((p: any) => ({
+    ...p,
+    tags: Array.isArray(p?.tags) ? p.tags : [],
+    roles: Array.isArray(p?.roles) ? p.roles : [],
+  })) as Photo[];
+}
+
 export function PhotoPicker({
   selected,
   onChange,
   max,
-  /** Pre-filters the library to this category's folder when opened. */
+  /** Pre-selects Subcategory in the sidebar. */
   preferCategory,
-  /** When set, filter defaults to images tagged with this variant value. */
+  /** Pre-selects Variant Value in the sidebar (empty string = "Common"). */
   preferVariantValue,
-  /** When set, show subcategory filter context. */
+  /** Pre-selects Subcategory in the sidebar (alias for preferCategory when both are set). */
   preferSubcategory,
   label = "Choose from photo library",
 }: {
@@ -40,103 +93,201 @@ export function PhotoPicker({
   preferSubcategory?: string;
   label?: string;
 }) {
-  const [open, setOpen]       = useState(false);
+  const [open, setOpen] = useState(false);
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(false);
-  const [q, setQ]             = useState("");
-  const [folder, setFolder]   = useState<string>("All");
-  // Smart variant filter: "all" = no filter, a string = filter by variantValue
-  const [variantFilter, setVariantFilter] = useState<string | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
 
-  // Build query string for the API based on current filters
-  function buildQuery() {
-    const p = new URLSearchParams({ limit: "200" });
-    if (folder !== "All") p.set("category", folder);
-    if (variantFilter !== null) {
-      p.set("variantValue", variantFilter === "" ? "__common__" : variantFilter);
+  // Filter state — same set as MediaLibrary's left sidebar.
+  const [q, setQ] = useState("");
+  const [filterSource, setFilterSource] = useState<string>("All");
+  const [filterUsage, setFilterUsage] = useState<string>("All");
+  const [filterCategory, setFilterCategory] = useState<string>("All");
+  const [filterSubcategory, setFilterSubcategory] = useState<string>("All");
+  const [filterVariantAttr, setFilterVariantAttr] = useState<string>("All");
+  const [filterVariantValue, setFilterVariantValue] = useState<string>("All");
+  const [filterRole, setFilterRole] = useState<string>("All");
+  const [filterTag, setFilterTag] = useState<string>("All");
+
+  const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null);
+
+  /** Fetch first page and replace whatever's on screen. */
+  async function fetchFirstPage() {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/media?page=1&limit=${PAGE_SIZE}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load photos");
+      setLibrary({
+        photos: normalizePhotos(data.photos),
+        usage: data.usage ?? {},
+        total: data.total,
+      });
+      setTotal(data.total ?? data.photos?.length ?? 0);
+      setPage(1);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
     }
-    if (q.trim()) p.set("q", q.trim());
-    return p.toString();
   }
 
-  // Fetch when opened (or when filters change)
-  useEffect(() => {
-    if (!open) return;
+  /** Fetch next page and append. */
+  async function loadMore() {
+    const next = page + 1;
     setLoading(true);
-    fetch(`/api/admin/media?${buildQuery()}`)
-      .then(async (r) => {
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || "Could not load photos");
-        return data as Library;
-      })
-      .then(setLibrary)
-      .catch((err) => toast.error(err.message))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, folder, variantFilter]);
+    try {
+      const res = await fetch(`/api/admin/media?page=${next}&limit=${PAGE_SIZE}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Could not load photos");
+      const more = normalizePhotos(data.photos);
+      setLibrary((prev) =>
+        prev
+          ? {
+              photos: [...prev.photos, ...more],
+              usage: { ...prev.usage, ...(data.usage ?? {}) },
+              total: data.total,
+            }
+          : { photos: more, usage: data.usage ?? {}, total: data.total }
+      );
+      setTotal(data.total ?? total);
+      setPage(next);
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  // Re-fetch on search with debounce
-  useEffect(() => {
-    if (!open || !library) return;
-    const t = setTimeout(() => {
-      setLoading(true);
-      fetch(`/api/admin/media?${buildQuery()}`)
-        .then((r) => r.json())
-        .then(setLibrary)
-        .finally(() => setLoading(false));
-    }, 350);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q]);
-
-  // When the picker first opens, set smart defaults
+  // Load library + taxonomy when the picker opens (only the first time).
   useEffect(() => {
     if (!open) return;
-    if (preferVariantValue !== undefined) {
-      setVariantFilter(preferVariantValue);
+    if (!library) void fetchFirstPage();
+    if (!taxonomy) {
+      fetch("/api/admin/taxonomy")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((t) => t && setTaxonomy(t))
+        .catch(() => {
+          /* dropdowns degrade to whatever the loaded photos carry */
+        });
     }
-    if (preferCategory) {
-      setFolder(preferCategory);
-    }
-  }, [open, preferVariantValue, preferCategory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
-  const folders = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of library?.photos ?? []) {
-      if (p.category) counts.set(p.category, (counts.get(p.category) ?? 0) + 1);
+  // Apply smart defaults on open. Only sets once per open — the admin can
+  // clear them from the sidebar and browse freely.
+  const primedRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      primedRef.current = false;
+      return;
     }
-    const names = [...counts.keys()].sort((a, b) => {
-      const ai = LAST.indexOf(a);
-      const bi = LAST.indexOf(b);
-      if (ai !== bi) return (ai === -1 ? -1 : ai) - (bi === -1 ? -1 : bi);
-      return a.localeCompare(b);
+    if (primedRef.current) return;
+    primedRef.current = true;
+
+    if (preferVariantValue !== undefined) {
+      // "" = the "common" bucket (no variant tag). Sidebar shows "Common" for it.
+      setFilterVariantValue(preferVariantValue === "" ? "__common__" : preferVariantValue);
+    }
+    const sub = preferSubcategory ?? preferCategory;
+    if (sub) setFilterSubcategory(sub);
+  }, [open, preferVariantValue, preferCategory, preferSubcategory]);
+
+  // ---- Derived option lists ----
+  const allCategories = useMemo(() => {
+    const set = new Set<string>();
+    (library?.photos ?? []).forEach((p) => {
+      if (p.category) set.add(p.category);
     });
-    return [
-      { name: "All", count: library?.photos.length ?? 0 },
-      ...names.map((name) => ({ name, count: counts.get(name) ?? 0 })),
-    ];
+    return Array.from(set).sort();
   }, [library]);
 
-  // Photos are already filtered by the API; just do local text search
+  const allSubcategories = useMemo(() => {
+    const set = new Set<string>();
+    (taxonomy?.categories ?? []).forEach((c) =>
+      c.subcategories.forEach((s) => set.add(s.name))
+    );
+    (library?.photos ?? []).forEach((p) => {
+      if (p.subcategoryName) set.add(p.subcategoryName);
+    });
+    return Array.from(set).sort();
+  }, [taxonomy, library]);
+
+  const allVariantAttrs = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(taxonomy?.variantAttributes ?? {}).forEach((a) => set.add(a));
+    (library?.photos ?? []).forEach((p) => {
+      if (p.variantAttribute) set.add(p.variantAttribute);
+    });
+    return Array.from(set).sort();
+  }, [taxonomy, library]);
+
+  const allVariantValues = useMemo(() => {
+    const set = new Set<string>();
+    const attrs = taxonomy?.variantAttributes ?? {};
+    if (filterVariantAttr !== "All") {
+      (attrs[filterVariantAttr] ?? []).forEach((v) => set.add(v));
+    } else {
+      Object.values(attrs).forEach((list) => list.forEach((v) => set.add(v)));
+    }
+    (library?.photos ?? []).forEach((p) => {
+      if (!p.variantValue) return;
+      if (filterVariantAttr !== "All" && p.variantAttribute !== filterVariantAttr) return;
+      set.add(p.variantValue);
+    });
+    return Array.from(set).sort();
+  }, [taxonomy, library, filterVariantAttr]);
+
+  const allRoles = useMemo(() => {
+    const set = new Set<string>();
+    (library?.photos ?? []).forEach((p) => p.roles.forEach((r) => set.add(r)));
+    return Array.from(set).sort();
+  }, [library]);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    (library?.photos ?? []).forEach((p) => p.tags.forEach((t) => set.add(t)));
+    return Array.from(set).sort();
+  }, [library]);
+
+  // ---- Client-side filtering — same rules as MediaLibrary ----
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    if (!needle) return library?.photos ?? [];
-    return (library?.photos ?? []).filter((p) =>
-      `${p.category} ${p.group} ${p.file} ${p.variantValue ?? ""}`.toLowerCase().includes(needle)
-    );
-  }, [library, q]);
+    return (library?.photos ?? []).filter((p) => {
+      if (filterSource !== "All" && p.source !== filterSource) return false;
+      if (filterCategory !== "All" && p.category !== filterCategory) return false;
+      if (filterSubcategory !== "All" && p.subcategoryName !== filterSubcategory) return false;
+      if (filterVariantAttr !== "All" && p.variantAttribute !== filterVariantAttr) return false;
+      if (filterVariantValue !== "All") {
+        // "__common__" sentinel matches photos without any variant value.
+        if (filterVariantValue === "__common__") {
+          if (p.variantValue) return false;
+        } else if (p.variantValue !== filterVariantValue) return false;
+      }
+      if (filterRole !== "All" && !p.roles.includes(filterRole)) return false;
+      if (filterTag !== "All" && !p.tags.includes(filterTag)) return false;
 
-  // Group the visible photos by their subfolder, mirroring the repo layout.
-  const grouped = useMemo(() => {
-    const map = new Map<string, MediaLibraryItem[]>();
-    for (const p of visible) {
-      const key = [p.category, p.group].filter(Boolean).join(" / ") || "Ungrouped";
-      const list = map.get(key);
-      if (list) list.push(p);
-      else map.set(key, [p]);
-    }
-    return [...map.entries()];
-  }, [visible]);
+      const uses = library?.usage[p.url] || [];
+      if (filterUsage === "Unused" && uses.length > 0) return false;
+      if (filterUsage === "Used" && uses.length === 0) return false;
+
+      if (!needle) return true;
+      const hay = `${p.file} ${p.alt ?? ""} ${p.category} ${p.group} ${p.subcategoryName ?? ""} ${p.variantValue ?? ""} ${p.tags.join(" ")} ${p.roles.join(" ")}`.toLowerCase();
+      return hay.includes(needle);
+    });
+  }, [
+    library,
+    q,
+    filterSource,
+    filterCategory,
+    filterSubcategory,
+    filterVariantAttr,
+    filterVariantValue,
+    filterRole,
+    filterTag,
+    filterUsage,
+  ]);
 
   const atLimit = max !== undefined && selected.length >= max;
 
@@ -152,13 +303,27 @@ export function PhotoPicker({
     onChange([...selected, url]);
   }
 
-  const hasSmartFilter = variantFilter !== null;
-  const smartFilterLabel =
-    variantFilter === ""
-      ? "Common (no variant)"
-      : variantFilter
-      ? `Design: ${variantFilter}`
-      : null;
+  function clearFilters() {
+    setQ("");
+    setFilterSource("All");
+    setFilterUsage("All");
+    setFilterCategory("All");
+    setFilterSubcategory("All");
+    setFilterVariantAttr("All");
+    setFilterVariantValue("All");
+    setFilterRole("All");
+    setFilterTag("All");
+  }
+
+  const activeFilterCount =
+    (filterSource !== "All" ? 1 : 0) +
+    (filterUsage !== "All" ? 1 : 0) +
+    (filterCategory !== "All" ? 1 : 0) +
+    (filterSubcategory !== "All" ? 1 : 0) +
+    (filterVariantAttr !== "All" ? 1 : 0) +
+    (filterVariantValue !== "All" ? 1 : 0) +
+    (filterRole !== "All" ? 1 : 0) +
+    (filterTag !== "All" ? 1 : 0);
 
   return (
     <>
@@ -177,16 +342,16 @@ export function PhotoPicker({
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl"
+            className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
+            <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4 shrink-0">
               <div className="min-w-0">
                 <h3 className="font-serif text-lg">Photo library</h3>
                 <p className="truncate text-xs text-muted-foreground">
                   {library
-                    ? `${library.total ?? library.photos.length} photos total`
+                    ? `${total || library.photos.length} photos total`
                     : "Loading…"}
                   {max !== undefined && ` · pick up to ${max}`}
                 </p>
@@ -201,160 +366,326 @@ export function PhotoPicker({
               </button>
             </div>
 
-            {/* Filters */}
-            <div className="space-y-2.5 border-b border-border px-5 py-3">
-              {/* Smart variant filter pill */}
-              {(preferVariantValue !== undefined || preferSubcategory) && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Smart filter:</span>
-                  {hasSmartFilter && smartFilterLabel && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-2.5 py-1 text-xs text-accent">
-                      <Tag className="h-3 w-3" />
-                      {smartFilterLabel}
+            <div className="flex min-h-0 flex-1">
+              {/* ── Left Filter Sidebar ── */}
+              <aside className="w-60 shrink-0 overflow-y-auto border-r border-border bg-muted/20 p-4 space-y-5 hidden md:block">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Filters
+                    {activeFilterCount > 0 && (
+                      <span className="ml-1.5 rounded-full bg-accent/15 px-1.5 py-0.5 text-[10px] text-accent">
+                        {activeFilterCount}
+                      </span>
+                    )}
+                  </h4>
+                  {activeFilterCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearFilters}
+                      className="text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+
+                {/* Source */}
+                <FilterGroup title="Source">
+                  {["All", "repo", "blob", "external"].map((src) => (
+                    <SidebarPill
+                      key={src}
+                      active={filterSource === src}
+                      onClick={() => setFilterSource(src)}
+                    >
+                      <HardDrive className="h-3 w-3 opacity-60" />
+                      {src === "All"
+                        ? "All sources"
+                        : src === "repo"
+                        ? "Public folder"
+                        : src === "blob"
+                        ? "Blob storage"
+                        : "External URLs"}
+                    </SidebarPill>
+                  ))}
+                </FilterGroup>
+
+                {/* Usage */}
+                <FilterGroup title="Usage">
+                  {["All", "Used", "Unused"].map((u) => (
+                    <SidebarPill
+                      key={u}
+                      active={filterUsage === u}
+                      onClick={() => setFilterUsage(u)}
+                    >
+                      {u}
+                    </SidebarPill>
+                  ))}
+                </FilterGroup>
+
+                {/* Category */}
+                {allCategories.length > 0 && (
+                  <FilterGroup title="Category">
+                    <select
+                      value={filterCategory}
+                      onChange={(e) => setFilterCategory(e.target.value)}
+                      className="input h-8 w-full px-2 text-xs"
+                    >
+                      <option value="All">All categories</option>
+                      {allCategories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </select>
+                  </FilterGroup>
+                )}
+
+                {/* Subcategory */}
+                {allSubcategories.length > 0 && (
+                  <FilterGroup title="Subcategory">
+                    <select
+                      value={filterSubcategory}
+                      onChange={(e) => setFilterSubcategory(e.target.value)}
+                      className="input h-8 w-full px-2 text-xs"
+                    >
+                      <option value="All">All subcategories</option>
+                      {allSubcategories.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </FilterGroup>
+                )}
+
+                {/* Variant Attribute */}
+                {allVariantAttrs.length > 0 && (
+                  <FilterGroup title="Variant Attribute">
+                    <select
+                      value={filterVariantAttr}
+                      onChange={(e) => {
+                        setFilterVariantAttr(e.target.value);
+                        setFilterVariantValue("All");
+                      }}
+                      className="input h-8 w-full px-2 text-xs"
+                    >
+                      <option value="All">All attributes</option>
+                      {allVariantAttrs.map((a) => (
+                        <option key={a} value={a}>
+                          {a}
+                        </option>
+                      ))}
+                    </select>
+                  </FilterGroup>
+                )}
+
+                {/* Variant Value */}
+                {(allVariantValues.length > 0 || preferVariantValue !== undefined) && (
+                  <FilterGroup title="Variant Value">
+                    <select
+                      value={filterVariantValue}
+                      onChange={(e) => setFilterVariantValue(e.target.value)}
+                      className="input h-8 w-full px-2 text-xs"
+                    >
+                      <option value="All">All values</option>
+                      <option value="__common__">Common (no variant)</option>
+                      {allVariantValues.map((v) => (
+                        <option key={v} value={v}>
+                          {v}
+                        </option>
+                      ))}
+                    </select>
+                  </FilterGroup>
+                )}
+
+                {/* Roles */}
+                {allRoles.length > 0 && (
+                  <FilterGroup title="Roles">
+                    <SidebarPill
+                      active={filterRole === "All"}
+                      onClick={() => setFilterRole("All")}
+                    >
+                      All roles
+                    </SidebarPill>
+                    {allRoles.map((r) => (
+                      <SidebarPill
+                        key={r}
+                        active={filterRole === r}
+                        onClick={() => setFilterRole(r)}
+                      >
+                        {r}
+                      </SidebarPill>
+                    ))}
+                  </FilterGroup>
+                )}
+
+                {/* Tags */}
+                {allTags.length > 0 && (
+                  <FilterGroup title="Tags">
+                    <div className="flex flex-wrap gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setVariantFilter(null)}
-                        className="ml-0.5 hover:text-danger"
-                        aria-label="Remove smart filter"
+                        onClick={() => setFilterTag("All")}
+                        className={cn(
+                          "cursor-pointer rounded-full border px-2.5 py-1 text-xs transition-colors",
+                          filterTag === "All"
+                            ? "border-foreground bg-foreground text-background"
+                            : "border-border bg-card text-muted-foreground hover:bg-muted"
+                        )}
                       >
-                        <X className="h-3 w-3" />
+                        All
                       </button>
-                    </span>
-                  )}
-                  {!hasSmartFilter && (
-                    <button
-                      type="button"
-                      onClick={() => setVariantFilter(preferVariantValue ?? null)}
-                      className="rounded-full border border-dashed border-accent/50 px-2.5 py-1 text-xs text-accent hover:bg-accent/5"
-                    >
-                      Show {preferVariantValue ? `"${preferVariantValue}"` : "common"} images
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => { setVariantFilter(null); setFolder("All"); }}
-                    className="text-xs text-muted-foreground underline hover:text-foreground"
-                  >
-                    Browse all
-                  </button>
-                </div>
-              )}
-
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  className="input h-10 pl-9"
-                  placeholder="Search photos…"
-                />
-              </div>
-
-              {/* Category tabs */}
-              <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
-                {folders.map((f) => (
-                  <button
-                    key={f.name}
-                    type="button"
-                    onClick={() => setFolder(f.name)}
-                    className={cn(
-                      "shrink-0 cursor-pointer rounded-full border px-3.5 py-1.5 text-xs transition-colors",
-                      folder === f.name
-                        ? "border-transparent bg-foreground text-background"
-                        : "border-border text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    {f.name}
-                    <span className="ml-1.5 opacity-60">{f.count}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Grid */}
-            <div className="flex-1 overflow-y-auto px-5 py-4">
-              {loading && (
-                <div className="grid place-items-center py-16 text-muted-foreground">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              )}
-
-              {!loading && grouped.length === 0 && (
-                <p className="py-16 text-center text-sm text-muted-foreground">
-                  No photos match.{" "}
-                  {hasSmartFilter && (
-                    <button
-                      type="button"
-                      onClick={() => setVariantFilter(null)}
-                      className="underline"
-                    >
-                      Remove smart filter
-                    </button>
-                  )}
-                </p>
-              )}
-
-              {grouped.map(([groupName, photos]) => (
-                <section key={groupName} className="mb-6">
-                  <h4 className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
-                    {groupName}{" "}
-                    <span className="normal-case opacity-60">({photos.length})</span>
-                  </h4>
-                  <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5">
-                    {photos.map((p) => {
-                      const on = selected.includes(p.url);
-                      const uses = library?.usage[p.url] ?? [];
-                      return (
+                      {allTags.map((t) => (
                         <button
-                          key={p.url}
+                          key={t}
                           type="button"
-                          onClick={() => toggle(p.url)}
-                          title={
-                            uses.length
-                              ? `${p.file} — used by ${uses.map((u) => u.name).join(", ")}`
-                              : p.file
-                          }
+                          onClick={() => setFilterTag(t)}
                           className={cn(
-                            "group relative aspect-square cursor-pointer overflow-hidden rounded-xl border-2 bg-muted transition-all",
-                            on
-                              ? "border-accent ring-2 ring-accent/30"
-                              : "border-transparent hover:border-border"
+                            "cursor-pointer rounded-full border px-2.5 py-1 text-xs transition-colors",
+                            filterTag === t
+                              ? "border-foreground bg-foreground text-background"
+                              : "border-border bg-card text-muted-foreground hover:bg-muted"
                           )}
                         >
-                          <Image
-                            src={decodeURI(p.url)}
-                            alt={p.file}
-                            fill
-                            sizes="(max-width: 640px) 33vw, 20vw"
-                            className="object-cover"
-                          />
-                          {on && (
-                            <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-accent text-accent-foreground shadow">
-                              <Check className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                          {/* Variant value badge */}
-                          {p.variantValue && (
-                            <span className="absolute bottom-1.5 left-1.5 rounded-full bg-accent/80 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur">
-                              {p.variantValue}
-                            </span>
-                          )}
-                          {!p.variantValue && uses.length > 0 && !on && (
-                            <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
-                              in {uses.length}
-                            </span>
-                          )}
+                          {t}
                         </button>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  </FilterGroup>
+                )}
+              </aside>
+
+              {/* ── Main grid ── */}
+              <div className="flex min-w-0 flex-1 flex-col">
+                {/* Toolbar */}
+                <div className="flex items-center gap-3 border-b border-border px-5 py-3 shrink-0">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      value={q}
+                      onChange={(e) => setQ(e.target.value)}
+                      className="input h-9 w-full pl-9"
+                      placeholder="Search photos, tags, roles…"
+                    />
                   </div>
-                </section>
-              ))}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void fetchFirstPage()}
+                    disabled={loading}
+                  >
+                    <RefreshCw
+                      className={cn("h-4 w-4", loading && "animate-spin")}
+                    />
+                    <span className="ml-2 hidden sm:inline">Refresh</span>
+                  </Button>
+                </div>
+
+                {/* Grid */}
+                <div className="flex-1 overflow-y-auto px-5 py-4">
+                  {loading && !library && (
+                    <div className="grid place-items-center py-16 text-muted-foreground">
+                      <Loader2 className="h-6 w-6 animate-spin" />
+                    </div>
+                  )}
+
+                  {!loading && visible.length === 0 && library && (
+                    <div className="grid place-items-center py-16 text-center text-sm text-muted-foreground">
+                      <p>No photos match your filters.</p>
+                      {activeFilterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={clearFilters}
+                          className="mt-2 text-xs underline hover:text-foreground"
+                        >
+                          Clear all filters
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {visible.length > 0 && (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                      {visible.map((p) => {
+                        const on = selected.includes(p.url);
+                        const uses = library?.usage[p.url] ?? [];
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => toggle(p.url)}
+                            title={
+                              uses.length
+                                ? `${p.file} — used by ${uses.map((u) => u.name).join(", ")}`
+                                : p.file
+                            }
+                            className={cn(
+                              "group relative aspect-square cursor-pointer overflow-hidden rounded-xl border-2 bg-muted transition-all",
+                              on
+                                ? "border-accent ring-2 ring-accent/30"
+                                : "border-transparent hover:border-border"
+                            )}
+                          >
+                            <Image
+                              src={decodeURI(p.url)}
+                              alt={p.alt || p.file}
+                              fill
+                              sizes="(max-width: 640px) 50vw, 20vw"
+                              className="object-cover"
+                            />
+                            {on && (
+                              <span className="absolute right-1.5 top-1.5 grid h-6 w-6 place-items-center rounded-full bg-accent text-accent-foreground shadow">
+                                <Check className="h-3.5 w-3.5" />
+                              </span>
+                            )}
+                            {/* Info strip on hover */}
+                            <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-2 pt-6">
+                              <p className="truncate text-[11px] text-white drop-shadow">
+                                {p.alt || p.file.split("/").pop()}
+                              </p>
+                              <div className="mt-0.5 flex items-center gap-1.5">
+                                {p.variantValue && (
+                                  <span className="inline-flex items-center gap-0.5 rounded-full bg-accent/80 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur">
+                                    <Tag className="h-2.5 w-2.5" />
+                                    {p.variantValue}
+                                  </span>
+                                )}
+                                {uses.length > 0 && (
+                                  <span className="rounded-full bg-white/25 px-1.5 py-0.5 text-[9px] text-white backdrop-blur">
+                                    in {uses.length}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Load more */}
+                  {library && library.photos.length < total && (
+                    <div className="mt-6 flex flex-col items-center gap-2">
+                      <p className="text-xs text-muted-foreground">
+                        {visible.length} shown · {library.photos.length} of {total} loaded
+                      </p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void loadMore()}
+                        disabled={loading}
+                      >
+                        {loading && <RefreshCw className="mr-2 h-4 w-4 animate-spin" />}
+                        Load more
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3.5">
+            <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3.5 shrink-0">
               <p className="text-xs text-muted-foreground">
                 {selected.length} selected. Removing a photo here never deletes
                 the file — you can add it back, or to another product, anytime.
@@ -367,5 +698,49 @@ export function PhotoPicker({
         </div>
       )}
     </>
+  );
+}
+
+// ---- Sidebar building blocks ----
+
+function FilterGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h5 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {title}
+      </h5>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function SidebarPill({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+        active
+          ? "bg-accent/15 font-medium text-accent"
+          : "text-muted-foreground hover:bg-muted"
+      )}
+    >
+      {children}
+    </button>
   );
 }

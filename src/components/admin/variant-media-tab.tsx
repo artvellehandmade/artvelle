@@ -7,16 +7,23 @@
  * (`visualOptionName`, e.g. "Design" or "Size"). Divides management into 3
  * focused sections:
  *
- *   1. Variant Previews   — one hero preview per visual variant value
- *   2. Variant Galleries  — per-value galleries (accordion, drag-to-reorder),
- *                           each with a read-only "Final gallery" preview
- *   3. Common Gallery     — images shared across ALL variants (drag-to-reorder)
+ *   1. Variant Previews   — auto-derived: 1st image of each variant's gallery
+ *                           (or 1st common image as fallback). Read-only chip.
+ *   2. Variant Galleries  — per-value galleries (accordion), each with an
+ *                           interactive "Final gallery" that combines the
+ *                           variant's own photos + common photos.
+ *   3. Common Gallery     — images shared across ALL variants.
  *
  * Order rule: the Final gallery for a value = that value's photos (in the
- * admin's drag order) THEN the common photos (in their drag order). This is the
- * default and only ordering — reorder WITHIN each group by dragging; common
- * photos are never interleaved into the middle of the variant photos. The
- * order is persisted via ProductImage.sortOrder (see syncProductImages).
+ * admin's drag order) THEN the common photos (in their drag order). Common
+ * photos are never interleaved into the middle of the variant photos — reorder
+ * happens WITHIN each group. Persisted via ProductImage.sortOrder (see
+ * syncProductImages).
+ *
+ * Bidirectional editing: the Final gallery is fully interactive — delete or
+ * reorder there and the source (variant gallery OR common gallery) updates.
+ * Editing the source galleries also reflects in the Final gallery. Same
+ * underlying state; multiple views onto it.
  */
 
 import { useState } from "react";
@@ -33,6 +40,11 @@ import type { ProductOption } from "@/lib/types";
 export type VisualGalleryState = {
   /** key = variantValue string; null key = "common" gallery */
   galleries: Record<string, string[]>;
+  /**
+   * Preview thumbnail per variant value. Auto-derived from galleries at save
+   * time (see product-form.tsx). Kept in the type for backwards compatibility
+   * with existing product loads — the UI does not write to it anymore.
+   */
   previews: Record<string, string>;
   common: string[];
 };
@@ -84,6 +96,7 @@ export function VariantMediaTab({
   );
 
   // Which image is being dragged: { scope: variantValue | COMMON_SCOPE, index }.
+  // `index` is LOCAL to the source array (not the combined Final index).
   const [drag, setDrag] = useState<{ scope: string; index: number } | null>(null);
 
   function toggleSection(val: string) {
@@ -104,6 +117,11 @@ export function VariantMediaTab({
     });
   }
 
+  function setCommon(images: string[]) {
+    onChange({ ...state, common: images });
+  }
+
+  // Manually chosen preview thumbnail per variant value.
   function setPreview(variantValue: string, url: string | null) {
     const previews = { ...state.previews };
     if (url === null) delete previews[variantValue];
@@ -111,15 +129,14 @@ export function VariantMediaTab({
     onChange({ ...state, previews });
   }
 
-  function setCommon(images: string[]) {
-    onChange({ ...state, common: images });
-  }
-
-  // Remove a single image from a gallery
+  // Remove a single image from a variant gallery (clears the preview too when
+  // it pointed at the removed photo).
   function removeFromGallery(variantValue: string, url: string) {
     const cur = state.galleries[variantValue] ?? [];
-    setGallery(variantValue, cur.filter((u) => u !== url));
-    if (state.previews[variantValue] === url) setPreview(variantValue, null);
+    const galleries = { ...state.galleries, [variantValue]: cur.filter((u) => u !== url) };
+    const previews = { ...state.previews };
+    if (previews[variantValue] === url) delete previews[variantValue];
+    onChange({ ...state, galleries, previews });
   }
 
   function removeFromCommon(url: string) {
@@ -127,6 +144,9 @@ export function VariantMediaTab({
   }
 
   // ---- Drag-and-drop reordering ----
+  // Drops only apply within the same scope — dragging a common photo onto a
+  // variant slot (or vice versa) is a no-op so the "variant photos first, then
+  // common" rule is preserved.
   function onDropInGallery(variantValue: string, target: number) {
     if (drag && drag.scope === variantValue) {
       setGallery(variantValue, reorder(state.galleries[variantValue] ?? [], drag.index, target));
@@ -151,11 +171,11 @@ export function VariantMediaTab({
 
   return (
     <div className="space-y-6">
-      {/* ── Section 1: Variant Previews ── */}
+      {/* ── Section 1: Variant Previews (manually chosen per value) ── */}
       <div>
         <SectionHeader
           title="Variant Previews"
-          description={`One preview thumbnail per ${visualName} — shown on the variant picker.`}
+          description={`One preview thumbnail per ${visualName} — shown on the variant picker. Pick manually, or use "Set preview" on a gallery photo below.`}
         />
         <div className="mt-3 flex flex-wrap gap-3">
           {visualValues.map((val) => {
@@ -209,7 +229,7 @@ export function VariantMediaTab({
       <div>
         <SectionHeader
           title={`${visualName} Galleries`}
-          description={`Assign a gallery to each ${visualName} value. Every combination sharing it uses these photos. Drag photos to reorder.`}
+          description={`Assign a gallery to each ${visualName} value. Every combination sharing it uses these photos. The Final gallery below is fully editable — remove or reorder from either view.`}
         />
         <div className="mt-3 space-y-2">
           {visualValues.map((val) => {
@@ -253,7 +273,8 @@ export function VariantMediaTab({
                       />
                     </div>
 
-                    {/* Gallery grid (drag to reorder) */}
+                    {/* Variant-only gallery grid (drag to reorder, click X to remove).
+                        Editing here reflects in the Final gallery below. */}
                     {gallery.length > 0 ? (
                       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6">
                         {gallery.map((img, i) => (
@@ -281,7 +302,7 @@ export function VariantMediaTab({
                             <span className="absolute right-1 top-1 grid h-5 w-5 place-items-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
                               <GripVertical className="h-3 w-3" />
                             </span>
-                            {/* Set as preview button */}
+                            {/* Set as preview / preview badge (manual choice) */}
                             {state.previews[val] !== img && (
                               <button
                                 type="button"
@@ -314,37 +335,69 @@ export function VariantMediaTab({
                       </p>
                     )}
 
-                    {/* Read-only "Final gallery" = this design's gallery + common */}
+                    {/* Interactive "Final gallery" — variant gallery + common.
+                        Removing/reordering here writes back to the correct
+                        source (variant vs. common). */}
                     <div>
                       <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                        Final gallery preview ({finalGallery.length})
+                        Final gallery ({finalGallery.length}) — drag to reorder, click × to remove
                       </p>
                       {finalGallery.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
-                          {finalGallery.map((img, i) => (
-                            <div
-                              key={`${img}-${i}`}
-                              className="relative h-12 w-12 overflow-hidden rounded-md border border-border bg-muted"
-                              title={i < gallery.length ? `${visualName} image` : "Common image"}
-                            >
-                              <Image
-                                src={decodeURI(img)}
-                                alt={`Final ${i + 1}`}
-                                fill
-                                sizes="48px"
-                                className="object-cover"
-                              />
-                              {i >= gallery.length && (
-                                <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[7px] leading-tight text-white">
-                                  common
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                          {finalGallery.map((img, i) => {
+                            const isCommon = i >= gallery.length;
+                            const scope = isCommon ? COMMON_SCOPE : val;
+                            const localIndex = isCommon ? i - gallery.length : i;
+                            const isDragging =
+                              drag?.scope === scope && drag.index === localIndex;
+                            return (
+                              <div
+                                key={`${img}-${i}`}
+                                draggable
+                                onDragStart={() => setDrag({ scope, index: localIndex })}
+                                onDragOver={(e) => e.preventDefault()}
+                                onDrop={() => {
+                                  if (isCommon) onDropInCommon(localIndex);
+                                  else onDropInGallery(val, localIndex);
+                                }}
+                                onDragEnd={() => setDrag(null)}
+                                className={`group relative h-14 w-14 cursor-move overflow-hidden rounded-md border bg-muted transition-all ${
+                                  isDragging
+                                    ? "border-accent opacity-40 ring-2 ring-accent"
+                                    : "border-border"
+                                }`}
+                                title={isCommon ? "Common image" : `${visualName} image`}
+                              >
+                                <Image
+                                  src={decodeURI(img)}
+                                  alt={`Final ${i + 1}`}
+                                  fill
+                                  sizes="56px"
+                                  className="pointer-events-none object-cover"
+                                />
+                                {isCommon && (
+                                  <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[7px] leading-tight text-white">
+                                    common
+                                  </span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (isCommon) removeFromCommon(img);
+                                    else removeFromGallery(val, img);
+                                  }}
+                                  className="absolute right-0.5 top-0.5 grid h-4 w-4 place-items-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100 hover:bg-danger"
+                                  aria-label="Remove"
+                                >
+                                  <X className="h-2.5 w-2.5" />
+                                </button>
+                              </div>
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-xs text-muted-foreground">
-                          Nothing yet — this design has no images and there are no common images.
+                          Nothing yet — this {visualName} has no images and there are no common images.
                         </p>
                       )}
                     </div>

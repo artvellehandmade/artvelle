@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Image from "next/image";
+import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { useProductView } from "@/context/product-view";
 import { cn } from "@/lib/utils";
@@ -63,43 +64,68 @@ export function ProductGallery({
   return (
     <div className="sticky top-24 flex flex-col gap-4">
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-muted">
-        {isVideo ? (
-          <video
+        {/* Directional crossfade: the incoming photo slides in from the side
+            being paginated towards while the old one fades under it. */}
+        <AnimatePresence initial={false} custom={direction} mode="popLayout">
+          <motion.div
             key={currentUrl}
-            src={currentUrl}
-            autoPlay
-            loop
-            muted
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <Image
-            key={currentUrl}
-            src={currentUrl || ""}
-            alt={product.name}
-            fill
-            className="object-cover"
-            priority
-            sizes="(max-width: 768px) 100vw, 50vw"
-          />
-        )}
+            custom={direction}
+            variants={{
+              enter: (dir: number) => ({
+                opacity: 0,
+                x: dir * 48,
+                scale: 1.02,
+              }),
+              center: { opacity: 1, x: 0, scale: 1 },
+              exit: (dir: number) => ({
+                opacity: 0,
+                x: dir * -32,
+                scale: 0.99,
+              }),
+            }}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute inset-0"
+          >
+            {isVideo ? (
+              <video
+                src={currentUrl}
+                autoPlay
+                loop
+                muted
+                playsInline
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <Image
+                src={currentUrl || ""}
+                alt={product.name}
+                fill
+                className="object-cover"
+                priority
+                sizes="(max-width: 768px) 100vw, 50vw"
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
         
         {activeImages.length > 1 && (
           <>
             <button
               onClick={() => paginate(-1)}
-              className="absolute left-4 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-black backdrop-blur transition hover:bg-white"
+              className="absolute left-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/80 p-2 text-black shadow-md backdrop-blur transition-all duration-300 hover:scale-110 hover:bg-white active:scale-95"
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
             <button
               onClick={() => paginate(1)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-full bg-white/80 p-2 text-black backdrop-blur transition hover:bg-white"
+              className="absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-full bg-white/80 p-2 text-black shadow-md backdrop-blur transition-all duration-300 hover:scale-110 hover:bg-white active:scale-95"
             >
               <ChevronRight className="h-5 w-5" />
             </button>
-            <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-1.5">
+            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
               {activeImages.map((_, i) => (
                 <div
                   key={i}
@@ -126,8 +152,10 @@ export function ProductGallery({
                   setActiveIndex(i);
                 }}
                 className={cn(
-                  "relative aspect-square overflow-hidden rounded-lg bg-muted transition-all",
-                  i === activeIndex ? "ring-2 ring-primary ring-offset-2" : "opacity-70 hover:opacity-100"
+                  "relative aspect-square overflow-hidden rounded-lg bg-muted transition-all duration-300 hover:-translate-y-0.5",
+                  i === activeIndex
+                    ? "ring-2 ring-primary ring-offset-2"
+                    : "opacity-70 hover:opacity-100 hover:shadow-md"
                 )}
               >
                 {thumbIsVideo ? (

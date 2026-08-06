@@ -90,7 +90,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
   return (
     <div className="group flex flex-col">
       {/* ── Image area (Swappable gallery) ── */}
-      <div className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted">
+      <div className="card-lift relative block aspect-square overflow-hidden rounded-2xl bg-muted ring-1 ring-border/60 transition-shadow group-hover:ring-primary/25">
         <Link href={`/product/${product.slug}`} className="absolute inset-0 z-10" aria-label={product.name} />
         
         {images.length > 0 ? (
@@ -160,9 +160,9 @@ export function ProductCard({ product }: { product: ProductDTO }) {
           </div>
         )}
 
-        {/* Discount badge — top left */}
+        {/* Discount badge — top left (berry chip, matches primary CTA) */}
         {discount > 0 && (
-          <span className="absolute left-2 top-2 z-30 rounded-full bg-accent px-2 py-0.5 text-[10px] font-semibold text-accent-foreground shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
+          <span className="animate-pop absolute left-2 top-2 z-30 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground shadow-md shadow-primary/30 sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs">
             −{discount}%
           </span>
         )}
@@ -170,7 +170,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
         {/* Context badge — top left (after discount) */}
         {badge && !discount && (
           <span
-            className={`absolute left-2 top-2 z-30 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs ${BADGE_STYLES[badge].bg} ${BADGE_STYLES[badge].text}`}
+            className={`animate-pop absolute left-2 top-2 z-30 rounded-full px-2 py-0.5 text-[10px] font-semibold shadow-md sm:left-3 sm:top-3 sm:px-2.5 sm:py-1 sm:text-xs ${BADGE_STYLES[badge].bg} ${BADGE_STYLES[badge].text}`}
           >
             {badge}
           </span>
@@ -224,7 +224,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
         <div className="mt-2 flex items-center gap-2 sm:mt-3">
           <Link
             href={`/product/${product.slug}`}
-            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium transition-all duration-150 hover:border-foreground/40 hover:bg-muted active:scale-[0.97] sm:h-10 sm:text-sm"
+            className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full border border-border text-xs font-medium transition-all duration-200 hover:border-primary hover:bg-primary hover:text-primary-foreground hover:shadow-lg hover:shadow-primary/25 active:scale-[0.97] sm:h-10 sm:text-sm"
           >
             View Product
           </Link>

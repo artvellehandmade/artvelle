@@ -3,39 +3,44 @@
 /* Enable class-based dark mode (next-themes uses .dark on <html>) */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ---------------- Design tokens ---------------- */
+/* ---------------- Design tokens ----------------
+   Premium blush + rosewood + gold palette, tuned to match the studio's
+   pink/gold product photography. `--blush` is decorative-only (gradients,
+   glow orbs); everything else maps 1:1 onto Tailwind utilities below. */
 :root {
-  --background: #faf9f6; /* warm cream */
-  --foreground: #1a1a18; /* near black */
+  --background: #fdf7f4; /* blush cream */
+  --foreground: #2b1f1c; /* warm espresso */
   --card: #ffffff;
-  --card-foreground: #1a1a18;
-  --muted: #f1efea;
-  --muted-foreground: #6b6862;
-  --border: #e7e4dd;
-  --input: #e7e4dd;
-  --ring: #b08d4c;
-  --primary: #1a1a18; /* near-black buttons */
-  --primary-foreground: #faf9f6;
+  --card-foreground: #2b1f1c;
+  --muted: #f7ece7; /* soft blush */
+  --muted-foreground: #7d6a63;
+  --border: #f0ded6; /* rose-tinted */
+  --input: #f0ded6;
+  --ring: #a84a5e;
+  --primary: #a84a5e; /* rosewood berry buttons */
+  --primary-foreground: #fff8f6;
   --accent: #b08d4c; /* refined gold */
   --accent-foreground: #ffffff;
+  --blush: #e9bcc7; /* decorative rose for gradients & orbs */
   --success: #2f7d5b;
   --danger: #b4442f;
 }
 
 .dark {
-  --background: #100f0d;
-  --foreground: #f2f0eb;
-  --card: #1a1815;
-  --card-foreground: #f2f0eb;
-  --muted: #201e1a;
-  --muted-foreground: #a6a29a;
-  --border: #2c2924;
-  --input: #2c2924;
-  --ring: #c6a15b;
-  --primary: #f2f0eb; /* light buttons on dark */
-  --primary-foreground: #16140f;
+  --background: #191114; /* warm plum-black */
+  --foreground: #f5edea;
+  --card: #221820;
+  --card-foreground: #f5edea;
+  --muted: #2a1f26;
+  --muted-foreground: #b1a099;
+  --border: #372a32;
+  --input: #372a32;
+  --ring: #d38a97;
+  --primary: #d98d9c; /* rose-blush buttons on dark */
+  --primary-foreground: #23131a;
   --accent: #c6a15b; /* brighter gold on dark */
   --accent-foreground: #16140f;
+  --blush: #4a2f38;
   --success: #4caf82;
   --danger: #e06a54;
 }
@@ -55,6 +60,7 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-blush: var(--blush);
   --color-success: var(--success);
   --color-danger: var(--danger);
 
@@ -314,14 +320,17 @@ select.input {
 }
 
 /* Card hover lift — plus a press-in on tap so touch users get feedback
-   too (mobile has no :hover, so without this the cards feel dead). */
+   too (mobile has no :hover, so without this the cards feel dead).
+   The shadow is rose-tinted so lifted cards feel warm, not grey. */
 .card-lift {
   transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.45s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .card-lift:hover {
   transform: translateY(-6px);
-  box-shadow: 0 24px 48px -20px color-mix(in srgb, var(--foreground) 22%, transparent);
+  box-shadow:
+    0 24px 48px -20px color-mix(in srgb, var(--primary) 35%, transparent),
+    0 8px 20px -12px color-mix(in srgb, var(--foreground) 18%, transparent);
 }
 .card-lift:active {
   transform: scale(0.98);
@@ -329,6 +338,66 @@ select.input {
 }
 @media (hover: none) {
   .card-lift:hover { transform: none; box-shadow: none; }
+}
+
+/* Slow ken-burns zoom for large imagery (heroes, about) */
+@keyframes kenBurns {
+  from {
+    transform: scale(1) translateY(0);
+  }
+  to {
+    transform: scale(1.08) translateY(-1.5%);
+  }
+}
+.animate-kenburns {
+  animation: kenBurns 16s ease-in-out infinite alternate;
+}
+
+/* Drifting gradient wash for section backgrounds */
+@keyframes gradientShift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradientShift 12s ease-in-out infinite;
+}
+
+/* Pop-in for badges & chips (scale overshoot) */
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  70% {
+    transform: scale(1.08);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.animate-pop {
+  animation: popIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Soft breathing glow for standout CTAs */
+@keyframes glowPulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 24px 4px color-mix(in srgb, var(--primary) 22%, transparent);
+  }
+}
+.animate-glow {
+  animation: glowPulse 3.2s ease-in-out infinite;
 }
 
 /* Elegant underline grow for nav links */
@@ -362,7 +431,11 @@ select.input {
   .animate-aurora,
   .animate-aurora-2,
   .text-gold-shimmer,
-  .animate-pulse-soft {
+  .animate-pulse-soft,
+  .animate-kenburns,
+  .animate-gradient,
+  .animate-pop,
+  .animate-glow {
     animation: none;
   }
 }

@@ -454,9 +454,14 @@ export function ProductForm({
     for (const [val, imgs] of Object.entries(visualGallery.galleries)) {
       if (imageValues.has(val) && imgs.length) cleanGalleries[val] = imgs;
     }
+    // Preview thumbnail: the admin's manual pick wins; when none is chosen,
+    // fall back to the 1st image of that value's gallery (then 1st common).
     const cleanPreviews: Record<string, string> = {};
-    for (const [val, url] of Object.entries(visualGallery.previews)) {
-      if (imageValues.has(val) && url) cleanPreviews[val] = url;
+    for (const val of imageValues) {
+      const manual = visualGallery.previews[val];
+      const preview =
+        manual || cleanGalleries[val]?.[0] || visualGallery.common[0] || null;
+      if (preview) cleanPreviews[val] = preview;
     }
     const cleanMedia: VisualGalleryState = {
       galleries: cleanGalleries,

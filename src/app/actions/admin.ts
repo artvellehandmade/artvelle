@@ -113,9 +113,14 @@ export async function createProduct(input: ProductInput) {
     stock: data.stock,
   });
 
+  // `media` only drives syncProductImages below — it is NOT a Product column,
+  // so it must never reach prisma (spreading it makes the whole create/update
+  // throw PrismaClientValidationError and the save silently fails).
+  const { media: _media, ...productData } = data;
+
   const product = await prisma.product.create({
     data: {
-      ...data,
+      ...productData,
       secondaryCategory: data.secondaryCategory || null,
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
@@ -282,10 +287,13 @@ export async function updateProduct(id: string, input: ProductInput) {
     stock: data.stock,
   });
 
+  // See createProduct: `media` is for syncProductImages only, never prisma.
+  const { media: _media, ...productData } = data;
+
   await prisma.product.update({
     where: { id },
     data: {
-      ...data,
+      ...productData,
       secondaryCategory: data.secondaryCategory || null,
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,

@@ -85,9 +85,10 @@ export default async function HomePage() {
     <div className="overflow-x-clip">
       {/* ---------------- Hero ---------------- */}
       <section className="relative overflow-hidden">
-        {/* Glow orbs */}
-        <div className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+        {/* Glow orbs — blush + gold wash */}
+        <div className="pointer-events-none absolute -top-40 left-1/2 h-[480px] w-[820px] -translate-x-1/2 rounded-full bg-blush/50 blur-3xl" />
+        <div className="animate-aurora pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
+        <div className="animate-aurora-2 pointer-events-none absolute right-[-6rem] top-24 h-80 w-80 rounded-full bg-blush/40 blur-3xl" />
 
         <div className="container-px mx-auto grid max-w-7xl items-center gap-12 py-16 md:grid-cols-2 md:py-24">
           <div>

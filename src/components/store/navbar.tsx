@@ -49,9 +49,9 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
       {/* ── Top header (all sizes) ── */}
       <header
         className={cn(
-          "sticky top-0 z-40 transition-colors duration-300",
+          "sticky top-0 z-40 transition-all duration-500",
           scrolled
-            ? "border-b border-border bg-background/80 backdrop-blur-md"
+            ? "border-b border-border bg-background/80 shadow-lg shadow-primary/5 backdrop-blur-md"
             : "border-b border-transparent bg-background/0"
         )}
       >
@@ -103,7 +103,7 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
             {/* Mobile: quick link to search / shop */}
             <Link
               href="/shop"
-              className="grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer md:hidden"
+              className="grid h-10 w-10 place-items-center rounded-full border border-border transition-all duration-300 hover:scale-105 hover:border-primary/40 hover:bg-primary/5 active:scale-95 cursor-pointer md:hidden"
               aria-label="Search"
             >
               <Search className="h-[18px] w-[18px]" />
@@ -112,7 +112,7 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
             {/* Account — desktop only (mobile uses bottom bar) */}
             <Link
               href="/account"
-              className="relative hidden md:grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
+              className="relative hidden md:grid h-10 w-10 place-items-center rounded-full border border-border transition-all duration-300 hover:scale-105 hover:border-primary/40 hover:bg-primary/5 active:scale-95 cursor-pointer"
               aria-label={account ? "My account" : "Log in"}
               title={account ? `Hi, ${account.name.split(" ")[0]}` : "Log in"}
             >
@@ -123,12 +123,17 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
             </Link>
             <button
               onClick={() => setOpen(true)}
-              className="relative grid h-10 w-10 place-items-center rounded-full border border-border hover:bg-muted cursor-pointer"
+              className="relative grid h-10 w-10 place-items-center rounded-full border border-border transition-all duration-300 hover:scale-105 hover:border-primary/40 hover:bg-primary/5 active:scale-95 cursor-pointer"
               aria-label="Open cart"
             >
               <ShoppingBag className="h-[18px] w-[18px]" />
               {count > 0 && (
-                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-accent px-1 text-[11px] font-medium text-accent-foreground">
+                // key={count} remounts the badge when the count changes, so it
+                // pops every time something is added to the cart.
+                <span
+                  key={count}
+                  className="animate-pop absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-primary px-1 text-[11px] font-medium text-primary-foreground shadow-md shadow-primary/30"
+                >
                   {count}
                 </span>
               )}
@@ -185,7 +190,10 @@ export function Navbar({ account }: { account?: { name: string } | null }) {
               <span className="relative">
                 <ShoppingBag className="h-5 w-5" strokeWidth={1.6} />
                 {count > 0 && (
-                  <span className="absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-accent px-0.5 text-[9px] font-semibold text-accent-foreground">
+                  <span
+                    key={count}
+                    className="animate-pop absolute -right-2 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-0.5 text-[9px] font-semibold text-primary-foreground"
+                  >
                     {count}
                   </span>
                 )}

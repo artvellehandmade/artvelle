@@ -7,11 +7,11 @@ type Size = "sm" | "md" | "lg" | "icon";
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-primary text-primary-foreground hover:opacity-90 border border-transparent",
+    "bg-primary text-primary-foreground border border-transparent shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/35 hover:brightness-105",
   outline:
-    "bg-transparent text-foreground border border-border hover:bg-muted",
+    "bg-transparent text-foreground border border-border hover:border-primary/40 hover:bg-primary/5",
   ghost: "bg-transparent text-foreground hover:bg-muted border border-transparent",
-  gold: "bg-accent text-accent-foreground hover:opacity-90 border border-transparent",
+  gold: "bg-gradient-to-r from-accent via-[#caa25e] to-accent bg-[length:200%_auto] text-accent-foreground border border-transparent shadow-lg shadow-accent/30 hover:bg-right hover:shadow-xl hover:shadow-accent/40",
   danger:
     "bg-transparent text-danger border border-danger/40 hover:bg-danger/10",
 };
