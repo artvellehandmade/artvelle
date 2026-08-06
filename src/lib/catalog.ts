@@ -1,6 +1,7 @@
 import { prisma } from "./prisma";
 import type { ProductDTO, MediaDTO } from "./types";
 import { toDTO } from "./products";
+import { remapGalleryUrl } from "./gallery-remap";
 
 /**
  * The browsing hierarchy: Category → Subcategory → Product.
@@ -84,7 +85,7 @@ function coverImages(
   sub: { images: string[] },
   products: ProductDTO[]
 ): string[] {
-  const own = sub.images.filter(Boolean);
+  const own = sub.images.filter(Boolean).map(remapGalleryUrl);
   if (own.length > 0) return own.slice(0, 6);
   const borrowed: string[] = [];
   for (const p of products) {
@@ -106,7 +107,7 @@ function toTile(sub: SubcategoryRow, products: ProductDTO[]): SubcategoryTile {
     images: coverImages(sub, products),
     media: (sub as any).subcategoryImages?.map((si: any) => ({
       id: si.media.id,
-      url: si.media.url,
+      url: remapGalleryUrl(si.media.url),
       alt: si.media.alt,
       width: si.media.width,
       height: si.media.height,

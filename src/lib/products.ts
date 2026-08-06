@@ -10,6 +10,7 @@ import type {
   SellableVariant,
 } from "./types";
 import { deriveVariantModel } from "./variants";
+import { remapGalleryUrl, remapGalleryUrls } from "./gallery-remap";
 import { searchProducts } from "./search";
 
 /** Normalise a Prisma product row into a ProductDTO (coerces the JSON columns). */
@@ -42,11 +43,27 @@ export function toDTO(
         })
       : null;
 
+  const storedSellableRemapped = storedSellable.map((v) => ({
+    ...v,
+    images: remapGalleryUrls(v.images),
+  }));
+
+  // Drop the raw Prisma relation before spreading `p` — otherwise its
+  // unmapped, un-typed `media.url` values ride along on the DTO (ProductDTO
+  // has no `productImages` field, so nothing reads them) and get serialized
+  // into the RSC payload anyway once the product is passed to a client
+  // component, silently re-exposing pre-restructure gallery paths.
+  const { productImages: _rawProductImages, ...rest } = p;
+
   return {
-    ...p,
+    ...rest,
+    // Photos moved to the new folder layout on 2026-08-06; remap on read so the
+    // storefront always emits the current, directly-servable path (see
+    // gallery-remap.ts for why next/image needs this rather than the redirect).
+    images: remapGalleryUrls(p.images),
     media: p.productImages?.map((pi) => ({
       id: pi.media.id,
-      url: pi.media.url,
+      url: remapGalleryUrl(pi.media.url),
       alt: pi.media.alt,
       width: pi.media.width,
       height: pi.media.height,
@@ -72,7 +89,7 @@ export function toDTO(
     attributes: derived ? derived.attributes : storedAttributes,
     propertyModules: (p.propertyModules as any) ?? {},
     rules: (p.rules as any) ?? {},
-    sellableVariants: derived ? derived.sellableVariants : storedSellable,
+    sellableVariants: derived ? derived.sellableVariants : storedSellableRemapped,
   };
 }
 

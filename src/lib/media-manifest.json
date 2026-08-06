@@ -1,668 +1,731 @@
 {
   "photos": [
     {
-      "url": "/products/gallery/Car%20Accessories/Dashboard%20Idol/closeup.webp",
+      "url": "/products/gallery/Business%20Essentials/Business%20Displays/Business%20QR%20Display/common/closeup.webp",
       "file": "closeup.webp",
-      "category": "Car Accessories",
-      "group": "Dashboard Idol",
-      "size": 144430
-    },
-    {
-      "url": "/products/gallery/Car%20Accessories/Dashboard%20Idol/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Car Accessories",
-      "group": "Dashboard Idol",
-      "size": 76592
-    },
-    {
-      "url": "/products/gallery/Car%20Accessories/Dashboard%20Idol/hero.webp",
-      "file": "hero.webp",
-      "category": "Car Accessories",
-      "group": "Dashboard Idol",
-      "size": 78680
-    },
-    {
-      "url": "/products/gallery/Car%20Accessories/Dashboard%20Idol/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Car Accessories",
-      "group": "Dashboard Idol",
-      "size": 147734
-    },
-    {
-      "url": "/products/gallery/Car%20Accessories/Dashboard%20Idol/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Car Accessories",
-      "group": "Dashboard Idol",
-      "size": 25074
-    },
-    {
-      "url": "/products/gallery/Fashion%20Accessories/Resin%20Brooch/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Fashion Accessories",
-      "group": "Resin Brooch",
-      "size": 124618
-    },
-    {
-      "url": "/products/gallery/Fashion%20Accessories/Resin%20Brooch/hero.webp",
-      "file": "hero.webp",
-      "category": "Fashion Accessories",
-      "group": "Resin Brooch",
-      "size": 309972
-    },
-    {
-      "url": "/products/gallery/Fashion%20Accessories/Resin%20Brooch/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Fashion Accessories",
-      "group": "Resin Brooch",
-      "size": 92100
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Resin%20Toran/hero.webp",
-      "file": "hero.webp",
-      "category": "Festive Decor",
-      "group": "Resin Toran",
-      "size": 265052
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Resin%20Toran/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Festive Decor",
-      "group": "Resin Toran",
-      "size": 79064
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Shubh%20Labh%20Door%20Hanging/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Festive Decor",
-      "group": "Shubh Labh Door Hanging",
-      "size": 120832
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Shubh%20Labh%20Door%20Hanging/gallery-02.webp",
-      "file": "gallery-02.webp",
-      "category": "Festive Decor",
-      "group": "Shubh Labh Door Hanging",
-      "size": 180576
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Shubh%20Labh%20Door%20Hanging/hero.webp",
-      "file": "hero.webp",
-      "category": "Festive Decor",
-      "group": "Shubh Labh Door Hanging",
-      "size": 238236
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Shubh%20Labh%20Door%20Hanging/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Festive Decor",
-      "group": "Shubh Labh Door Hanging",
-      "size": 134922
-    },
-    {
-      "url": "/products/gallery/Festive%20Decor/Shubh%20Labh%20Door%20Hanging/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Festive Decor",
-      "group": "Shubh Labh Door Hanging",
-      "size": 72250
-    },
-    {
-      "url": "/products/gallery/Home%20Decor/Resin%20Name%20Plate/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Home Decor",
-      "group": "Resin Name Plate",
-      "size": 108138
-    },
-    {
-      "url": "/products/gallery/Home%20Decor/Resin%20Name%20Plate/gallery-02.webp",
-      "file": "gallery-02.webp",
-      "category": "Home Decor",
-      "group": "Resin Name Plate",
-      "size": 142756
-    },
-    {
-      "url": "/products/gallery/Home%20Decor/Resin%20Name%20Plate/hero.webp",
-      "file": "hero.webp",
-      "category": "Home Decor",
-      "group": "Resin Name Plate",
-      "size": 98372
-    },
-    {
-      "url": "/products/gallery/Home%20Decor/Resin%20Name%20Plate/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Home Decor",
-      "group": "Resin Name Plate",
-      "size": 203182
-    },
-    {
-      "url": "/products/gallery/Home%20Decor/Resin%20Name%20Plate/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Home Decor",
-      "group": "Resin Name Plate",
-      "size": 32192
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Baby%20Footprint%20Frame/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Personalised Gifts",
-      "group": "Baby Footprint Frame",
-      "size": 129504
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Baby%20Footprint%20Frame/hero.webp",
-      "file": "hero.webp",
-      "category": "Personalised Gifts",
-      "group": "Baby Footprint Frame",
-      "size": 196714
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Baby%20Footprint%20Frame/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Personalised Gifts",
-      "group": "Baby Footprint Frame",
-      "size": 62646
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Flower%20Photo%20Frame/hero.webp",
-      "file": "hero.webp",
-      "category": "Personalised Gifts",
-      "group": "Flower Photo Frame",
-      "size": 167184
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Flower%20Photo%20Frame/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Personalised Gifts",
-      "group": "Flower Photo Frame",
-      "size": 53554
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Name%20Keychain/closeup.webp",
-      "file": "closeup.webp",
-      "category": "Personalised Gifts",
-      "group": "Name Keychain",
-      "size": 78782
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Name%20Keychain/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Personalised Gifts",
-      "group": "Name Keychain",
-      "size": 47716
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Name%20Keychain/hero.webp",
-      "file": "hero.webp",
-      "category": "Personalised Gifts",
-      "group": "Name Keychain",
-      "size": 88996
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Name%20Keychain/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Personalised Gifts",
-      "group": "Name Keychain",
-      "size": 136972
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Name%20Keychain/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Personalised Gifts",
-      "group": "Name Keychain",
-      "size": 29650
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/QR%20Code%20Frame/closeup.webp",
-      "file": "closeup.webp",
-      "category": "Personalised Gifts",
-      "group": "QR Code Frame",
+      "category": "Business Essentials",
+      "group": "Business Displays / Business QR Display / common",
       "size": 140246
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/QR%20Code%20Frame/gallery-01.webp",
+      "url": "/products/gallery/Business%20Essentials/Business%20Displays/Business%20QR%20Display/common/gallery-01.webp",
       "file": "gallery-01.webp",
-      "category": "Personalised Gifts",
-      "group": "QR Code Frame",
+      "category": "Business Essentials",
+      "group": "Business Displays / Business QR Display / common",
       "size": 119048
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/QR%20Code%20Frame/hero.webp",
+      "url": "/products/gallery/Business%20Essentials/Business%20Displays/Business%20QR%20Display/common/hero.webp",
       "file": "hero.webp",
-      "category": "Personalised Gifts",
-      "group": "QR Code Frame",
+      "category": "Business Essentials",
+      "group": "Business Displays / Business QR Display / common",
       "size": 89722
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/QR%20Code%20Frame/lifestyle.webp",
+      "url": "/products/gallery/Business%20Essentials/Business%20Displays/Business%20QR%20Display/common/lifestyle.webp",
       "file": "lifestyle.webp",
-      "category": "Personalised Gifts",
-      "group": "QR Code Frame",
+      "category": "Business Essentials",
+      "group": "Business Displays / Business QR Display / common",
       "size": 134510
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/QR%20Code%20Frame/thumbnail.webp",
+      "url": "/products/gallery/Business%20Essentials/Business%20Displays/Business%20QR%20Display/common/thumbnail.webp",
       "file": "thumbnail.webp",
-      "category": "Personalised Gifts",
-      "group": "QR Code Frame",
+      "category": "Business Essentials",
+      "group": "Business Displays / Business QR Display / common",
       "size": 27486
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-01.webp",
+      "url": "/products/gallery/Car%20Accessories/Dashboard%20Decor/Ganesha%20Dashboard%20Idol/common/closeup.webp",
+      "file": "closeup.webp",
+      "category": "Car Accessories",
+      "group": "Dashboard Decor / Ganesha Dashboard Idol / common",
+      "size": 144430
+    },
+    {
+      "url": "/products/gallery/Car%20Accessories/Dashboard%20Decor/Ganesha%20Dashboard%20Idol/common/gallery-01.webp",
       "file": "gallery-01.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 201240
+      "category": "Car Accessories",
+      "group": "Dashboard Decor / Ganesha Dashboard Idol / common",
+      "size": 76592
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-02.webp",
-      "file": "gallery-02.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 197098
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-03.webp",
-      "file": "gallery-03.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 110038
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-04.webp",
-      "file": "gallery-04.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 193804
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-05.webp",
-      "file": "gallery-05.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 148532
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/gallery-06.webp",
-      "file": "gallery-06.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 173198
-    },
-    {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/hero.webp",
+      "url": "/products/gallery/Car%20Accessories/Dashboard%20Decor/Ganesha%20Dashboard%20Idol/common/hero.webp",
       "file": "hero.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 134714
+      "category": "Car Accessories",
+      "group": "Dashboard Decor / Ganesha Dashboard Idol / common",
+      "size": 78680
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/lifestyle.webp",
+      "url": "/products/gallery/Car%20Accessories/Dashboard%20Decor/Ganesha%20Dashboard%20Idol/common/lifestyle.webp",
       "file": "lifestyle.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 147558
+      "category": "Car Accessories",
+      "group": "Dashboard Decor / Ganesha Dashboard Idol / common",
+      "size": 147734
     },
     {
-      "url": "/products/gallery/Personalised%20Gifts/Resin%20Photo%20Frame/thumbnail.webp",
+      "url": "/products/gallery/Car%20Accessories/Dashboard%20Decor/Ganesha%20Dashboard%20Idol/common/thumbnail.webp",
       "file": "thumbnail.webp",
-      "category": "Personalised Gifts",
-      "group": "Resin Photo Frame",
-      "size": 41858
+      "category": "Car Accessories",
+      "group": "Dashboard Decor / Ganesha Dashboard Idol / common",
+      "size": 25074
     },
     {
-      "url": "/products/gallery/Pooja%20Essentials/God%20Photo%20Frame/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Pooja Essentials",
-      "group": "God Photo Frame",
-      "size": 249908
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/God%20Photo%20Frame/hero.webp",
-      "file": "hero.webp",
-      "category": "Pooja Essentials",
-      "group": "God Photo Frame",
-      "size": 325454
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/God%20Photo%20Frame/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Pooja Essentials",
-      "group": "God Photo Frame",
-      "size": 278328
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/God%20Photo%20Frame/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Pooja Essentials",
-      "group": "God Photo Frame",
-      "size": 97946
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Krishna%20Jhula/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Pooja Essentials",
-      "group": "Krishna Jhula",
-      "size": 133368
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Krishna%20Jhula/hero.webp",
-      "file": "hero.webp",
-      "category": "Pooja Essentials",
-      "group": "Krishna Jhula",
-      "size": 141982
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Krishna%20Jhula/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Pooja Essentials",
-      "group": "Krishna Jhula",
-      "size": 41570
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Mandir%20Backdrop/hero.webp",
-      "file": "hero.webp",
-      "category": "Pooja Essentials",
-      "group": "Mandir Backdrop",
-      "size": 101580
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Mandir%20Backdrop/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Pooja Essentials",
-      "group": "Mandir Backdrop",
-      "size": 31402
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Panchmashi%20Wall%20Art/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Pooja Essentials",
-      "group": "Panchmashi Wall Art",
-      "size": 117068
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Panchmashi%20Wall%20Art/hero.webp",
-      "file": "hero.webp",
-      "category": "Pooja Essentials",
-      "group": "Panchmashi Wall Art",
-      "size": 392884
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Panchmashi%20Wall%20Art/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Pooja Essentials",
-      "group": "Panchmashi Wall Art",
-      "size": 120694
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-01.webp",
-      "file": "gallery-01.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 269902
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-02.webp",
-      "file": "gallery-02.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 92532
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-03.webp",
-      "file": "gallery-03.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 204504
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-04.webp",
-      "file": "gallery-04.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 110110
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-05.webp",
-      "file": "gallery-05.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 122928
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-06.webp",
-      "file": "gallery-06.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 148712
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-07.webp",
-      "file": "gallery-07.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 85770
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-08.webp",
-      "file": "gallery-08.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 138042
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-09.webp",
-      "file": "gallery-09.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 120734
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-10.webp",
-      "file": "gallery-10.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 70024
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-11.webp",
-      "file": "gallery-11.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 341146
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-12.webp",
-      "file": "gallery-12.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 118200
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-13.webp",
-      "file": "gallery-13.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 120466
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-14.webp",
-      "file": "gallery-14.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 93300
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-15.webp",
-      "file": "gallery-15.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 155980
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-16.webp",
-      "file": "gallery-16.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 172618
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/gallery-17.webp",
-      "file": "gallery-17.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 163532
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/hero.webp",
-      "file": "hero.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 123846
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/lifestyle.webp",
-      "file": "lifestyle.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 381840
-    },
-    {
-      "url": "/products/gallery/Pooja%20Essentials/Resin%20Pooja%20Thali/thumbnail.webp",
-      "file": "thumbnail.webp",
-      "category": "Pooja Essentials",
-      "group": "Resin Pooja Thali",
-      "size": 35614
-    },
-    {
-      "url": "/products/gallery/Rakhi%20Collection/Rakhi%20Preservation%20Hamper/gallery-01.png",
+      "url": "/products/gallery/Festive%20Collection/Rakhi%20Hampers/Rakhi%20Gift%20Hamper/common/gallery-01.png",
       "file": "gallery-01.png",
-      "category": "Rakhi Collection",
-      "group": "Rakhi Preservation Hamper",
+      "category": "Festive Collection",
+      "group": "Rakhi Hampers / Rakhi Gift Hamper / common",
       "size": 603306
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Rakhi%20Preservation%20Hamper/gallery-02.png",
+      "url": "/products/gallery/Festive%20Collection/Rakhi%20Hampers/Rakhi%20Gift%20Hamper/common/gallery-02.png",
       "file": "gallery-02.png",
-      "category": "Rakhi Collection",
-      "group": "Rakhi Preservation Hamper",
+      "category": "Festive Collection",
+      "group": "Rakhi Hampers / Rakhi Gift Hamper / common",
       "size": 1008207
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Rakhi%20Preservation%20Hamper/hero.png",
+      "url": "/products/gallery/Festive%20Collection/Rakhi%20Hampers/Rakhi%20Gift%20Hamper/common/hero.png",
       "file": "hero.png",
-      "category": "Rakhi Collection",
-      "group": "Rakhi Preservation Hamper",
+      "category": "Festive Collection",
+      "group": "Rakhi Hampers / Rakhi Gift Hamper / common",
       "size": 488361
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Rakhi%20Preservation%20Hamper/lifestyle.png",
+      "url": "/products/gallery/Festive%20Collection/Rakhi%20Hampers/Rakhi%20Gift%20Hamper/common/lifestyle.png",
       "file": "lifestyle.png",
-      "category": "Rakhi Collection",
-      "group": "Rakhi Preservation Hamper",
+      "category": "Festive Collection",
+      "group": "Rakhi Hampers / Rakhi Gift Hamper / common",
       "size": 800600
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/gallery-01.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/gallery-01.webp",
       "file": "gallery-01.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 216828
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/gallery-02.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/gallery-02.webp",
       "file": "gallery-02.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 293216
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/gallery-03.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/gallery-03.webp",
       "file": "gallery-03.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 159212
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/hero.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/hero.webp",
       "file": "hero.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 129508
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/lifestyle.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/lifestyle.webp",
       "file": "lifestyle.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 227154
     },
     {
-      "url": "/products/gallery/Rakhi%20Collection/Resin%20Rakhi/thumbnail.webp",
+      "url": "/products/gallery/Festive%20Collection/Rakhi/Designer%20Rakhi/common/thumbnail.webp",
       "file": "thumbnail.webp",
-      "category": "Rakhi Collection",
-      "group": "Resin Rakhi",
+      "category": "Festive Collection",
+      "group": "Rakhi / Designer Rakhi / common",
       "size": 35996
     },
     {
-      "url": "/products/gallery/Tableware%20and%20Dining/Ring%20Platter/gallery-01.png",
+      "url": "/products/gallery/Home%20Decor/Name%20Plates/Personalized%20Name%20Plate/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Home Decor",
+      "group": "Name Plates / Personalized Name Plate / common",
+      "size": 108138
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Name%20Plates/Personalized%20Name%20Plate/common/gallery-02.webp",
+      "file": "gallery-02.webp",
+      "category": "Home Decor",
+      "group": "Name Plates / Personalized Name Plate / common",
+      "size": 142756
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Name%20Plates/Personalized%20Name%20Plate/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Home Decor",
+      "group": "Name Plates / Personalized Name Plate / common",
+      "size": 98372
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Name%20Plates/Personalized%20Name%20Plate/common/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Home Decor",
+      "group": "Name Plates / Personalized Name Plate / common",
+      "size": 203182
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Name%20Plates/Personalized%20Name%20Plate/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Home Decor",
+      "group": "Name Plates / Personalized Name Plate / common",
+      "size": 32192
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 201240
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-02.webp",
+      "file": "gallery-02.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 197098
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-03.webp",
+      "file": "gallery-03.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 110038
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-04.webp",
+      "file": "gallery-04.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 193804
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-05.webp",
+      "file": "gallery-05.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 148532
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/gallery-06.webp",
+      "file": "gallery-06.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 173198
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 134714
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 147558
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Personalized%20Photo%20Frame/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Personalized Photo Frame / common",
+      "size": 41858
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Premium%20Resin%20Photo%20Frame/Baby%20Footprint/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Premium Resin Photo Frame / Baby Footprint",
+      "size": 129504
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Premium%20Resin%20Photo%20Frame/Baby%20Footprint/hero.webp",
+      "file": "hero.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Premium Resin Photo Frame / Baby Footprint",
+      "size": 196714
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Premium%20Resin%20Photo%20Frame/Baby%20Footprint/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Premium Resin Photo Frame / Baby Footprint",
+      "size": 62646
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Premium%20Resin%20Photo%20Frame/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Premium Resin Photo Frame / common",
+      "size": 167184
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Photo%20Frames/Premium%20Resin%20Photo%20Frame/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Home Decor",
+      "group": "Photo Frames / Premium Resin Photo Frame / common",
+      "size": 53554
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Torans/Premium%20Resin%20Toran/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Home Decor",
+      "group": "Torans / Premium Resin Toran / common",
+      "size": 265052
+    },
+    {
+      "url": "/products/gallery/Home%20Decor/Torans/Premium%20Resin%20Toran/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Home Decor",
+      "group": "Torans / Premium Resin Toran / common",
+      "size": 79064
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Brooches/Personalized%20Brooch/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Personalized Gifts",
+      "group": "Brooches / Personalized Brooch / common",
+      "size": 124618
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Brooches/Personalized%20Brooch/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Personalized Gifts",
+      "group": "Brooches / Personalized Brooch / common",
+      "size": 309972
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Brooches/Personalized%20Brooch/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Personalized Gifts",
+      "group": "Brooches / Personalized Brooch / common",
+      "size": 92100
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Keychains/Personalized%20Keychain/common/closeup.webp",
+      "file": "closeup.webp",
+      "category": "Personalized Gifts",
+      "group": "Keychains / Personalized Keychain / common",
+      "size": 78782
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Keychains/Personalized%20Keychain/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Personalized Gifts",
+      "group": "Keychains / Personalized Keychain / common",
+      "size": 47716
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Keychains/Personalized%20Keychain/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Personalized Gifts",
+      "group": "Keychains / Personalized Keychain / common",
+      "size": 88996
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Keychains/Personalized%20Keychain/common/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Personalized Gifts",
+      "group": "Keychains / Personalized Keychain / common",
+      "size": 136972
+    },
+    {
+      "url": "/products/gallery/Personalized%20Gifts/Keychains/Personalized%20Keychain/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Personalized Gifts",
+      "group": "Keychains / Personalized Keychain / common",
+      "size": 29650
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Kankavati/common/pooja-thali-19.jpg",
+      "file": "pooja-thali-19.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Kankavati / common",
+      "size": 75794
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Kankavati/common/pooja-thali-2.jpg",
+      "file": "pooja-thali-2.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Kankavati / common",
+      "size": 257017
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Kankavati/common/pooja-thali-5.jpg",
+      "file": "pooja-thali-5.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Kankavati / common",
+      "size": 93515
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Shubh%20Labh/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Shubh Labh / common",
+      "size": 120832
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Shubh%20Labh/common/gallery-02.webp",
+      "file": "gallery-02.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Shubh Labh / common",
+      "size": 180576
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Shubh%20Labh/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Shubh Labh / common",
+      "size": 238236
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Shubh%20Labh/common/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Shubh Labh / common",
+      "size": 134922
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Decorative%20Shubh%20Labh/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Decorative Shubh Labh / common",
+      "size": 72250
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Panchratna%20Sacred%20Thread/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Panchratna Sacred Thread / common",
+      "size": 117068
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Panchratna%20Sacred%20Thread/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Panchratna Sacred Thread / common",
+      "size": 392884
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Accessories/Panchratna%20Sacred%20Thread/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Accessories / Panchratna Sacred Thread / common",
+      "size": 120694
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Designer%20Pooja%20Thali/common/pooja-thali-15.jpg",
+      "file": "pooja-thali-15.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Designer Pooja Thali / common",
+      "size": 191369
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Designer%20Pooja%20Thali/common/pooja-thali-18.jpg",
+      "file": "pooja-thali-18.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Designer Pooja Thali / common",
+      "size": 112239
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Designer%20Pooja%20Thali/common/pooja-thali-7.jpg",
+      "file": "pooja-thali-7.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Designer Pooja Thali / common",
+      "size": 163866
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Designer%20Pooja%20Thali/common/pooja-thali-9.jpg",
+      "file": "pooja-thali-9.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Designer Pooja Thali / common",
+      "size": 420178
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Divine%20Pooja%20Thali/common/pooja-thali-11.jpg",
+      "file": "pooja-thali-11.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Divine Pooja Thali / common",
+      "size": 121238
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/Divine%20Pooja%20Thali/common/pooja-thali-4.jpg",
+      "file": "pooja-thali-4.jpg",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / Divine Pooja Thali / common",
+      "size": 116430
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 269902
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-02.webp",
+      "file": "gallery-02.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 92532
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-03.webp",
+      "file": "gallery-03.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 204504
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-04.webp",
+      "file": "gallery-04.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 110110
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-05.webp",
+      "file": "gallery-05.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 122928
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-06.webp",
+      "file": "gallery-06.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 148712
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-07.webp",
+      "file": "gallery-07.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 85770
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-08.webp",
+      "file": "gallery-08.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 138042
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-09.webp",
+      "file": "gallery-09.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 120734
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-10.webp",
+      "file": "gallery-10.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 70024
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-11.webp",
+      "file": "gallery-11.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 341146
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-12.webp",
+      "file": "gallery-12.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 118200
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-13.webp",
+      "file": "gallery-13.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 120466
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-14.webp",
+      "file": "gallery-14.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 93300
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-15.webp",
+      "file": "gallery-15.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 155980
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-16.webp",
+      "file": "gallery-16.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 172618
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/gallery-17.webp",
+      "file": "gallery-17.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 163532
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 123846
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 381840
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Pooja%20Thalis/shared/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Pooja Thalis / shared",
+      "size": 35614
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/God%20Photo%20Frame/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / God Photo Frame / common",
+      "size": 249908
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/God%20Photo%20Frame/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / God Photo Frame / common",
+      "size": 325454
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/God%20Photo%20Frame/common/lifestyle.webp",
+      "file": "lifestyle.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / God Photo Frame / common",
+      "size": 278328
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/God%20Photo%20Frame/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / God Photo Frame / common",
+      "size": 97946
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/Kanha%20Jhula/common/gallery-01.webp",
+      "file": "gallery-01.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / Kanha Jhula / common",
+      "size": 133368
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/Kanha%20Jhula/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / Kanha Jhula / common",
+      "size": 141982
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/Kanha%20Jhula/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / Kanha Jhula / common",
+      "size": 41570
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/Mandir%20Backdrop/common/hero.webp",
+      "file": "hero.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / Mandir Backdrop / common",
+      "size": 101580
+    },
+    {
+      "url": "/products/gallery/Pooja%20Essentials/Temple%20Decor/Mandir%20Backdrop/common/thumbnail.webp",
+      "file": "thumbnail.webp",
+      "category": "Pooja Essentials",
+      "group": "Temple Decor / Mandir Backdrop / common",
+      "size": 31402
+    },
+    {
+      "url": "/products/gallery/Wedding%20Collection/Ring%20Platters/Designer%20Ring%20Platter/common/gallery-01.png",
       "file": "gallery-01.png",
-      "category": "Tableware and Dining",
-      "group": "Ring Platter",
+      "category": "Wedding Collection",
+      "group": "Ring Platters / Designer Ring Platter / common",
       "size": 705647
     },
     {
-      "url": "/products/gallery/Tableware%20and%20Dining/Ring%20Platter/gallery-02.png",
+      "url": "/products/gallery/Wedding%20Collection/Ring%20Platters/Designer%20Ring%20Platter/common/gallery-02.png",
       "file": "gallery-02.png",
-      "category": "Tableware and Dining",
-      "group": "Ring Platter",
+      "category": "Wedding Collection",
+      "group": "Ring Platters / Designer Ring Platter / common",
       "size": 802186
     },
     {
-      "url": "/products/gallery/Tableware%20and%20Dining/Ring%20Platter/hero.png",
+      "url": "/products/gallery/Wedding%20Collection/Ring%20Platters/Designer%20Ring%20Platter/common/hero.png",
       "file": "hero.png",
-      "category": "Tableware and Dining",
-      "group": "Ring Platter",
+      "category": "Wedding Collection",
+      "group": "Ring Platters / Designer Ring Platter / common",
       "size": 823334
     },
     {
-      "url": "/products/gallery/Tableware%20and%20Dining/Ring%20Platter/lifestyle.png",
+      "url": "/products/gallery/Wedding%20Collection/Ring%20Platters/Designer%20Ring%20Platter/common/lifestyle.png",
       "file": "lifestyle.png",
-      "category": "Tableware and Dining",
-      "group": "Ring Platter",
+      "category": "Wedding Collection",
+      "group": "Ring Platters / Designer Ring Platter / common",
       "size": 849249
     },
     {
-      "url": "/products/gallery/Wedding%20Preservation/Varmala%20and%20Flower%20Preservation/gallery-01.webp",
+      "url": "/products/gallery/Wedding%20Collection/Wedding%20Preservation/Varmala%20Preservation/common/gallery-01.webp",
       "file": "gallery-01.webp",
-      "category": "Wedding Preservation",
-      "group": "Varmala and Flower Preservation",
+      "category": "Wedding Collection",
+      "group": "Wedding Preservation / Varmala Preservation / common",
       "size": 268586
     },
     {
-      "url": "/products/gallery/Wedding%20Preservation/Varmala%20and%20Flower%20Preservation/gallery-02.webp",
+      "url": "/products/gallery/Wedding%20Collection/Wedding%20Preservation/Varmala%20Preservation/common/gallery-02.webp",
       "file": "gallery-02.webp",
-      "category": "Wedding Preservation",
-      "group": "Varmala and Flower Preservation",
+      "category": "Wedding Collection",
+      "group": "Wedding Preservation / Varmala Preservation / common",
       "size": 225698
     },
     {
-      "url": "/products/gallery/Wedding%20Preservation/Varmala%20and%20Flower%20Preservation/hero.webp",
+      "url": "/products/gallery/Wedding%20Collection/Wedding%20Preservation/Varmala%20Preservation/common/hero.webp",
       "file": "hero.webp",
-      "category": "Wedding Preservation",
-      "group": "Varmala and Flower Preservation",
+      "category": "Wedding Collection",
+      "group": "Wedding Preservation / Varmala Preservation / common",
       "size": 166806
     },
     {
-      "url": "/products/gallery/Wedding%20Preservation/Varmala%20and%20Flower%20Preservation/lifestyle.webp",
+      "url": "/products/gallery/Wedding%20Collection/Wedding%20Preservation/Varmala%20Preservation/common/lifestyle.webp",
       "file": "lifestyle.webp",
-      "category": "Wedding Preservation",
-      "group": "Varmala and Flower Preservation",
+      "category": "Wedding Collection",
+      "group": "Wedding Preservation / Varmala Preservation / common",
       "size": 146732
     },
     {
-      "url": "/products/gallery/Wedding%20Preservation/Varmala%20and%20Flower%20Preservation/thumbnail.webp",
+      "url": "/products/gallery/Wedding%20Collection/Wedding%20Preservation/Varmala%20Preservation/common/thumbnail.webp",
       "file": "thumbnail.webp",
-      "category": "Wedding Preservation",
-      "group": "Varmala and Flower Preservation",
+      "category": "Wedding Collection",
+      "group": "Wedding Preservation / Varmala Preservation / common",
       "size": 44810
     }
   ]

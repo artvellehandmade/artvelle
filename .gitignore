@@ -23,6 +23,8 @@
 # misc
 .DS_Store
 *.pem
+.claude/
+scripts/tmp/backup-catalog-*.json
 
 # debug
 npm-debug.log*

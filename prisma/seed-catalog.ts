@@ -689,6 +689,30 @@ const CATEGORIES = [
 ];
 
 async function main() {
+  // -------------------------------------------------------------------------
+  // ⛔ GUARD — DO NOT RUN THIS SEED AGAINST THE LIVE DATABASE.
+  //
+  // This file transcribes the catalogue with product names/slugs that do NOT
+  // match the live products (e.g. "Personalised Resin Keychain" vs the live
+  // "Personalized Keychain"). Because products are upserted BY SLUG, running
+  // it creates near-duplicates of almost every product instead of updating
+  // them — exactly what happened on 2026-08-06 (16 duplicate products + 7
+  // junk subcategories were created and later had to be cleaned up).
+  //
+  // The live DB was reconciled to the client's final 23-family catalogue on
+  // 2026-08-06 (see scripts/tmp/fix-catalog.mjs + backup-catalog-*.json).
+  // If you need a seed again, regenerate this file from the live DB first.
+  // To bypass this guard intentionally, run with SEED_CATALOG_FORCE=1.
+  // -------------------------------------------------------------------------
+  if (process.env.SEED_CATALOG_FORCE !== "1") {
+    console.error(
+      "seed-catalog.ts is DISABLED: its product names/slugs no longer match the live catalogue,\n" +
+        "so running it would re-create the duplicate products cleaned up on 2026-08-06.\n" +
+        "Set SEED_CATALOG_FORCE=1 to bypass (not recommended)."
+    );
+    process.exit(1);
+  }
+
   const counts = {
     catCreated: 0,
     catExisting: 0,

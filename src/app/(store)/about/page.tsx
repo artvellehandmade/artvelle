@@ -29,7 +29,7 @@ export default async function AboutPage() {
       <Reveal delay={0.1}>
         <div className="relative mt-12 aspect-[16/9] overflow-hidden rounded-3xl bg-muted">
           <Image
-            src={galleryImg("Pooja Essentials/Resin Pooja Thali/pooja-thali-3.jpg")}
+            src={galleryImg("Pooja Essentials/Pooja Thalis/shared/lifestyle.webp")}
             alt={s.brandName}
             fill
             sizes="100vw"
@@ -56,10 +56,14 @@ export default async function AboutPage() {
         <Reveal delay={0.08}>
           <div className="grid grid-cols-2 gap-4">
             {[
-              galleryImg("Pooja Essentials/God Photo Frame/god-frame-1.jpg"),
-              galleryImg("Tableware and Dining/Ring Platter/ring-platter-2.jpg"),
-              galleryImg("Pooja Essentials/Krishna Jhula/krishna-jhula-1.jpg"),
-              galleryImg("Personalised Gifts/Resin Photo Frame/photo-frame-2.jpg"),
+              galleryImg("Pooja Essentials/Temple Decor/God Photo Frame/common/hero.webp"),
+              galleryImg(
+                "Wedding Collection/Ring Platters/Designer Ring Platter/common/hero.png"
+              ),
+              galleryImg("Pooja Essentials/Temple Decor/Kanha Jhula/common/hero.webp"),
+              galleryImg(
+                "Home Decor/Photo Frames/Personalized Photo Frame/common/gallery-02.webp"
+              ),
             ].map((src) => (
               <div
                 key={src}

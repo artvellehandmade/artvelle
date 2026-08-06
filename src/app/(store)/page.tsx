@@ -15,16 +15,19 @@ import { ButtonLink } from "@/components/ui/button";
 import { ProductCard } from "@/components/store/product-card";
 import { Reveal } from "@/components/store/reveal";
 import { galleryImg } from "@/lib/utils";
+import { remapGalleryUrl } from "@/lib/gallery-remap";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
 // Real studio photos used in the hero collage.
 const HERO_IMAGES = [
-  galleryImg("Pooja Essentials/Resin Pooja Thali/hero.webp"),
-  galleryImg("Personalised Gifts/Resin Photo Frame/hero.webp"),
-  galleryImg("Tableware and Dining/Ring Platter/hero.webp"),
-  galleryImg("Wedding Preservation/Varmala and Flower Preservation/hero.webp"),
+  galleryImg("Pooja Essentials/Pooja Thalis/shared/hero.webp"),
+  galleryImg("Home Decor/Photo Frames/Personalized Photo Frame/common/hero.webp"),
+  galleryImg("Wedding Collection/Ring Platters/Designer Ring Platter/common/hero.png"),
+  galleryImg(
+    "Wedding Collection/Wedding Preservation/Varmala Preservation/common/hero.webp"
+  ),
 ];
 
 /* Style the final word of the headline in shimmering gold italic */
@@ -222,7 +225,7 @@ export default async function HomePage() {
                 className="card-lift group relative block aspect-square overflow-hidden rounded-2xl bg-muted"
               >
                 <Image
-                  src={decodeURI(cat.imageUrl ?? HERO_IMAGES[0])}
+                  src={decodeURI(remapGalleryUrl(cat.imageUrl) ?? HERO_IMAGES[0])}
                   alt={cat.name}
                   fill
                   sizes="(max-width:768px) 50vw, 16vw"
@@ -365,7 +368,11 @@ export default async function HomePage() {
             <div className="relative">
               <div className="relative aspect-[5/4] overflow-hidden rounded-3xl bg-muted shadow-2xl">
                 <Image
-                  src={decodeURI(galleryImg("Home Decor/Resin Name Plate/hero.webp"))}
+                  src={decodeURI(
+                    galleryImg(
+                      "Home Decor/Name Plates/Personalized Name Plate/common/hero.webp"
+                    )
+                  )}
                   alt="Our studio"
                   fill
                   sizes="(max-width:768px) 100vw, 50vw"
