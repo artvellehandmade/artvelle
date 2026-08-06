@@ -4,69 +4,121 @@ import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getAdminSession();
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { searchParams } = new URL(req.url);
+  const category       = searchParams.get("category") ?? undefined;
+  const subcategoryName= searchParams.get("subcategoryName") ?? undefined;
+  const variantValue   = searchParams.get("variantValue") ?? undefined;
+  const q              = searchParams.get("q") ?? undefined;
+  const page           = Math.max(1, Number(searchParams.get("page") ?? 1));
+  const limit          = Math.min(200, Math.max(1, Number(searchParams.get("limit") ?? 100)));
+  const skip           = (page - 1) * limit;
 
   try {
-    // 1. Fetch all media from the new relational table
-    const media = await prisma.media.findMany({
-      orderBy: { file: "asc" }
-    });
+    // Build WHERE clause — only filter on fields that were passed
+    const where: Record<string, unknown> = {};
 
-    const photos = media.map(m => {
-      // Reconstruct category and group from the file path if it was a repo file
-      // Otherwise put uploaded blobs in "Uploaded"
-      let category = "Uploaded";
+    if (q) {
+      where.OR = [
+        { file:            { contains: q, mode: "insensitive" } },
+        { alt:             { contains: q, mode: "insensitive" } },
+        { variantValue:    { contains: q, mode: "insensitive" } },
+        { subcategoryName: { contains: q, mode: "insensitive" } },
+      ];
+    }
+
+    // category filter — derived from the URL path stored in `url`
+    if (category) {
+      where.url = { contains: encodeURIComponent(category), mode: "insensitive" };
+    }
+
+    if (subcategoryName) {
+      where.subcategoryName = subcategoryName;
+    }
+
+    // variantValue = "__common__" is a sentinel meaning "no variant tag"
+    if (variantValue !== undefined) {
+      where.variantValue = variantValue === "__common__" ? null : variantValue;
+    }
+
+    const [media, total] = await Promise.all([
+      prisma.media.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip,
+        take: limit,
+      }),
+      prisma.media.count({ where }),
+    ]);
+
+    const photos = media.map((m) => {
+      let cat = "Uploaded";
       let group = "";
       if (m.source === "repo") {
-        const parts = m.url.replace("/products/gallery/", "").split("/");
-        if (parts.length >= 2) category = parts[0];
+        const parts = decodeURIComponent(m.url)
+          .replace("/products/gallery/", "")
+          .split("/");
+        if (parts.length >= 2) cat = parts[0];
         if (parts.length >= 3) group = parts.slice(1, -1).join(" / ");
       } else if (m.source === "external") {
-        category = "Pasted links";
+        cat = "Pasted links";
       }
 
       return {
-        url: m.url,
-        file: m.file,
-        category,
+        id:              m.id,
+        url:             m.url,
+        file:            m.file,
+        category:        cat,
         group,
-        source: m.source as "repo" | "blob" | "external",
+        variantAttribute: m.variantAttribute,
+        variantValue:    m.variantValue,
+        subcategoryName: m.subcategoryName,
+        size:            m.size,
+        width:           m.width,
+        height:          m.height,
+        source:          m.source as "repo" | "blob" | "external",
+        createdAt:       m.createdAt,
       };
     });
 
-    // 2. Map usage
-    const usage: Record<string, { kind: string, id: string, name: string }[]> = {};
-    
-    const productImages = await prisma.productImage.findMany({
-      include: { product: { select: { id: true, name: true } }, media: { select: { url: true } } }
-    });
+    // Build usage map only for the current page (bounded)
+    const urls = photos.map((p) => p.url);
+    const usage: Record<string, { kind: string; id: string; name: string; slot?: string }[]> = {};
+
+    const [productImages, subImages] = await Promise.all([
+      prisma.productImage.findMany({
+        where: { media: { url: { in: urls } } },
+        include: {
+          product: { select: { id: true, name: true } },
+          media:   { select: { url: true } },
+        },
+      }),
+      prisma.subcategoryImage.findMany({
+        where: { media: { url: { in: urls } } },
+        include: {
+          subcategory: { select: { id: true, name: true } },
+          media:       { select: { url: true } },
+        },
+      }),
+    ]);
 
     for (const pi of productImages) {
       const url = pi.media.url;
       if (!usage[url]) usage[url] = [];
-      usage[url].push({ kind: "product", id: pi.product.id, name: pi.product.name });
+      usage[url].push({ kind: "product", id: pi.product.id, name: pi.product.name, slot: pi.slot });
     }
-
-    const subImages = await prisma.subcategoryImage.findMany({
-      include: { subcategory: { select: { id: true, name: true } }, media: { select: { url: true } } }
-    });
-
     for (const si of subImages) {
       const url = si.media.url;
       if (!usage[url]) usage[url] = [];
       usage[url].push({ kind: "subcategory", id: si.subcategory.id, name: si.subcategory.name });
     }
 
-    return NextResponse.json({ photos, usage });
+    return NextResponse.json({ photos, usage, total, page, limit });
   } catch (err) {
     console.error("[api/admin/media] failed:", err);
-    return NextResponse.json(
-      { error: "Could not read the photo library" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Could not read the photo library" }, { status: 500 });
   }
 }

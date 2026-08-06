@@ -8,6 +8,7 @@ import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical, ArrowLe
 import { Button } from "@/components/ui/button";
 import { createProduct, updateProduct } from "@/app/actions/admin";
 import { PhotoPicker } from "@/components/admin/photo-picker";
+import { VariantMediaTab, type VisualGalleryState } from "@/components/admin/variant-media-tab";
 import { allCombinations, comboKey } from "@/lib/options";
 import { formatINR } from "@/lib/utils";
 import type { ProductDTO, ProductOption } from "@/lib/types";
@@ -119,6 +120,31 @@ export function ProductForm({
     }
   );
 
+  // ---- Visual Gallery state (new Media tab) ----
+  // Initialise from existing variants so editing an existing product keeps its images.
+  const [visualGallery, setVisualGallery] = useState<VisualGalleryState>(() => {
+    const galleries: Record<string, string[]> = {};
+    const previews: Record<string, string> = {};
+    const commonSet = new Set<string>();
+    if (product?.variants?.length) {
+      for (const v of product.variants) {
+        const firstVal = Object.values(v.combo ?? {})[0];
+        if (firstVal && v.images?.length) {
+          galleries[firstVal] = galleries[firstVal] ?? [];
+          for (const img of v.images) {
+            if (!galleries[firstVal].includes(img)) galleries[firstVal].push(img);
+          }
+          if (!previews[firstVal]) previews[firstVal] = v.images[0];
+        }
+      }
+    }
+    for (const img of product?.images ?? []) {
+      const inVariant = Object.values(galleries).some((g) => g.includes(img));
+      if (!inVariant) commonSet.add(img);
+    }
+    return { galleries, previews, common: [...commonSet] };
+  });
+
   // All combinations of the current options (recomputed as options change).
   // Trim to match how options are cleaned on save, so combo keys line up.
   const combos = useMemo(
@@ -127,11 +153,11 @@ export function ProductForm({
         options
           .map((g) => ({
             name: g.name.trim(),
-            choices: g.choices
-              .filter((c) => c.label.trim())
-              .map((c) => ({ ...c, label: c.label.trim() })),
+            values: g.choices
+              .map((c) => c.label.trim())
+              .filter(Boolean),
           }))
-          .filter((g) => g.name && g.choices.length > 0)
+          .filter((g) => g.name && g.values.length > 0)
       ),
     [options]
   );
@@ -298,22 +324,38 @@ export function ProductForm({
       }))
       .filter((g) => g.name && g.choices.length > 0);
 
-    // Build the variant matrix (only when the toggle is on). Each combination
-    // gets a price, availability and its own photos. Blank price → base price.
+    // Build the variant matrix. Images per combo are now derived from the
+    // visual gallery: all combos sharing the same first option value (e.g. "Pink")
+    // get the Design Gallery for that value + the common gallery.
     const base = Number(form.price || 0);
     const variants =
       useVariants && combos.length > 0
         ? combos.map((combo) => {
             const v = variantOf(comboKey(combo));
             const price = v.price === "" ? base : Number(v.price) || 0;
+            // Infer the visual value from the first option in this combo.
+            const visualVal = Object.values(combo)[0] ?? null;
+            const designImages = visualVal ? (visualGallery.galleries[visualVal] ?? []) : [];
+            const comboImages = [...designImages, ...visualGallery.common];
             return {
               combo,
               price,
               available: v.available,
-              images: v.images,
+              images: comboImages,
+              previewImage: visualVal ? (visualGallery.previews[visualVal] ?? null) : null,
             };
           })
         : [];
+
+    // Derive a flat images array for the product (hero first, then unique gallery images).
+    const allVariantImages = new Set<string>();
+    for (const gal of Object.values(visualGallery.galleries)) {
+      for (const img of gal) allVariantImages.add(img);
+    }
+    for (const img of visualGallery.common) allVariantImages.add(img);
+    // Fall back to the old `images` state if gallery is empty (e.g. product with no variants).
+    const derivedImages = allVariantImages.size > 0 ? [...allVariantImages] : images;
+
 
     const payload = {
       name: form.name,
@@ -331,7 +373,7 @@ export function ProductForm({
         .split(",")
         .map((t) => t.trim().toLowerCase())
         .filter(Boolean),
-      images,
+      images: derivedImages,
       isFeatured: form.isFeatured,
       isActive: form.isActive,
       paymentModes: (paymentModes.length ? paymentModes : ["prepaid", "cod"]) as (
@@ -635,147 +677,117 @@ export function ProductForm({
         </Card>
 
         {combos.length > 1 && (
-          <Card title="Variants (price · availability · photos)">
-            <div className="-mt-1 flex flex-wrap items-start justify-between gap-3">
-              <p className="max-w-md text-xs text-muted-foreground">
-                Give every combination (e.g. <b>4 inch</b> + <b>1 vatki</b>) its
-                own price, mark which ones you actually make, and pick the
-                photos that show for it. Unavailable combos are greyed out for
-                customers. Turn off for simple add-on pricing.
-              </p>
-              <Toggle
-                label={useVariants ? "On" : "Off"}
-                checked={useVariants}
-                onChange={setUseVariants}
-              />
-            </div>
-
-            {useVariants && (
-              <div className="space-y-3">
-                {images.length === 0 && (
-                  <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
-                    Upload photos above first — then you can assign them to each
-                    variant here.
-                  </p>
-                )}
-                <div className="overflow-x-auto rounded-xl border border-border">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
-                        <th className="px-3 py-2.5 font-medium">Combination</th>
-                        <th className="w-20 px-3 py-2.5 text-center font-medium">
-                          Available
-                        </th>
-                        <th className="w-32 px-3 py-2.5 font-medium">Price (₹)</th>
-                        <th className="px-3 py-2.5 font-medium">Photos</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border">
-                      {combos.map((combo) => {
-                        const key = comboKey(combo);
-                        const v = variantOf(key);
-                        return (
-                          <tr key={key} className={v.available ? "" : "opacity-50"}>
-                            <td className="px-3 py-2 align-top">
-                              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                                {Object.entries(combo).map(([name, value]) => (
-                                  <span
-                                    key={name}
-                                    className="rounded-full bg-muted px-2.5 py-0.5 text-xs"
-                                    title={name}
-                                  >
-                                    {value}
-                                  </span>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 text-center align-top">
-                              <input
-                                type="checkbox"
-                                checked={v.available}
-                                onChange={(e) =>
-                                  setVariantField(key, {
-                                    available: e.target.checked,
-                                  })
-                                }
-                                className="mt-2 h-4 w-4 accent-[var(--accent)]"
-                                title="Do you make this combination?"
-                              />
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              <div className="relative">
-                                <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                                  ₹
-                                </span>
-                                <input
-                                  type="number"
-                                  min={0}
-                                  value={v.price}
-                                  onChange={(e) =>
-                                    setVariantField(key, { price: e.target.value })
-                                  }
-                                  className="input h-9 pl-6"
-                                  placeholder={form.price || "0"}
-                                  disabled={!v.available}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-3 py-2 align-top">
-                              {images.length === 0 ? (
-                                <span className="text-xs text-muted-foreground">
-                                  —
-                                </span>
-                              ) : (
-                                <div className="flex flex-wrap gap-1.5 py-0.5">
-                                  {images.map((img, idx) => {
-                                    const on = v.images.includes(img);
-                                    return (
-                                      <button
-                                        key={img}
-                                        type="button"
-                                        onClick={() =>
-                                          toggleVariantImage(key, img)
-                                        }
-                                        className={`relative h-10 w-10 overflow-hidden rounded-md border-2 transition-all ${
-                                          on
-                                            ? "border-accent"
-                                            : "border-transparent opacity-50 hover:opacity-100"
-                                        }`}
-                                        title={`Photo ${idx + 1}${
-                                          on ? " (shown)" : ""
-                                        }`}
-                                      >
-                                        <Image
-                                          src={img}
-                                          alt={`Photo ${idx + 1}`}
-                                          fill
-                                          sizes="40px"
-                                          className="object-cover"
-                                        />
-                                        {on && (
-                                          <span className="absolute inset-0 grid place-items-center bg-accent/30">
-                                            <Check className="h-3.5 w-3.5 text-white drop-shadow" />
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Blank price → base price ({formatINR(Number(form.price || 0))}).
-                  No photos on a variant → the product’s main photos are shown.
+          <>
+            {/* ── Pricing & Stock (combination table) ── */}
+            <Card title="Pricing & Stock">
+              <div className="-mt-1 flex flex-wrap items-start justify-between gap-3">
+                <p className="max-w-md text-xs text-muted-foreground">
+                  Give every combination (e.g. <b>4 inch</b> + <b>1 vatki</b>) its
+                  own price and mark which ones you actually make. Unavailable combos
+                  are greyed out for customers.
                 </p>
+                <Toggle
+                  label={useVariants ? "On" : "Off"}
+                  checked={useVariants}
+                  onChange={setUseVariants}
+                />
               </div>
-            )}
-          </Card>
+
+              {useVariants && (
+                <div className="space-y-3">
+                  <div className="overflow-x-auto rounded-xl border border-border">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+                          <th className="px-3 py-2.5 font-medium">Combination</th>
+                          <th className="w-20 px-3 py-2.5 text-center font-medium">
+                            Available
+                          </th>
+                          <th className="w-32 px-3 py-2.5 font-medium">Price (₹)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {combos.map((combo) => {
+                          const key = comboKey(combo);
+                          const v = variantOf(key);
+                          return (
+                            <tr key={key} className={v.available ? "" : "opacity-50"}>
+                              <td className="px-3 py-2 align-top">
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                                  {Object.entries(combo).map(([name, value]) => (
+                                    <span
+                                      key={name}
+                                      className="rounded-full bg-muted px-2.5 py-0.5 text-xs"
+                                      title={name}
+                                    >
+                                      {value}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="px-3 py-2 text-center align-top">
+                                <input
+                                  type="checkbox"
+                                  checked={v.available}
+                                  onChange={(e) =>
+                                    setVariantField(key, {
+                                      available: e.target.checked,
+                                    })
+                                  }
+                                  className="mt-2 h-4 w-4 accent-[var(--accent)]"
+                                  title="Do you make this combination?"
+                                />
+                              </td>
+                              <td className="px-3 py-2 align-top">
+                                <div className="relative">
+                                  <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                                    ₹
+                                  </span>
+                                  <input
+                                    type="number"
+                                    min={0}
+                                    value={v.price}
+                                    onChange={(e) =>
+                                      setVariantField(key, { price: e.target.value })
+                                    }
+                                    className="input h-9 pl-6"
+                                    placeholder={form.price || "0"}
+                                    disabled={!v.available}
+                                  />
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Blank price → base price ({formatINR(Number(form.price || 0))}).
+                  </p>
+                </div>
+              )}
+            </Card>
+
+            {/* ── Media (visual-variant-indexed gallery) ── */}
+            <Card title="Media">
+              <p className="-mt-1 mb-4 text-xs text-muted-foreground">
+                Manage photos by <b>design</b> only — not by combination.
+                Every size + bowl combination sharing the same design will
+                automatically use that design's gallery. Images with no variant
+                tag go in the Common Gallery (packaging, lifestyle, dimensions).
+              </p>
+              <VariantMediaTab
+                options={options}
+                state={visualGallery}
+                onChange={setVisualGallery}
+                productCategory={form.category}
+                productSubcategory={
+                  subcategories.find((s) => s.id === form.subcategoryId)?.name
+                }
+              />
+            </Card>
+          </>
         )}
       </div>
 

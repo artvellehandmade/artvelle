@@ -99,7 +99,7 @@ export async function GET() {
         // but to avoid collisions on nulls, we just create. Wait, upsert with null is problematic in some DBs.
         // We can just findFirst and then create.
         const existing = await prisma.productImage.findFirst({
-          where: { productId: p.id, mediaId, variantId: null }
+          where: { productId: p.id, mediaId, variantValue: null }
         });
 
         if (!existing) {
@@ -107,7 +107,7 @@ export async function GET() {
             data: {
               productId: p.id,
               mediaId,
-              variantId: null,
+              variantValue: null,
               sortOrder,
             }
           });

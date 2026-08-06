@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, useEffect } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ShoppingBag,
@@ -18,20 +19,16 @@ import { useCart } from "@/context/cart";
 import { useProductView } from "@/context/product-view";
 import { Button } from "@/components/ui/button";
 import { WhatsAppProductButton } from "@/components/store/product-actions";
-import { formatINR } from "@/lib/utils";
+import { formatINR, cn } from "@/lib/utils";
 import {
-  normalizeVariants,
+  priceForSelection,
+  priceRange,
   isChoiceEnabled,
-  pruneSelection,
-  effectiveVariant,
-  minMatchingPrice,
-  toSelectedOptions,
-  missingChoices,
-  realOptionGroups,
+  repairSelection,
 } from "@/lib/variants";
-import type { ProductDTO } from "@/lib/types";
+import type { ProductDTO, Attribute, SellableVariant } from "@/lib/types";
+import { comboKey } from "@/lib/options";
 
-// ─── Trust badges row (lives inside the purchase section, near CTAs) ────────
 function TrustRow() {
   const items = [
     { icon: <HandHeart  className="h-4 w-4" />, label: "Handmade to Order" },
@@ -53,61 +50,42 @@ function TrustRow() {
   );
 }
 
-// ─── Diagonal line SVG for unavailable pills ─────────────────────────────────
 function StrikeThrough() {
   return (
-    <svg
-      className="pointer-events-none absolute inset-0 h-full w-full"
-      aria-hidden
-    >
-      <line
-        x1="0"
-        y1="100%"
-        x2="100%"
-        y2="0"
-        stroke="currentColor"
-        strokeWidth="1"
-        strokeOpacity="0.3"
-      />
+    <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+      <line x1="0" y1="100%" x2="100%" y2="0" stroke="currentColor" strokeWidth="1" strokeOpacity="0.3" />
     </svg>
   );
 }
 
-// ─── Main component ───────────────────────────────────────────────────────────
 export function ProductPurchase({ product }: { product: ProductDTO }) {
   const { addItem, buyNow, leadInfo } = useCart();
   const { selection, setSelection }   = useProductView();
+  
+  const attributes = (product.attributes || []) as Attribute[];
+  const hasOptions = attributes.length > 0;
 
-  const variants  = useMemo(() => normalizeVariants(product), [product]);
   const [qty, setQty]       = useState(1);
   const [added, setAdded]   = useState(false);
   const [buying, setBuying] = useState(false);
 
-  const groups     = useMemo(() => realOptionGroups(product.options), [product]);
-  const hasOptions = groups.length > 0;
-  const variant    = effectiveVariant(product, selection);
-  const minPrice   = minMatchingPrice(product, selection);
-  const unitPrice  = variant ? variant.price : minPrice;
+  const unitPrice = priceForSelection(product as any, selection);
+  const minMax = priceRange(product as any);
 
-  const missing          = missingChoices(product.options, selection);
-  const noVariantAvail   = variants.length > 0 && !variants.some((v) => v.available);
-  const soldOut          = product.stock <= 0 || noVariantAvail;
-  const unavailableCombo = missing.length === 0 && variants.length > 0 && !variant;
-  const needsChoice      = missing.length > 0 || unavailableCombo;
-  const canOrder         = !soldOut && !needsChoice;
+  const missing = attributes.filter(g => !selection[g.name]).map(g => g.name);
+  const soldOut = product.stock <= 0;
+  const needsChoice = missing.length > 0;
+  const canOrder = !soldOut && !needsChoice;
 
   function toggle(groupName: string, value: string) {
     if (selection[groupName] === value) {
       const next = { ...selection };
       delete next[groupName];
-      setSelection(pruneSelection(variants, product.options, next));
+      setSelection(next);
       return;
     }
-    if (!isChoiceEnabled(variants, product.options, groupName, value, selection))
-      return;
-    setSelection(
-      pruneSelection(variants, product.options, { ...selection, [groupName]: value })
-    );
+    if (!isChoiceEnabled(groupName, value, product)) return;
+    setSelection(repairSelection(attributes, { ...selection, [groupName]: value }));
   }
 
   function listNames(names: string[]) {
@@ -116,15 +94,26 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   }
 
   function buildItem() {
-    const combo = variant ? variant.combo : selection;
+    const key = comboKey(selection);
+    const variants = (product.sellableVariants || []) as SellableVariant[];
+    const match = variants.find(v => v.id === key);
+    
+    let activeImage = product.images[0] ?? "";
+    if (match && match.images && match.images.length > 0) {
+      activeImage = match.images[0];
+    }
+    
+    // Convert selection Record to SelectedOption[]
+    const selectedOptions = Object.entries(selection).map(([name, value]) => ({ name, value }));
+    
     return {
       productId: product.id,
       slug:      product.slug,
       name:      product.name,
-      image:     variant?.images[0] ?? product.images[0] ?? "",
+      image:     activeImage,
       price:     unitPrice,
       stock:     product.stock,
-      options:   Object.keys(combo).length ? toSelectedOptions(combo) : undefined,
+      options:   selectedOptions.length > 0 ? selectedOptions : undefined,
     };
   }
 
@@ -144,201 +133,131 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
     buyNow(buildItem(), qty);
   }
 
+
   return (
     <div className="space-y-5">
-      {/* ── Live price — always visible, "From" until a variant is pinned ── */}
       {hasOptions && (
         <div className="flex items-baseline gap-2">
           <span className="text-sm text-muted-foreground">
-            {variant ? "Your selection:" : "From"}
+            {missing.length === 0 ? "Your selection:" : "From"}
           </span>
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
-              key={`${unitPrice}-${!!variant}`}
+              key={`${unitPrice}-${missing.length}`}
               initial={{ opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
               transition={{ duration: 0.15 }}
               className="text-2xl font-semibold"
             >
-              {formatINR(unitPrice)}
+              {formatINR(missing.length === 0 ? unitPrice : minMax.min)}
             </motion.span>
           </AnimatePresence>
         </div>
       )}
 
+      {/* ── Variant Preview Strip ── */}
       {/* ── Option groups — pill style ── */}
-      {groups.map((group) => (
+      {attributes.map((group) => (
         <div key={group.name}>
-          {/* Group label + current pick */}
           <p className="mb-2.5 flex flex-wrap items-center gap-x-2 text-sm font-medium">
-            <span>
-              {group.name}
-              <span className="text-danger"> *</span>
-            </span>
+            <span>{group.name} <span className="text-danger">*</span></span>
             {selection[group.name] ? (
-              <span className="font-normal text-muted-foreground">
-                — {selection[group.name]}
-              </span>
+              <span className="font-normal text-muted-foreground">— {selection[group.name]}</span>
             ) : (
               <span className="font-normal text-danger text-xs">Select one</span>
             )}
           </p>
 
-          {/* Pill grid */}
           <div className="flex flex-wrap gap-2">
-            {group.choices.map((choice) => {
-              const isActive = selection[group.name] === choice.label;
-              const enabled  =
-                isActive ||
-                isChoiceEnabled(
-                  variants,
-                  product.options,
-                  group.name,
-                  choice.label,
-                  selection
-                );
+            {group.values.map((val) => {
+              const isActive = selection[group.name] === val;
+              const enabled = isChoiceEnabled(group.name, val, product);
 
               return (
                 <motion.button
-                  key={choice.label}
+                  key={val}
                   type="button"
                   disabled={!enabled}
                   whileTap={enabled ? { scale: 0.96 } : undefined}
-                  onClick={() => toggle(group.name, choice.label)}
+                  onClick={() => toggle(group.name, val)}
                   aria-pressed={isActive}
-                  aria-label={`${group.name}: ${choice.label}${!enabled ? " (unavailable)" : ""}`}
-                  title={
-                    !enabled
-                      ? "Not available in this combination"
-                      : isActive
-                      ? "Click to unselect"
-                      : undefined
-                  }
-                  className={[
-                    // Base — minimum 44 px touch target, pill shape
-                    "relative inline-flex min-h-[44px] min-w-[44px] items-center justify-center",
-                    "rounded-full border px-4 text-sm font-medium",
-                    "transition-all duration-150 select-none",
-                    // States
+                  className={cn(
+                    "relative overflow-hidden rounded-full border px-4 py-2 text-sm font-medium transition-all",
                     isActive
-                      ? "border-accent bg-accent text-accent-foreground shadow-sm"
-                      : enabled
-                      ? "border-border bg-background hover:border-foreground/40 hover:bg-muted cursor-pointer"
-                      : "cursor-not-allowed border-dashed border-border/60 text-muted-foreground/50",
-                  ].join(" ")}
-                >
-                  {/* Diagonal line on unavailable pills */}
-                  {!enabled && <StrikeThrough />}
-
-                  {/* Label */}
-                  <span className="relative z-10">{choice.label}</span>
-
-                  {/* Check mark for active */}
-                  {isActive && (
-                    <motion.span
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      className="relative z-10 ml-1.5 flex h-4 w-4 items-center justify-center"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </motion.span>
+                      ? "border-accent bg-accent/5 text-accent"
+                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                    !enabled && "pointer-events-none opacity-40"
                   )}
+                >
+                  <span className="relative z-10">{val}</span>
+                  {!enabled && <StrikeThrough />}
                 </motion.button>
               );
             })}
           </div>
         </div>
       ))}
-
-      {/* ── Validation banners ── */}
-      {missing.length > 0 && (
-        <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
-          Please select {listNames(missing)} to continue.
-        </p>
-      )}
-      {unavailableCombo && (
-        <p className="rounded-lg border border-danger/25 bg-danger/5 px-3 py-2 text-sm text-danger">
-          That combination isn&apos;t available — try a different one.
-        </p>
-      )}
-
-      {/* ── Action section ── */}
-      {soldOut ? (
-        <Button variant="outline" disabled className="w-full" size="lg">
-          {noVariantAvail ? "Out of stock" : "Sold out"}
-        </Button>
-      ) : (
-        <div className="space-y-3">
-          {/* Quantity + Add to Cart */}
-          <div className="flex items-center gap-3">
-            {/* Quantity stepper */}
-            <div className="inline-flex h-12 shrink-0 items-center rounded-full border border-border">
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.max(1, q - 1))}
-                className="grid h-12 w-12 cursor-pointer place-items-center rounded-l-full hover:bg-muted"
-                aria-label="Decrease quantity"
-              >
-                <Minus className="h-4 w-4" />
-              </button>
-              <span className="w-8 text-center text-sm tabular-nums">{qty}</span>
-              <button
-                type="button"
-                onClick={() => setQty((q) => Math.min(product.stock, q + 1))}
-                className="grid h-12 w-12 cursor-pointer place-items-center rounded-r-full hover:bg-muted"
-                aria-label="Increase quantity"
-              >
-                <Plus className="h-4 w-4" />
-              </button>
-            </div>
-
-            {/* Add to Cart */}
-            <Button
-              onClick={onAdd}
-              size="lg"
-              className="flex-1"
-              disabled={needsChoice}
+      {/* ── Add to cart / Buy CTA ── */}
+      <div className="space-y-3 pt-2">
+        <div className="flex gap-3 h-14">
+          <div className="flex shrink-0 items-center rounded-full border border-border bg-card p-1">
+            <button
+              type="button"
+              onClick={() => setQty(Math.max(1, qty - 1))}
+              disabled={qty <= 1}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30"
+              aria-label="Decrease quantity"
             >
-              {added ? (
-                <>
-                  <Check className="h-4 w-4" /> Added
-                </>
-              ) : (
-                <>
-                  <ShoppingBag className="h-4 w-4" /> Add to Cart
-                </>
-              )}
-            </Button>
+              <Minus className="h-4 w-4" />
+            </button>
+            <span className="w-8 text-center text-sm font-medium">{qty}</span>
+            <button
+              type="button"
+              onClick={() => setQty(Math.min(product.stock, qty + 1))}
+              disabled={qty >= product.stock}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30"
+              aria-label="Increase quantity"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
 
-          {/* Buy Now + WhatsApp */}
-          <div className="flex items-center gap-2.5">
-            <Button
-              onClick={onBuy}
-              variant="gold"
-              size="lg"
-              disabled={buying || needsChoice}
-              className="flex-1 min-w-0"
-            >
-              {buying ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Zap className="h-4 w-4" />
-              )}
-              Buy Now
-              {!needsChoice && ` · ${formatINR(unitPrice * qty)}`}
-            </Button>
-            <WhatsAppProductButton
-              product={product}
-              variant="compact"
-              options={toSelectedOptions(variant ? variant.combo : selection)}
-            />
-          </div>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={onAdd}
+            disabled={!canOrder || added}
+            className={cn("h-14 flex-1 text-sm font-semibold transition-all", added && "border-green-600 bg-green-50 text-green-700")}
+          >
+            {added ? (
+              <span className="flex items-center gap-2"><Check className="h-4 w-4" /> Added</span>
+            ) : (
+              <span className="flex items-center gap-2"><ShoppingBag className="h-4 w-4" /> Add to Cart</span>
+            )}
+          </Button>
         </div>
-      )}
 
-      {/* ── Trust badges — immediately below CTAs ── */}
+        <Button size="lg" variant="primary" onClick={onBuy} disabled={!canOrder || buying} className="h-14 w-full text-sm font-semibold shadow-xl shadow-primary/20">
+          {buying ? (
+            <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Preparing checkout...</span>
+          ) : (
+            <span className="flex items-center gap-2"><Zap className="h-4 w-4 fill-current" /> Buy it now</span>
+          )}
+        </Button>
+        <WhatsAppProductButton product={product} />
+
+        <div className="pt-2">
+          {soldOut ? (
+            <p className="text-center text-sm font-medium text-danger">Sold out</p>
+          ) : needsChoice ? (
+            <p className="text-center text-sm font-medium text-accent">Please select {listNames(missing)}</p>
+          ) : (
+            <p className="text-center text-sm font-medium text-green-600">In stock, ready to ship</p>
+          )}
+        </div>
+      </div>
+
       <TrustRow />
     </div>
   );

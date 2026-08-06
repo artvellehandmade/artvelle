@@ -10,7 +10,7 @@ import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductCard } from "@/components/store/product-card";
 import { DescriptionCollapse } from "@/components/store/description-collapse";
 import { ProductViewProvider } from "@/context/product-view";
-import { normalizeVariants, priceRange } from "@/lib/variants";
+import { priceRange } from "@/lib/variants";
 import { getSettings } from "@/lib/settings";
 import { siteUrl } from "@/lib/site-url";
 
@@ -103,7 +103,7 @@ export default async function ProductPage({
         )
       : 0;
 
-  const variants  = normalizeVariants(product);
+
   const range     = priceRange(product);
   const hasRange  = range.min !== range.max;
   const { rating, count } = stubRating(product.name);
@@ -130,7 +130,7 @@ export default async function ProductPage({
           priceCurrency: "INR",
           lowPrice: range.min,
           highPrice: range.max,
-          offerCount: Math.max(variants.length, 1),
+          offerCount: 1,
           availability:
             product.stock > 0
               ? "https://schema.org/InStock"
@@ -199,8 +199,7 @@ export default async function ProductPage({
           <div className="md:sticky md:top-24 md:self-start min-w-0">
             <ProductGallery
               product={product}
-              variants={variants}
-              name={product.name}
+              media={product.media ?? []}
             />
           </div>
 

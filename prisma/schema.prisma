@@ -35,6 +35,10 @@ model Product {
   // availability and its own set of photos. Supersedes variantPrices when set.
   // Shape: [{ combo: { "Size": "4 inch", "Vatki": "1" }, price, available, images: [] }]
   variants          Json     @default("[]")
+  attributes        Json     @default("[]")
+  propertyModules   Json     @default("{}")
+  rules             Json     @default("{}")
+  sellableVariants  Json     @default("[]")
   price             Int // whole rupees
   compareAtPrice    Int? // optional "was" price for showing a discount
   images            String[] @default([])
@@ -285,32 +289,47 @@ model Coupon {
 
 // -------- Media --------
 model Media {
-  id        String   @id @default(cuid())
-  url       String   @unique
-  file      String
-  alt       String?
-  width     Int?
-  height    Int?
-  size      Int?
-  source    String   // "repo", "blob", "external"
-  createdAt DateTime @default(now())
+  id               String   @id @default(cuid())
+  url              String   @unique
+  file             String
+  alt              String?
+  width            Int?
+  height           Int?
+  size             Int?
+  source           String   // "repo", "blob", "external"
+  tags             String[] @default([])
+  roles            String[] @default([])
+  // Smart variant tagging — optional. When set, the photo is automatically
+  // suggested when the admin opens that variant's gallery in the picker.
+  // e.g. variantAttribute = "Design", variantValue = "Pink"
+  variantAttribute String?  // e.g. "Design"
+  variantValue     String?  // e.g. "Pink"
+  // Denormalised subcategory name for fast search without a join.
+  subcategoryName  String?  // e.g. "Resin Pooja Thali"
+  createdAt        DateTime @default(now())
 
   productImages     ProductImage[]
   subcategoryImages SubcategoryImage[]
+
+  @@index([variantAttribute, variantValue])
+  @@index([subcategoryName])
 }
 
 model ProductImage {
-  id         String  @id @default(cuid())
-  productId  String
-  mediaId    String
-  variantId  String? // Null = Common Image, String = Variant specific
-  isPrimary  Boolean @default(false)
-  sortOrder  Int     @default(0)
+  id           String  @id @default(cuid())
+  productId    String
+  mediaId      String
+  // variantValue = null  → common (shown for all variants)
+  // variantValue = "Pink" → shown only when Design = Pink is selected
+  variantValue String?
+  slot         String  @default("gallery") // "preview", "gallery", "common"
+  sortOrder    Int     @default(0)
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   media   Media   @relation(fields: [mediaId], references: [id], onDelete: Restrict)
-  
-  @@unique([productId, mediaId, variantId])
+
+  @@unique([productId, mediaId, variantValue])
+  @@index([productId, variantValue])
 }
 
 model SubcategoryImage {

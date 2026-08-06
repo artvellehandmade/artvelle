@@ -3,31 +3,22 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
-import { Check, Images, Loader2, Search, X } from "lucide-react";
+import { Check, Images, Loader2, Search, Tag, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import type { MediaLibraryItem } from "@/lib/types";
 
-type Photo = {
-  url: string;
-  file: string;
-  category: string;
-  group: string;
-  source: "repo" | "blob" | "external";
-};
-type PhotoUse = { kind: string; id: string; name: string };
-type Library = { photos: Photo[]; usage: Record<string, PhotoUse[]> };
+type Library = { photos: MediaLibraryItem[]; usage: Record<string, { kind: string; id: string; name: string; slot?: string }[]>; total: number };
 
-// Repo folders sort alphabetically; the two synthetic buckets go last so the
-// real gallery structure stays at the front of the filter strip.
+// Repo folders sort alphabetically; these two synthetic buckets go last.
 const LAST = ["Uploaded", "Pasted links"];
 
 /**
  * Picks any photo the store already has: the gallery committed to the repo,
  * anything uploaded to Vercel Blob, and any image URL pasted in by hand.
  *
- * Nothing here uploads or deletes: choosing a photo just records its URL, and
- * removing it only drops the URL. The file stays where it is, so the same
- * photo can be attached to another product later, or added back to this one.
+ * When `preferVariantValue` is provided, the picker defaults to that value's
+ * images first and shows a smart-filter badge so the admin knows the context.
  */
 export function PhotoPicker({
   selected,
@@ -35,25 +26,44 @@ export function PhotoPicker({
   max,
   /** Pre-filters the library to this category's folder when opened. */
   preferCategory,
+  /** When set, filter defaults to images tagged with this variant value. */
+  preferVariantValue,
+  /** When set, show subcategory filter context. */
+  preferSubcategory,
   label = "Choose from photo library",
 }: {
   selected: string[];
   onChange: (next: string[]) => void;
   max?: number;
   preferCategory?: string;
+  preferVariantValue?: string;
+  preferSubcategory?: string;
   label?: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen]       = useState(false);
   const [library, setLibrary] = useState<Library | null>(null);
   const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState("");
-  const [folder, setFolder] = useState<string>("All");
+  const [q, setQ]             = useState("");
+  const [folder, setFolder]   = useState<string>("All");
+  // Smart variant filter: "all" = no filter, a string = filter by variantValue
+  const [variantFilter, setVariantFilter] = useState<string | null>(null);
 
-  // Fetch once, the first time the picker is opened.
+  // Build query string for the API based on current filters
+  function buildQuery() {
+    const p = new URLSearchParams({ limit: "200" });
+    if (folder !== "All") p.set("category", folder);
+    if (variantFilter !== null) {
+      p.set("variantValue", variantFilter === "" ? "__common__" : variantFilter);
+    }
+    if (q.trim()) p.set("q", q.trim());
+    return p.toString();
+  }
+
+  // Fetch when opened (or when filters change)
   useEffect(() => {
-    if (!open || library || loading) return;
+    if (!open) return;
     setLoading(true);
-    fetch("/api/admin/media")
+    fetch(`/api/admin/media?${buildQuery()}`)
       .then(async (r) => {
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "Could not load photos");
@@ -62,14 +72,33 @@ export function PhotoPicker({
       .then(setLibrary)
       .catch((err) => toast.error(err.message))
       .finally(() => setLoading(false));
-  }, [open, library, loading]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, folder, variantFilter]);
 
-  // Default the folder filter to the product's own category, when it has one.
+  // Re-fetch on search with debounce
   useEffect(() => {
-    if (!open || !library || !preferCategory) return;
-    const match = library.photos.find((p) => p.category === preferCategory);
-    setFolder(match ? preferCategory : "All");
-  }, [open, library, preferCategory]);
+    if (!open || !library) return;
+    const t = setTimeout(() => {
+      setLoading(true);
+      fetch(`/api/admin/media?${buildQuery()}`)
+        .then((r) => r.json())
+        .then(setLibrary)
+        .finally(() => setLoading(false));
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q]);
+
+  // When the picker first opens, set smart defaults
+  useEffect(() => {
+    if (!open) return;
+    if (preferVariantValue !== undefined) {
+      setVariantFilter(preferVariantValue);
+    }
+    if (preferCategory) {
+      setFolder(preferCategory);
+    }
+  }, [open, preferVariantValue, preferCategory]);
 
   const folders = useMemo(() => {
     const counts = new Map<string, number>();
@@ -88,18 +117,18 @@ export function PhotoPicker({
     ];
   }, [library]);
 
+  // Photos are already filtered by the API; just do local text search
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (library?.photos ?? []).filter((p) => {
-      if (folder !== "All" && p.category !== folder) return false;
-      if (!needle) return true;
-      return `${p.category} ${p.group} ${p.file}`.toLowerCase().includes(needle);
-    });
-  }, [library, folder, q]);
+    if (!needle) return library?.photos ?? [];
+    return (library?.photos ?? []).filter((p) =>
+      `${p.category} ${p.group} ${p.file} ${p.variantValue ?? ""}`.toLowerCase().includes(needle)
+    );
+  }, [library, q]);
 
   // Group the visible photos by their subfolder, mirroring the repo layout.
   const grouped = useMemo(() => {
-    const map = new Map<string, Photo[]>();
+    const map = new Map<string, MediaLibraryItem[]>();
     for (const p of visible) {
       const key = [p.category, p.group].filter(Boolean).join(" / ") || "Ungrouped";
       const list = map.get(key);
@@ -123,6 +152,14 @@ export function PhotoPicker({
     onChange([...selected, url]);
   }
 
+  const hasSmartFilter = variantFilter !== null;
+  const smartFilterLabel =
+    variantFilter === ""
+      ? "Common (no variant)"
+      : variantFilter
+      ? `Design: ${variantFilter}`
+      : null;
+
   return (
     <>
       <button
@@ -143,12 +180,13 @@ export function PhotoPicker({
             className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border border-border bg-card shadow-2xl sm:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {/* Header */}
             <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-4">
               <div className="min-w-0">
                 <h3 className="font-serif text-lg">Photo library</h3>
                 <p className="truncate text-xs text-muted-foreground">
                   {library
-                    ? `${library.photos.length} photos — repo gallery, uploads and pasted links`
+                    ? `${library.total ?? library.photos.length} photos total`
                     : "Loading…"}
                   {max !== undefined && ` · pick up to ${max}`}
                 </p>
@@ -163,7 +201,46 @@ export function PhotoPicker({
               </button>
             </div>
 
-            <div className="space-y-3 border-b border-border px-5 py-3">
+            {/* Filters */}
+            <div className="space-y-2.5 border-b border-border px-5 py-3">
+              {/* Smart variant filter pill */}
+              {(preferVariantValue !== undefined || preferSubcategory) && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground">Smart filter:</span>
+                  {hasSmartFilter && smartFilterLabel && (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-2.5 py-1 text-xs text-accent">
+                      <Tag className="h-3 w-3" />
+                      {smartFilterLabel}
+                      <button
+                        type="button"
+                        onClick={() => setVariantFilter(null)}
+                        className="ml-0.5 hover:text-danger"
+                        aria-label="Remove smart filter"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </span>
+                  )}
+                  {!hasSmartFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setVariantFilter(preferVariantValue ?? null)}
+                      className="rounded-full border border-dashed border-accent/50 px-2.5 py-1 text-xs text-accent hover:bg-accent/5"
+                    >
+                      Show {preferVariantValue ? `"${preferVariantValue}"` : "common"} images
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { setVariantFilter(null); setFolder("All"); }}
+                    className="text-xs text-muted-foreground underline hover:text-foreground"
+                  >
+                    Browse all
+                  </button>
+                </div>
+              )}
+
+              {/* Search */}
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
@@ -173,6 +250,8 @@ export function PhotoPicker({
                   placeholder="Search photos…"
                 />
               </div>
+
+              {/* Category tabs */}
               <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
                 {folders.map((f) => (
                   <button
@@ -193,6 +272,7 @@ export function PhotoPicker({
               </div>
             </div>
 
+            {/* Grid */}
             <div className="flex-1 overflow-y-auto px-5 py-4">
               {loading && (
                 <div className="grid place-items-center py-16 text-muted-foreground">
@@ -202,11 +282,16 @@ export function PhotoPicker({
 
               {!loading && grouped.length === 0 && (
                 <p className="py-16 text-center text-sm text-muted-foreground">
-                  No photos match. Add image files under{" "}
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">
-                    public/products/gallery/
-                  </code>
-                  .
+                  No photos match.{" "}
+                  {hasSmartFilter && (
+                    <button
+                      type="button"
+                      onClick={() => setVariantFilter(null)}
+                      className="underline"
+                    >
+                      Remove smart filter
+                    </button>
+                  )}
                 </p>
               )}
 
@@ -214,9 +299,7 @@ export function PhotoPicker({
                 <section key={groupName} className="mb-6">
                   <h4 className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
                     {groupName}{" "}
-                    <span className="normal-case opacity-60">
-                      ({photos.length})
-                    </span>
+                    <span className="normal-case opacity-60">({photos.length})</span>
                   </h4>
                   <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-5">
                     {photos.map((p) => {
@@ -229,9 +312,7 @@ export function PhotoPicker({
                           onClick={() => toggle(p.url)}
                           title={
                             uses.length
-                              ? `${p.file} — already used by ${uses
-                                  .map((u) => u.name)
-                                  .join(", ")}`
+                              ? `${p.file} — used by ${uses.map((u) => u.name).join(", ")}`
                               : p.file
                           }
                           className={cn(
@@ -242,7 +323,7 @@ export function PhotoPicker({
                           )}
                         >
                           <Image
-                            src={p.url}
+                            src={decodeURI(p.url)}
                             alt={p.file}
                             fill
                             sizes="(max-width: 640px) 33vw, 20vw"
@@ -253,7 +334,13 @@ export function PhotoPicker({
                               <Check className="h-3.5 w-3.5" />
                             </span>
                           )}
-                          {uses.length > 0 && !on && (
+                          {/* Variant value badge */}
+                          {p.variantValue && (
+                            <span className="absolute bottom-1.5 left-1.5 rounded-full bg-accent/80 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur">
+                              {p.variantValue}
+                            </span>
+                          )}
+                          {!p.variantValue && uses.length > 0 && !on && (
                             <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/65 px-1.5 py-0.5 text-[10px] font-medium text-white backdrop-blur">
                               in {uses.length}
                             </span>
@@ -266,6 +353,7 @@ export function PhotoPicker({
               ))}
             </div>
 
+            {/* Footer */}
             <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-3.5">
               <p className="text-xs text-muted-foreground">
                 {selected.length} selected. Removing a photo here never deletes

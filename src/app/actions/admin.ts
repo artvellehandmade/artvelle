@@ -43,30 +43,14 @@ async function ensureUniqueSlug(name: string, ignoreId?: string) {
   }
 }
 
-const optionSchema = z.object({
-  name: z.string().trim().min(1),
-  choices: z
-    .array(
-      z.object({
-        label: z.string().trim().min(1),
-        priceDelta: z.coerce.number().int().default(0),
-        image: z.string().trim().nullable().optional(),
-      })
-    )
-    .min(1),
-});
-
-const variantPriceSchema = z.object({
-  combo: z.record(z.string(), z.string()),
-  price: z.coerce.number().int().nonnegative(),
-});
-
-const variantSchema = z.object({
-  combo: z.record(z.string(), z.string()),
-  price: z.coerce.number().int().nonnegative(),
-  available: z.boolean().default(true),
-  images: z.array(z.string()).default([]),
-});
+// Keep optionSchema loose for backward compatibility or simple options if any
+const optionSchema = z.any();
+const attributeSchema = z.any();
+const propertyDependenciesSchema = z.any();
+const rulesSchema = z.any();
+const sellableVariantSchema = z.any();
+const variantSchema = z.any();
+const variantPriceSchema = z.any();
 
 const PAYMENT_MODES = ["prepaid", "cod", "partial", "direct"] as const;
 
@@ -82,9 +66,13 @@ const productSchema = z.object({
   stock: z.coerce.number().int().nonnegative(),
   tags: z.array(z.string()).default([]),
   images: z.array(z.string()).default([]),
-  options: z.array(optionSchema).default([]),
-  variantPrices: z.array(variantPriceSchema).default([]),
-  variants: z.array(variantSchema).default([]),
+  options: z.any().optional(),
+  attributes: z.any().optional(),
+  propertyModules: z.any().optional(),
+  rules: z.any().optional(),
+  sellableVariants: z.any().optional(),
+  variantPrices: z.any().optional(),
+  variants: z.any().optional(),
   isFeatured: z.boolean().default(false),
   isActive: z.boolean().default(true),
   // Which checkout modes this product supports (subset of the 4 modes).
@@ -121,9 +109,13 @@ export async function createProduct(input: ProductInput) {
       secondaryCategory: data.secondaryCategory || null,
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
-      options: data.options,
-      variantPrices: data.variantPrices,
-      variants: data.variants,
+      options: data.options ?? [],
+      attributes: data.attributes ?? [],
+      propertyModules: data.propertyModules ?? {},
+      rules: data.rules ?? {},
+      sellableVariants: data.sellableVariants ?? [],
+      variantPrices: data.variantPrices ?? [],
+      variants: data.variants ?? [],
       paymentModes: data.paymentModes,
       advancePercent: data.advancePercent ?? null,
       weightGrams: data.weightGrams ?? null,
@@ -146,7 +138,8 @@ export async function createProduct(input: ProductInput) {
 async function syncProductImages(productId: string, data: z.infer<typeof productSchema>) {
   const urls = new Set<string>();
   data.images.forEach(img => urls.add(img));
-  data.variants.forEach(v => v.images.forEach(img => urls.add(img)));
+  ((data as any).variants || []).forEach((v: any) => (v.images || []).forEach((img: any) => urls.add(img)));
+  ((data as any).sellableVariants || []).forEach((v: any) => (v.images || []).forEach((img: any) => urls.add(img)));
 
   // Ensure Media exists
   for (const url of Array.from(urls)) {
@@ -169,26 +162,40 @@ async function syncProductImages(productId: string, data: z.infer<typeof product
     const media = await prisma.media.findUnique({ where: { url } });
     if (media) {
       await prisma.productImage.create({
-        data: { productId, mediaId: media.id, variantId: null, sortOrder: sortOrder++ }
+        data: { productId, mediaId: media.id, variantValue: null, sortOrder: sortOrder++, slot: sortOrder === 1 && data.variants.length === 0 ? "hero" : "gallery" }
       });
     }
   }
 
-  // Re-create variant images (using a string representation of the combo as variantId)
+  // Re-create variant images — keyed by the visual variant value (first option value)
   for (const v of data.variants) {
-    const variantId = JSON.stringify(v.combo); // temporary variant ID since variants are JSON
+    // Use the first combo value as the visual variant identifier (e.g. "Pink")
+    const variantValue = (Object.values(v.combo ?? {})[0] as string | undefined) ?? null;
     let vSort = 0;
+
+    // Save preview image if exists
+    if (v.previewImage) {
+      const media = await prisma.media.findUnique({ where: { url: v.previewImage } });
+      if (media) {
+        try {
+          await prisma.productImage.create({
+            data: { productId, mediaId: media.id, variantValue, slot: "preview", sortOrder: vSort++ }
+          });
+        } catch { /* duplicate, skip */ }
+      }
+    }
+
+    // Save gallery images
     for (const url of v.images) {
       if (!url) continue;
       const media = await prisma.media.findUnique({ where: { url } });
       if (media) {
-        // Prevent duplicate (same image, same variant)
         const existing = await prisma.productImage.findFirst({
-          where: { productId, mediaId: media.id, variantId }
+          where: { productId, mediaId: media.id, variantValue }
         });
         if (!existing) {
           await prisma.productImage.create({
-            data: { productId, mediaId: media.id, variantId, sortOrder: vSort++ }
+            data: { productId, mediaId: media.id, variantValue, slot: "gallery", sortOrder: vSort++ }
           });
         }
       }
@@ -212,9 +219,13 @@ export async function updateProduct(id: string, input: ProductInput) {
       secondaryCategory: data.secondaryCategory || null,
       subcategoryId: data.subcategoryId || null,
       compareAtPrice: data.compareAtPrice || null,
-      options: data.options,
-      variantPrices: data.variantPrices,
-      variants: data.variants,
+      options: data.options ?? [],
+      attributes: data.attributes ?? [],
+      propertyModules: data.propertyModules ?? {},
+      rules: data.rules ?? {},
+      sellableVariants: data.sellableVariants ?? [],
+      variantPrices: data.variantPrices ?? [],
+      variants: data.variants ?? [],
       paymentModes: data.paymentModes,
       advancePercent: data.advancePercent ?? null,
       weightGrams: data.weightGrams ?? null,

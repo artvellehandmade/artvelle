@@ -32,6 +32,11 @@ export function toDTO(p: Product & { productImages?: { media: any }[] }): Produc
     paymentModes: (Array.isArray(p.paymentModes)
       ? p.paymentModes
       : ["prepaid", "cod"]) as PaymentMode[],
+    // New rule engine fields — stored as JSON, cast to proper types
+    attributes: Array.isArray(p.attributes) ? (p.attributes as any) : [],
+    propertyModules: (p.propertyModules as any) ?? {},
+    rules: (p.rules as any) ?? {},
+    sellableVariants: Array.isArray(p.sellableVariants) ? (p.sellableVariants as any) : [],
   };
 }
 

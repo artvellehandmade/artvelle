@@ -5,14 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { sendOrderEmails } from "@/lib/email";
 import { getUserSession, setUserCookie } from "@/lib/user-auth";
-import { priceWithOptions } from "@/lib/options";
-import {
-  missingChoices,
-  normalizeVariants,
-  resolveVariant,
-  toSelection,
-} from "@/lib/variants";
+
+import { priceForSelection, repairSelection, imagesForSelection } from "@/lib/variants";
+import { comboKey } from "@/lib/options";
 import { orderNumber } from "@/lib/utils";
+import type { Attribute, SellableVariant } from "@/lib/types";
 import {
   createRazorpayOrder,
   isRazorpayConfigured,
@@ -145,48 +142,29 @@ export async function placeOrder(input: PlaceOrderInput) {
     const p = products.find((pr) => pr.id === i.productId);
     if (!p) return fail("A product in your cart is no longer available.");
     // Recompute the unit price from the product's real option prices.
-    const productOptions = Array.isArray(p.options)
-      ? (p.options as unknown as ProductOption[])
-      : [];
-    const variantPrices = Array.isArray(p.variantPrices)
-      ? (p.variantPrices as unknown as VariantPrice[])
-      : [];
-    const variants = Array.isArray(p.variants)
-      ? (p.variants as unknown as Variant[])
-      : [];
-
-    // Validate the client's option choices against the product's real deltas.
-    const { unitPrice: additivePrice, clean } = priceWithOptions(
-      p.price,
-      productOptions,
-      i.options,
-      variantPrices
-    );
-
-    // Every option group must be answered. The product page already blocks
-    // this, but a cart saved before the item gained options — or one edited by
-    // hand — would otherwise order an unbuildable piece.
-    const unanswered = missingChoices(productOptions, toSelection(clean));
+    const attributes = (p.attributes as any) as Attribute[] || [];
+    const sellableVariants = (p.sellableVariants as any) as SellableVariant[] || [];
+    
+    // Clean and validate selection
+    const rawSelection = Object.fromEntries((i.options || []).map(o => [o.name, o.value]));
+    const cleanSelection = repairSelection(attributes, rawSelection);
+    
+    // Check if they answered everything
+    const unanswered = attributes.filter((a: Attribute) => !cleanSelection[a.name]).map((a: Attribute) => a.name);
     if (unanswered.length > 0) {
-      return fail(
-        `Please choose ${unanswered.join(" and ")} for “${p.name}” before checking out.`
-      );
+      return fail(`Please choose ${unanswered.join(" and ")} for "${p.name}" before checking out.`);
     }
 
-    // Prefer the Flipkart-style variant matrix when the product uses one.
-    const source = { price: p.price, options: productOptions, variants, variantPrices, images: p.images };
-    const normalized = normalizeVariants(source);
-    const matched =
-      normalized.length && clean.length
-        ? resolveVariant(normalized, toSelection(clean))
-        : null;
-    if (normalized.length && clean.length && !matched) {
-      return fail(
-        `The combination you picked for “${p.name}” is no longer available.`
-      );
+    const key = comboKey(cleanSelection);
+    const variant = sellableVariants.find((v: SellableVariant) => v.id === key);
+    
+    if (variant && !variant.available) {
+      return fail(`The combination you picked for “${p.name}” is out of stock.`);
     }
-    const unitPrice = matched ? matched.price : additivePrice;
-    const image = matched?.images[0] ?? p.images[0] ?? "";
+
+    const unitPrice = variant?.price ?? p.price;
+    const image = variant?.images?.[0] ?? p.images?.[0] ?? "";
+    const cleanOptions = Object.entries(cleanSelection).map(([name, value]) => ({ name, value }));
 
     return {
       productId: p.id,
@@ -194,7 +172,7 @@ export async function placeOrder(input: PlaceOrderInput) {
       image,
       price: unitPrice,
       quantity: i.quantity,
-      options: clean,
+      options: cleanOptions,
       note: i.note ?? "",
     };
   });
