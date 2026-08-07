@@ -1,6 +1,7 @@
 import { ShoppingCart } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
 import { OrdersTable, type AdminOrder } from "@/components/admin/orders-table";
 import { OrderFilters } from "@/components/admin/order-filters";
 
@@ -79,11 +80,18 @@ export default async function AdminOrders({
   const where = buildWhere(sp);
   const hasFilters = Object.keys(where).length > 0;
 
-  const [raw, totalCount] = await Promise.all([
+  const [raw, totalCount, settings] = await Promise.all([
     prisma.order
-      .findMany({ where, orderBy: { createdAt: "desc" } })
+      .findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        // Return count per order so the list can show "1 return" without the
+        // admin opening each card to find out.
+        include: { _count: { select: { returnRequests: true } } },
+      })
       .catch(() => []),
     prisma.order.count().catch(() => 0),
+    getSettings(),
   ]);
 
   // Line items store the productId but not the slug, so resolve the storefront
@@ -149,6 +157,7 @@ export default async function AdminOrders({
     lastSyncedAt: o.lastSyncedAt?.toISOString() ?? null,
     note: o.note,
     createdAt: o.createdAt.toISOString(),
+    returnCount: o._count.returnRequests,
   }));
 
   return (
@@ -178,7 +187,10 @@ export default async function AdminOrders({
         </div>
       ) : (
         <div className="mt-6">
-          <OrdersTable orders={orders} />
+          <OrdersTable
+            orders={orders}
+            returnWindowDays={settings.returnsEnabled ? settings.returnWindowDays : null}
+          />
         </div>
       )}
     </div>

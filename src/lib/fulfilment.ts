@@ -3,6 +3,7 @@ import { getSettings } from "./settings";
 import {
   isNimbusPostConfigured,
   createDraftOrder,
+  createReverseDraftOrder,
   getOrderState,
   listCourierOptions,
   shipDraft,
@@ -117,6 +118,102 @@ export async function createDraftForOrder(
     return { ok: true, nimbusOrderId };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * Stage a DRAFT reverse pickup for an approved return: the courier collects from
+ * the customer's address and brings the parcel back to our warehouse.
+ *
+ * Deliberately NOT best-effort-silent like `createDraftForOrder`. A forward draft
+ * that fails is recoverable — the admin sees the order sitting unshipped. An
+ * approved return whose pickup was never booked looks *done* in the admin while
+ * the customer waits for a courier that will never arrive. So every outcome is
+ * recorded on the request (`nimbusError` on failure, cleared on success) and the
+ * message is returned for the UI to show.
+ *
+ * The return itself stays approved either way — the customer's decision must not
+ * depend on a third-party API being up.
+ */
+export async function draftReturnPickup(
+  returnId: string
+): Promise<{ ok: boolean; skipped?: string; nimbusOrderId?: string; error?: string }> {
+  const settings = await getSettings();
+
+  const req = await prisma.returnRequest.findUnique({
+    where: { id: returnId },
+    include: { order: true },
+  });
+  if (!req) return { ok: false, error: "Return request not found" };
+  if (req.nimbusOrderId || req.nimbusAwb) {
+    return { ok: true, skipped: "already staged", nimbusOrderId: req.nimbusOrderId ?? undefined };
+  }
+
+  const note = async (error: string | null) => {
+    await prisma.returnRequest.update({
+      where: { id: returnId },
+      data: { nimbusError: error },
+    });
+  };
+
+  if (!settings.nimbusEnabled) {
+    await note("NimbusPost shipping is switched off in settings — book the pickup manually.");
+    return { ok: false, skipped: "shipping disabled" };
+  }
+  if (!isNimbusPostConfigured()) {
+    await note("NimbusPost credentials are missing — book the pickup manually.");
+    return { ok: false, skipped: "not configured" };
+  }
+
+  // Parcel size comes from the returned product when it has one on file.
+  const product = req.productId
+    ? await prisma.product.findUnique({
+        where: { id: req.productId },
+        select: { weightGrams: true, lengthCm: true, breadthCm: true, heightCm: true },
+      })
+    : null;
+
+  try {
+    const nimbusOrderId = await createReverseDraftOrder({
+      returnNumber: req.requestNumber,
+      // Declared value of what is travelling, not what was refunded.
+      orderAmount: Math.max(0, req.unitPrice * req.quantity),
+      pickupFrom: {
+        name: req.order.customerName,
+        address: req.order.address,
+        city: req.order.city,
+        state: req.order.state,
+        pincode: req.order.pincode,
+        phone: req.order.phone,
+      },
+      items: [
+        { name: req.productName, qty: req.quantity, price: req.unitPrice },
+      ],
+      parcel: {
+        weight: product?.weightGrams ? product.weightGrams * req.quantity : undefined,
+        length: product?.lengthCm ?? undefined,
+        breadth: product?.breadthCm ?? undefined,
+        height: product?.heightCm ?? undefined,
+      },
+    });
+
+    await prisma.returnRequest.update({
+      where: { id: returnId },
+      data: { nimbusOrderId, nimbusError: null },
+    });
+    return { ok: true, nimbusOrderId };
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    // A "pincode not recognized" rejection on a REVERSE order is misleading: the
+    // same pincode usually ships fine on the forward leg, so the admin starts
+    // doubting the customer's address. It normally means reverse pickup isn't
+    // serviceable there (or the reverse endpoint wants the pickup address under a
+    // different key) — say so, and keep the raw message with its requestId.
+    const message = /pincode/i.test(raw)
+      ? `${raw} — note this address ships fine on the forward leg, so this is usually reverse-pickup serviceability rather than a bad address. Check reverse serviceability for this pincode with NimbusPost (quote the requestId) and arrange the pickup manually meanwhile.`
+      : raw;
+    await note(message);
+    return { ok: false, error: message };
   }
 }
 

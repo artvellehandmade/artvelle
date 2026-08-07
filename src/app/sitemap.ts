@@ -3,6 +3,20 @@ import { prisma } from "@/lib/prisma";
 import { siteUrl } from "@/lib/site-url";
 
 /**
+ * Regenerate hourly.
+ *
+ * Without this Next prerenders the sitemap once at build time and serves that
+ * frozen copy forever — so a product added through the admin, or a review
+ * approved on one, never reaches sitemap.xml until someone happens to redeploy.
+ * The catalogue is edited far more often than the code is.
+ *
+ * Hourly is deliberate: it costs four queries an hour and search engines refetch
+ * a sitemap on their own schedule anyway, so there is nothing to gain from
+ * rebuilding it per request.
+ */
+export const revalidate = 3600;
+
+/**
  * Static routes worth indexing. Anything transactional or private is excluded
  * here and blocked in robots.ts.
  */
@@ -36,7 +50,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     prisma.product
       .findMany({
         where: { isActive: true },
-        select: { slug: true, updatedAt: true },
+        select: { id: true, slug: true, updatedAt: true },
         orderBy: { updatedAt: "desc" },
       })
       .catch((e) => {
@@ -68,8 +82,27 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       return [];
     });
 
+  // A product page also changes when a review is approved on it, but approving a
+  // review doesn't touch Product.updatedAt — so lastModified would go stale and
+  // tell crawlers nothing had changed. Take the later of the two dates.
+  const newestReview = await prisma.review
+    .groupBy({
+      by: ["productId"],
+      where: { approved: true },
+      _max: { createdAt: true },
+    })
+    .catch((e) => {
+      console.error("[sitemap] review query FAILED:", e);
+      return [] as { productId: string; _max: { createdAt: Date | null } }[];
+    });
+  const reviewedAt = new Map(
+    newestReview
+      .filter((r) => r._max.createdAt)
+      .map((r) => [r.productId, r._max.createdAt as Date])
+  );
+
   console.log(
-    `[sitemap] ${products.length} products, ${categories.length} categories, ${subcategories.length} subcategories, base=${base}`
+    `[sitemap] ${products.length} products, ${categories.length} categories, ${subcategories.length} subcategories, ${reviewedAt.size} with reviews, base=${base}`
   );
 
   for (const c of categories) {
@@ -93,9 +126,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
 
   for (const p of products) {
+    const reviewed = reviewedAt.get(p.id);
     entries.push({
       url: `${base}/product/${p.slug}`,
-      lastModified: p.updatedAt,
+      lastModified:
+        reviewed && reviewed > p.updatedAt ? reviewed : p.updatedAt,
       changeFrequency: "weekly",
       priority: 0.8,
     });

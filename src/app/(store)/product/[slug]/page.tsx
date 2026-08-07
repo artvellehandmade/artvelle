@@ -10,25 +10,21 @@ import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductPrice } from "@/components/store/product-price";
 import { ProductCard } from "@/components/store/product-card";
 import { ProductInfoSections } from "@/components/store/product-info-sections";
+import { ReviewPanel } from "@/components/store/review-panel";
+import { VideoPreviews } from "@/components/store/video-previews";
 import { ProductViewProvider } from "@/context/product-view";
 import { priceRange, firstAvailableSelection } from "@/lib/variants";
 import { getSettings, resolveProductInfo } from "@/lib/settings";
 import { siteUrl } from "@/lib/site-url";
+import { resolveVideos } from "@/lib/videos";
+import {
+  getProductReviews,
+  getReviewSummaries,
+  getReviewSummary,
+} from "@/lib/reviews";
+import { getUserSession } from "@/lib/user-auth";
 
 export const dynamic = "force-dynamic";
-
-// ─── Deterministic rating stub (mirrors product-card.tsx) ───────────────────
-function stubRating(name: string): { rating: number; count: number } {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-  }
-  const h = Math.abs(hash);
-  return {
-    rating: Math.round((4.6 + (h % 4) * 0.1) * 10) / 10,
-    count: 80 + (h % 100),
-  };
-}
 
 // ─── Metadata ────────────────────────────────────────────────────────────────
 export async function generateMetadata({
@@ -88,7 +84,7 @@ export default async function ProductPage({
   const product     = await getProductBySlug(slug);
   if (!product || !product.isActive) notFound();
 
-  const [related, settings, crumb] = await Promise.all([
+  const [related, settings, crumb, reviews, summary, session] = await Promise.all([
     getRelated(
       product.category,
       product.id,
@@ -98,11 +94,15 @@ export default async function ProductPage({
     ),
     getSettings(),
     getProductCrumb(product.subcategoryId),
+    getProductReviews(product.id),
+    // The headline figure counts every approved review, not just the page shown.
+    getReviewSummary(product.id),
+    getUserSession(),
   ]);
 
   const range     = priceRange(product);
-  const { rating, count } = stubRating(product.name);
   const initialSelection = firstAvailableSelection(product);
+  const relatedRatings = await getReviewSummaries(related.map((p) => p.id));
 
   // Info-accordion copy: this product's own text where set, otherwise the
   // store-wide default from Settings > Product defaults.
@@ -139,6 +139,17 @@ export default async function ProductPage({
         ...(absoluteImages.length ? { image: absoluteImages } : {}),
         category: product.category,
         brand: { "@type": "Brand", name: settings.brandName },
+        // Emitted only when real approved reviews exist. Structured-data rating
+        // with no reviews behind it is exactly what Google penalises.
+        ...(summary
+          ? {
+              aggregateRating: {
+                "@type": "AggregateRating",
+                ratingValue: summary.average,
+                reviewCount: summary.count,
+              },
+            }
+          : {}),
         offers: {
           "@type": "AggregateOffer",
           priceCurrency: "INR",
@@ -233,23 +244,30 @@ export default async function ProductPage({
               {product.name}
             </h1>
 
-            {/* Rating + stock on one compact line */}
+            {/* Rating + stock on one compact line. The rating block only exists
+                once a real approved review does — no placeholder stars. */}
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-              <span className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`h-3.5 w-3.5 ${
-                      star <= Math.round(rating)
-                        ? "fill-accent text-accent"
-                        : "fill-muted text-muted-foreground"
-                    }`}
-                  />
-                ))}
-                <span className="ml-0.5 font-medium">{rating}</span>
-              </span>
-              <span className="text-muted-foreground">({count} reviews)</span>
-              <span className="text-border">|</span>
+              {summary && (
+                <>
+                  <span className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={`h-3.5 w-3.5 ${
+                          star <= Math.round(summary.average)
+                            ? "fill-accent text-accent"
+                            : "fill-muted text-muted-foreground"
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-0.5 font-medium">{summary.average}</span>
+                  </span>
+                  <span className="text-muted-foreground">
+                    ({summary.count} review{summary.count === 1 ? "" : "s"})
+                  </span>
+                  <span className="text-border">|</span>
+                </>
+              )}
               {product.stock > 0 ? (
                 <span className="text-success">
                   In stock{product.stock <= 5 ? ` · only ${product.stock} left` : ""}
@@ -280,11 +298,23 @@ export default async function ProductPage({
           materialsCare={info.materialsCare}
           shippingInfo={info.shippingInfo}
           returnsInfo={info.returnsInfo}
-          rating={rating}
-          reviewCount={count}
+          rating={summary?.average ?? null}
+          reviewCount={summary?.count ?? 0}
           specs={specs}
+          reviews={
+            <ReviewPanel
+              productId={product.id}
+              summary={summary}
+              items={reviews.items}
+              distribution={reviews.distribution}
+              signedInName={session?.name ?? null}
+            />
+          }
         />
       </section>
+
+      {/* ── Video previews — the admin's YouTube / Instagram links ── */}
+      <VideoPreviews videos={resolveVideos(product.videos)} />
 
       {/* ── You may also love — horizontal carousel ── */}
       {related.length > 0 && (
@@ -302,7 +332,7 @@ export default async function ProductPage({
                   key={p.id}
                   className="w-[calc(50vw-2rem)] shrink-0 sm:w-[calc(33vw-2rem)] md:w-auto"
                 >
-                  <ProductCard product={p} />
+                  <ProductCard product={p} rating={relatedRatings.get(p.id)} />
                 </div>
               ))}
             </div>

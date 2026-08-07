@@ -80,7 +80,9 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
       announcement: f.announcement || null,
       defaultMaterialsCare: f.defaultMaterialsCare,
       defaultShippingInfo: f.defaultShippingInfo,
-      defaultReturnsInfo: f.defaultReturnsInfo,
+      // Owned by Admin > Returns. Echoed back unchanged so saving this form
+      // can't blank a policy the other screen manages.
+      defaultReturnsInfo: initial.defaultReturnsInfo,
     });
     setSaving(false);
     if (res.ok) {
@@ -273,14 +275,18 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
           value={f.defaultShippingInfo}
           onChange={(v) => set("defaultShippingInfo", v)}
         />
-        <Lines
-          label="Returns & Refunds"
-          value={f.defaultReturnsInfo}
-          onChange={(v) => set("defaultReturnsInfo", v)}
-        />
-        <p className="text-xs text-muted-foreground">
-          Product Details comes from each product&apos;s own description, and
-          Customer Reviews is driven by review data — neither is set here.
+        <p className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+          <b>Returns &amp; Refunds</b> lives in{" "}
+          <a href="/admin/returns" className="text-accent underline underline-offset-2">
+            Returns
+          </a>{" "}
+          alongside the returnable toggle and the return window — one screen owns
+          the whole policy. Product Details comes from each product&apos;s own
+          description, and Customer Reviews is driven by{" "}
+          <a href="/admin/reviews" className="text-accent underline underline-offset-2">
+            approved reviews
+          </a>
+          . None of the three is set here.
         </p>
       </Card>
 

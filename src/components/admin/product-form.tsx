@@ -3,13 +3,13 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Loader2, X, Star, Plus, Trash2, GripVertical } from "lucide-react";
+import { Loader2, X, Star, Plus, Trash2, GripVertical, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createProduct, updateProduct } from "@/app/actions/admin";
 import { VariantMediaTab, type VisualGalleryState } from "@/components/admin/variant-media-tab";
 import { allCombinations, comboKey } from "@/lib/options";
 import { formatINR } from "@/lib/utils";
-import type { ProductDTO, ProductOption } from "@/lib/types";
+import type { ProductDTO, ProductOption, ProductVideo } from "@/lib/types";
 
 type SubcategoryOption = { id: string; name: string; categoryName: string };
 
@@ -30,6 +30,8 @@ type Props = {
     shippingInfo: string;
     returnsInfo: string;
   };
+  /** Store-wide returnable default, so "Use store default" can say which it is. */
+  returnDefault?: boolean;
 };
 
 /** Which top-level tab of the editor is showing. */
@@ -58,6 +60,7 @@ export function ProductForm({
   initialCategory,
   initialSubcategoryId,
   infoDefaults,
+  returnDefault,
 }: Props) {
   const router = useRouter();
   // A duplicate arrives as a fully populated product with a blank id — that is
@@ -130,6 +133,18 @@ export function ProductForm({
     shippingInfo: product?.shippingInfo ?? null,
     returnsInfo: product?.returnsInfo ?? null,
   });
+  // Tri-state: null inherits the store default, true/false is this product's
+  // own answer. Personalised work is the usual reason to say no.
+  const [returnable, setReturnable] = useState<boolean | null>(
+    product?.returnable ?? null
+  );
+  // Social/video links shown as the "Video previews" rail on the product page.
+  const [videos, setVideos] = useState<ProductVideo[]>(
+    Array.isArray(product?.videos) ? product.videos : []
+  );
+  function setVideoField(i: number, key: keyof ProductVideo, value: string) {
+    setVideos((prev) => prev.map((v, idx) => (idx === i ? { ...v, [key]: value } : v)));
+  }
   type InfoKey = keyof typeof info;
   function setInfoField(key: InfoKey, value: string | null) {
     setInfo((prev) => ({ ...prev, [key]: value }));
@@ -613,6 +628,10 @@ export function ProductForm({
       materialsCare: info.materialsCare,
       shippingInfo: info.shippingInfo,
       returnsInfo: info.returnsInfo,
+      returnable,
+      videos: videos
+        .map((v) => ({ title: v.title.trim(), url: v.url.trim() }))
+        .filter((v) => v.url),
     };
 
     const res = editing
@@ -690,6 +709,34 @@ export function ProductForm({
                 preservation order that ships in 20 days, a non-returnable
                 customised piece). One point per line.
               </p>
+              <label className="block max-w-sm">
+                <span className="label">Can this be returned?</span>
+                <select
+                  value={returnable === null ? "inherit" : returnable ? "yes" : "no"}
+                  onChange={(e) =>
+                    setReturnable(
+                      e.target.value === "inherit"
+                        ? null
+                        : e.target.value === "yes"
+                    )
+                  }
+                  className="input"
+                >
+                  <option value="inherit">
+                    Use store default
+                    {returnDefault === undefined
+                      ? ""
+                      : ` — currently ${returnDefault ? "returnable" : "not returnable"}`}
+                  </option>
+                  <option value="yes">Yes — returnable</option>
+                  <option value="no">No — made to order, not returnable</option>
+                </select>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Set in <b>Returns</b> for the whole store. A &quot;No&quot; here
+                  hides the return request form for this piece only.
+                </span>
+              </label>
+
               <div className="grid gap-4 md:grid-cols-3">
                 <InfoOverride
                   label="Materials & Care"
@@ -709,6 +756,65 @@ export function ProductForm({
                   fallback={infoDefaults?.returnsInfo ?? ""}
                   onChange={(v) => setInfoField("returnsInfo", v)}
                 />
+              </div>
+
+              {/* ── Video links ── */}
+              <div className="border-t border-border pt-4">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Video className="h-4 w-4" /> Video links
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Customer reviews, the making process, packaging — paste the link
+                  straight from YouTube or Instagram and give it a title. They show
+                  as a scrollable <b>Video previews</b> row under the info sections
+                  on the product page. Shorts and Reels are framed portrait
+                  automatically.
+                </p>
+
+                {videos.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {videos.map((v, i) => (
+                      <div key={i} className="flex flex-wrap items-start gap-2">
+                        <input
+                          value={v.title}
+                          onChange={(e) => setVideoField(i, "title", e.target.value)}
+                          className="input h-9 w-full sm:w-[13rem]"
+                          placeholder="Title (e.g. Packaging walkthrough)"
+                        />
+                        <input
+                          value={v.url}
+                          onChange={(e) => setVideoField(i, "url", e.target.value)}
+                          className="input h-9 flex-1"
+                          placeholder="https://youtube.com/… or https://instagram.com/reel/…"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setVideos((prev) => prev.filter((_, idx) => idx !== i))
+                          }
+                          className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-danger/10 hover:text-danger"
+                          title="Remove this video"
+                          aria-label="Remove video"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setVideos((prev) => [...prev, { title: "", url: "" }])}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add video link
+                </button>
+                {videos.length === 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    No videos — the Video previews row is hidden on this product.
+                  </p>
+                )}
               </div>
             </Card>
           </div>

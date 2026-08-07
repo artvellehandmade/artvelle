@@ -247,6 +247,63 @@ export async function createDraftOrder(input: ShipmentInput): Promise<string> {
   return String(data.order_id);
 }
 
+export type ReverseShipmentInput = {
+  /** Our return reference (RET-XXXXXX) — becomes the Nimbus order number. */
+  returnNumber: string;
+  /** Rupee value of the goods coming back, for the waybill declaration. */
+  orderAmount: number;
+  /** Where the parcel is collected FROM — the customer, on a reverse pickup. */
+  pickupFrom: {
+    name: string;
+    address: string;
+    city: string;
+    state: string;
+    pincode: string;
+    phone: string;
+  };
+  items: { name: string; qty: number; price: number }[];
+  parcel?: { weight?: number; length?: number; breadth?: number; height?: number };
+};
+
+/**
+ * Create a DRAFT reverse-pickup order — the courier collects from the customer
+ * and delivers to our warehouse. Draft only: no courier allocated, no AWB, no
+ * wallet charge, so it appears in NimbusPost for a human to review exactly like
+ * a forward draft (see `createDraftOrder`).
+ *
+ * Payload shape: same `/v2/orders` endpoint with `order_type: "reverse"`, and
+ * `shipping_address` carrying the CUSTOMER (the pickup point) while
+ * `warehouse_id` is the destination. That inversion is the whole difference.
+ *
+ * ⚠️ Unlike the forward flow, this exact payload has NOT been exercised against
+ * a live NimbusPost account. Callers must treat a throw here as "return approved
+ * but pickup not booked" and surface the message rather than swallowing it —
+ * see `draftReturnPickup` in lib/fulfilment.ts.
+ */
+export async function createReverseDraftOrder(
+  input: ReverseShipmentInput
+): Promise<string> {
+  const forward = await buildOrderPayload({
+    orderNumber: input.returnNumber,
+    // A reverse pickup collects nothing from the customer — always prepaid, so
+    // `order_collectable_amount` is omitted and the courier asks for no money.
+    paymentType: "prepaid",
+    orderAmount: input.orderAmount,
+    consignee: input.pickupFrom,
+    items: input.items,
+    parcel: input.parcel,
+  });
+
+  const data = await np<{ order_id?: string }>("/v2/orders", {
+    method: "POST",
+    body: JSON.stringify({ ...forward, order_type: "reverse" }),
+  });
+  if (!data.order_id) {
+    throw new Error("NimbusPost did not return an order id for the reverse pickup.");
+  }
+  return String(data.order_id);
+}
+
 /**
  * Book an existing draft → allocates the courier and generates the AWB.
  *

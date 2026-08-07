@@ -9,18 +9,6 @@ import { variantPreviewImages } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 import { WhatsAppProductButton } from "./product-actions";
 
-// ─── Deterministic rating stub ────────────────────────────────────────────────
-function stubRating(name: string): { rating: number; count: number } {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
-  }
-  const h = Math.abs(hash);
-  const rating = 4.6 + (h % 4) * 0.1; // 4.6 – 4.9
-  const count = 80 + (h % 100); // 80 – 179
-  return { rating: Math.round(rating * 10) / 10, count };
-}
-
 // ─── Badge logic ──────────────────────────────────────────────────────────────
 type BadgeKind =
   | "Best Seller"
@@ -52,7 +40,18 @@ const BADGE_STYLES: Record<
 };
 
 // ─── Component ────────────────────────────────────────────────────────────────
-export function ProductCard({ product }: { product: ProductDTO }) {
+export function ProductCard({
+  product,
+  rating,
+}: {
+  product: ProductDTO;
+  /**
+   * Real approved-review summary, or undefined when the product has none — the
+   * rating row is then omitted entirely rather than showing invented stars.
+   * Fetched in one grouped query per page (see getReviewSummaries).
+   */
+  rating?: { average: number; count: number };
+}) {
   const discount =
     product.compareAtPrice && product.compareAtPrice > product.price
       ? Math.round(
@@ -62,8 +61,7 @@ export function ProductCard({ product }: { product: ProductDTO }) {
       : 0;
 
   const badge = resolveBadge(product);
-  const { rating, count } = stubRating(product.name);
-  
+
   // One photo per design, not the whole gallery. `product.images` is the union
   // of every variant gallery plus the common photos, which made a 2-design
   // product swipe through 20 shots (and buried the designs among packaging).
@@ -203,14 +201,16 @@ export function ProductCard({ product }: { product: ProductDTO }) {
           {product.name}
         </Link>
 
-        {/* Rating row */}
-        <div className="mt-0.5 flex items-center gap-1 sm:mt-1">
-          <Star className="h-3 w-3 fill-accent text-accent" />
-          <span className="text-[11px] font-medium tabular-nums text-foreground/80">
-            {rating}
-          </span>
-          <span className="text-[10px] text-muted-foreground">({count})</span>
-        </div>
+        {/* Rating row — only when there are approved reviews */}
+        {rating && (
+          <div className="mt-0.5 flex items-center gap-1 sm:mt-1">
+            <Star className="h-3 w-3 fill-accent text-accent" />
+            <span className="text-[11px] font-medium tabular-nums text-foreground/80">
+              {rating.average}
+            </span>
+            <span className="text-[10px] text-muted-foreground">({rating.count})</span>
+          </div>
+        )}
 
         {/* Price row */}
         <div className="mt-1 flex flex-wrap items-baseline gap-x-2">

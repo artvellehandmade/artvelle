@@ -10,6 +10,7 @@ import {
   type CategoryTile,
 } from "@/lib/catalog";
 import { ProductCard } from "@/components/store/product-card";
+import { getReviewSummaries, type ReviewSummary } from "@/lib/reviews";
 import { SubcategoryCard } from "@/components/store/subcategory-card";
 import { Reveal } from "@/components/store/reveal";
 import { ShopFilters } from "@/components/store/shop-filters";
@@ -107,8 +108,15 @@ function Empty({ message }: { message: string }) {
   );
 }
 
+type Ratings = Map<string, ReviewSummary>;
+
+/** One grouped review query per page, not one per card. */
+async function ratingsFor(products: { id: string }[]): Promise<Ratings> {
+  return getReviewSummaries(products.map((p) => p.id));
+}
+
 /** One grid for both shapes of listing — groups and products sit side by side. */
-function TileGrid({ tiles }: { tiles: CategoryTile[] }) {
+function TileGrid({ tiles, ratings }: { tiles: CategoryTile[]; ratings: Ratings }) {
   return (
     <div className={GRID}>
       {tiles.map((tile, i) => (
@@ -117,7 +125,10 @@ function TileGrid({ tiles }: { tiles: CategoryTile[] }) {
           delay={Math.min(i * 0.05, 0.3)}
         >
           {tile.kind === "product" ? (
-            <ProductCard product={tile.product} />
+            <ProductCard
+              product={tile.product}
+              rating={ratings.get(tile.product.id)}
+            />
           ) : (
             <SubcategoryCard tile={tile} />
           )}
@@ -149,6 +160,7 @@ export default async function ShopPage({
         view.priceMin === view.priceMax
           ? formatINR(view.priceMin)
           : `${formatINR(view.priceMin)} – ${formatINR(view.priceMax)}`;
+      const subRatings = await ratingsFor(view.products);
 
       return (
         <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
@@ -182,7 +194,7 @@ export default async function ShopPage({
             <div className={GRID}>
               {view.products.map((p, i) => (
                 <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
-                  <ProductCard product={p} />
+                  <ProductCard product={p} rating={subRatings.get(p.id)} />
                 </Reveal>
               ))}
             </div>
@@ -198,6 +210,9 @@ export default async function ShopPage({
   // ---- Level 2: a category — groups as tiles, one-offs as products ----
   if (inCategory && !sp.q) {
     const tiles = await getCategoryTiles(sp.category!, sort);
+    const tileRatings = await ratingsFor(
+      tiles.flatMap((t) => (t.kind === "product" ? [t.product] : []))
+    );
 
     return (
       <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
@@ -219,7 +234,7 @@ export default async function ShopPage({
         </Suspense>
 
         {tiles.length > 0 ? (
-          <TileGrid tiles={tiles} />
+          <TileGrid tiles={tiles} ratings={tileRatings} />
         ) : (
           <Empty message="Nothing in this category yet — try another one." />
         )}
@@ -230,6 +245,7 @@ export default async function ShopPage({
   // ---- A search reaches individual pieces, so it stays a flat product list ----
   if (sp.q) {
     const products = await getProducts({ category: sp.category, q: sp.q, sort });
+    const catRatings = await ratingsFor(products);
     return (
       <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
         <header className="mb-6 md:mb-8">
@@ -252,7 +268,7 @@ export default async function ShopPage({
           <div className={GRID}>
             {products.map((p, i) => (
               <Reveal key={p.id} delay={Math.min(i * 0.05, 0.3)}>
-                <ProductCard product={p} />
+                <ProductCard product={p} rating={catRatings.get(p.id)} />
               </Reveal>
             ))}
           </div>
@@ -265,6 +281,9 @@ export default async function ShopPage({
 
   // ---- Level 1: shop all — folded the same way as a category page ----
   const tiles = await getShopTiles(sort);
+  const allRatings = await ratingsFor(
+    tiles.flatMap((t) => (t.kind === "product" ? [t.product] : []))
+  );
 
   return (
     <div className="container-px mx-auto max-w-7xl py-8 md:py-12">
@@ -280,7 +299,7 @@ export default async function ShopPage({
       </Suspense>
 
       {tiles.length > 0 ? (
-        <TileGrid tiles={tiles} />
+        <TileGrid tiles={tiles} ratings={allRatings} />
       ) : (
         <Empty message="Nothing here yet — please check back soon." />
       )}

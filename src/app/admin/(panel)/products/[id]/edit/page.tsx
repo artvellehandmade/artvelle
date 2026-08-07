@@ -68,6 +68,7 @@ export default async function EditProductPage({
           shippingInfo: settings.defaultShippingInfo,
           returnsInfo: settings.defaultReturnsInfo,
         }}
+        returnDefault={settings.returnsEnabled && settings.defaultReturnable}
       />
     </div>
   );

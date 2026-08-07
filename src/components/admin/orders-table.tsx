@@ -93,6 +93,8 @@ export type AdminOrder = {
   lastSyncedAt: string | null;
   note: string | null;
   createdAt: string;
+  /** How many return requests this order has. */
+  returnCount: number;
 };
 
 type CourierOption = {
@@ -139,7 +141,51 @@ function paymentBadge(o: AdminOrder): { text: string; cls: string } {
   return { text: "COD due", cls: "bg-orange-500/15 text-orange-500" };
 }
 
-export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
+/**
+ * How much of the return window is left for an order — the same rule the
+ * storefront uses (counted from delivery, never from the order date).
+ * `windowDays` is null when returns are switched off store-wide.
+ */
+function returnWindowState(
+  o: AdminOrder,
+  windowDays: number | null
+): { label: string; cls: string; title: string } | null {
+  if (windowDays == null) return null;
+  if (o.status === "cancelled") return null;
+  if (o.status !== "delivered") {
+    return {
+      label: "returns: not delivered",
+      cls: "bg-muted text-muted-foreground",
+      title: `The ${windowDays}-day return window starts when you mark this order delivered.`,
+    };
+  }
+  // deliveryStatusAt is stamped when the status flips to delivered (or by the
+  // courier scan), so a delivered order always has a date to count from.
+  const from = o.deliveryStatusAt ? new Date(o.deliveryStatusAt) : new Date(o.createdAt);
+  const daysLeft =
+    windowDays - Math.floor((Date.now() - from.getTime()) / 86_400_000);
+  if (daysLeft > 0) {
+    return {
+      label: `returns: ${daysLeft}d left`,
+      cls: "bg-success/15 text-success",
+      title: `Delivered ${from.toLocaleDateString("en-IN")} — the customer can raise a return for ${daysLeft} more day(s).`,
+    };
+  }
+  return {
+    label: "returns: closed",
+    cls: "bg-muted text-muted-foreground",
+    title: `The ${windowDays}-day window closed. The customer can no longer raise a return themselves.`,
+  };
+}
+
+export function OrdersTable({
+  orders,
+  returnWindowDays,
+}: {
+  orders: AdminOrder[];
+  /** null = returns are switched off in Admin > Returns. */
+  returnWindowDays: number | null;
+}) {
   const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -220,6 +266,23 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                     return (
                       <span className={`rounded-full px-2 py-0.5 text-xs ${b.cls}`}>
                         {b.text}
+                      </span>
+                    );
+                  })()}
+                  {o.returnCount > 0 && (
+                    <span className="rounded-full bg-danger/15 px-2 py-0.5 text-xs text-danger">
+                      {o.returnCount} return{o.returnCount === 1 ? "" : "s"}
+                    </span>
+                  )}
+                  {(() => {
+                    const rw = returnWindowState(o, returnWindowDays);
+                    if (!rw) return null;
+                    return (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${rw.cls}`}
+                        title={rw.title}
+                      >
+                        {rw.label}
                       </span>
                     );
                   })()}
@@ -374,6 +437,13 @@ export function OrdersTable({ orders }: { orders: AdminOrder[] }) {
                           ))}
                         </select>
                       </label>
+                      {returnWindowDays != null && o.status !== "delivered" && (
+                        <p className="w-full text-xs text-muted-foreground">
+                          Marking this <b>delivered</b> starts the{" "}
+                          {returnWindowDays}-day return window — until then the
+                          customer can&apos;t raise a return.
+                        </p>
+                      )}
 
                       {/* Payment status dropdown */}
                       <label className="flex items-center gap-2 text-sm">

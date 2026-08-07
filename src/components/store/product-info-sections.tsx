@@ -101,6 +101,7 @@ export function ProductInfoSections({
   returnsInfo,
   rating,
   reviewCount,
+  reviews,
   specs,
 }: {
   /** Always per-product — Admin › Products › Description. */
@@ -113,8 +114,14 @@ export function ProductInfoSections({
   materialsCare: string;
   shippingInfo: string;
   returnsInfo: string;
-  rating: number;
+  /** Headline rating, or null when the product has no approved reviews. */
+  rating: number | null;
   reviewCount: number;
+  /**
+   * The reviews panel — list plus the submit form. Passed in as a slot so this
+   * component stays a server component and the review fetch lives on the page.
+   */
+  reviews: React.ReactNode;
   /** Label/value pairs rendered inside Materials & Care (dimensions, weight…). */
   specs?: { label: string; value: string }[];
 }) {
@@ -162,31 +169,17 @@ export function ProductInfoSections({
         icon={<Star className="h-4 w-4" />}
         title="Customer Reviews"
         meta={
-          <span className="flex items-center gap-1">
-            <Star className="h-3 w-3 fill-accent text-accent" />
-            {rating}
-          </span>
+          rating != null ? (
+            <span className="flex items-center gap-1">
+              <Star className="h-3 w-3 fill-accent text-accent" />
+              {rating} · {reviewCount}
+            </span>
+          ) : (
+            <span>None yet</span>
+          )
         }
       >
-        <div className="flex items-center gap-3">
-          <span className="text-3xl font-semibold text-foreground">{rating}</span>
-          <div>
-            <div className="flex gap-0.5">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star
-                  key={s}
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    s <= Math.round(rating)
-                      ? "fill-accent text-accent"
-                      : "fill-muted text-muted-foreground"
-                  )}
-                />
-              ))}
-            </div>
-            <p className="mt-0.5 text-xs">Based on {reviewCount} verified buyers</p>
-          </div>
-        </div>
+        {reviews}
       </Row>
     </div>
   );

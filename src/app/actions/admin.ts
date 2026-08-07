@@ -97,6 +97,18 @@ const productSchema = z.object({
   // Per-product overrides for the info accordion. `null` = inherit the store
   // default (see resolveProductInfo); a string replaces it for this product.
   materialsCare: z.string().nullable().optional(),
+  // Social/video links for the product page's "Video previews" rail. Rows with
+  // no url are dropped by the editor; the url is checked here so a typo can't
+  // reach the storefront as a dead card.
+  videos: z
+    .array(
+      z.object({
+        title: z.string().trim().max(120).default(""),
+        url: z.string().trim().url("Enter a valid video URL"),
+      })
+    )
+    .max(12, "Up to 12 video links per product")
+    .optional(),
   shippingInfo: z.string().nullable().optional(),
   returnsInfo: z.string().nullable().optional(),
 });
@@ -150,6 +162,7 @@ export async function createProduct(input: ProductInput) {
       materialsCare: data.materialsCare ?? null,
       shippingInfo: data.shippingInfo ?? null,
       returnsInfo: data.returnsInfo ?? null,
+      videos: data.videos ?? [],
       slug,
     },
   });
@@ -325,6 +338,7 @@ export async function updateProduct(id: string, input: ProductInput) {
       materialsCare: data.materialsCare ?? null,
       shippingInfo: data.shippingInfo ?? null,
       returnsInfo: data.returnsInfo ?? null,
+      videos: data.videos ?? [],
       slug,
     },
   });
@@ -696,11 +710,27 @@ export async function updateOrderStatus(
   if (trimmed) entry.note = trimmed;
   history.push(entry);
 
+  // The return window is counted from `deliveryStatusAt`. Only the NimbusPost
+  // sync used to set it, so an order marked delivered by hand had none — and
+  // `returnWindow()` then fell back to the order date, quietly measuring the
+  // window from PURCHASE instead of delivery (often already expired). Stamp it
+  // here, and clear it when an order moves back out of "delivered" so a stale
+  // date can't keep a window open on an undelivered order.
+  const deliveryTouch =
+    status === "delivered"
+      ? order.deliveryStatusAt
+        ? {} // a real courier scan already dated it — don't overwrite
+        : { deliveryStatusAt: new Date() }
+      : order.deliveryStatusAt && order.status === "delivered"
+        ? { deliveryStatusAt: null }
+        : {};
+
   await prisma.order.update({
     where: { id },
     data: {
       status,
       statusHistory: history as unknown as object[],
+      ...deliveryTouch,
       ...(trimmed ? { note: trimmed } : {}),
     },
   });

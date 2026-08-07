@@ -10,6 +10,7 @@ import {
   Quote,
 } from "lucide-react";
 import { getFeatured, getCategoryCounts } from "@/lib/products";
+import { getReviewSummaries } from "@/lib/reviews";
 import { getSettings } from "@/lib/settings";
 import { ButtonLink } from "@/components/ui/button";
 import { ProductCard } from "@/components/store/product-card";
@@ -76,6 +77,9 @@ export default async function HomePage() {
     getCategoryCounts(),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
   ]);
+
+  // One grouped review query for the whole featured row.
+  const ratings = await getReviewSummaries(featured.map((p) => p.id));
 
   const countFor = (c: string) =>
     counts.find((x) => x.category === c)?.count ?? 0;
@@ -271,7 +275,7 @@ export default async function HomePage() {
           <div className="mt-8 grid grid-cols-2 gap-x-3 gap-y-8 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-12 md:mt-10 lg:grid-cols-4">
             {featured.map((p, i) => (
               <Reveal key={p.id} delay={(i % 4) * 0.06}>
-                <ProductCard product={p} />
+                <ProductCard product={p} rating={ratings.get(p.id)} />
               </Reveal>
             ))}
           </div>

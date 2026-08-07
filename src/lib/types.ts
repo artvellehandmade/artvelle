@@ -57,6 +57,9 @@ export type Variant = {
   images: string[];
   previewImage?: string | null;
 };
+/** One admin-added video link: a title and the URL it was copied from. */
+export type ProductVideo = { title: string; url: string };
+
 // A customer's picked option on a cart/order line, e.g. { name: "Size", value: "Large" }
 export type SelectedOption = { name: string; value: string };
 
@@ -158,6 +161,10 @@ export type ProductDTO = {
   materialsCare: string | null;
   shippingInfo: string | null;
   returnsInfo: string | null;
+  /** null = inherit SettingsDTO.defaultReturnable. Resolve via resolveReturnPolicy(). */
+  returnable: boolean | null;
+  /** Admin-added social/video links, rendered as the Video previews rail. */
+  videos: ProductVideo[];
   isFeatured: boolean;
   isActive: boolean;
 };
@@ -193,4 +200,8 @@ export type SettingsDTO = {
   defaultMaterialsCare: string;
   defaultShippingInfo: string;
   defaultReturnsInfo: string;
+  /** Returns — see resolveReturnPolicy(). Managed in Admin > Returns. */
+  returnsEnabled: boolean;
+  defaultReturnable: boolean;
+  returnWindowDays: number;
 };

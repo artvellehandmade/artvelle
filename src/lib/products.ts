@@ -8,6 +8,7 @@ import type {
   PaymentMode,
   Attribute,
   SellableVariant,
+  ProductVideo,
 } from "./types";
 import { deriveVariantModel } from "./variants";
 import { remapGalleryUrl, remapGalleryUrls } from "./gallery-remap";
@@ -82,6 +83,7 @@ export function toDTO(
     variants: Array.isArray(p.variants)
       ? (p.variants as unknown as Variant[])
       : [],
+    videos: Array.isArray(p.videos) ? (p.videos as unknown as ProductVideo[]) : [],
     paymentModes: (Array.isArray(p.paymentModes)
       ? p.paymentModes
       : ["prepaid", "cod"]) as PaymentMode[],

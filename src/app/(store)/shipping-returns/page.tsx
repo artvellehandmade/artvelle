@@ -73,23 +73,56 @@ export default async function ShippingReturnsPage() {
       </PolicySection>
 
       <PolicySection title="Returns">
-        <p>
-          Because every piece is handmade to order, we accept returns only where
-          the item is damaged, defective or incorrect — not for change of mind
-          or for the natural variation in colour, bubbles and swirl described in
-          our{" "}
-          <Link href="/terms" className="text-accent underline">
-            terms
-          </Link>
-          .
-        </p>
-        <p>
-          Custom and commissioned pieces cannot be returned once production has
-          begun, as they cannot be resold.
-        </p>
-        <p className="text-foreground">
-          Whether a given piece is returnable is shown on its product page.
-        </p>
+        {/* Window and availability come from Admin > Returns so this page can
+            never contradict what the order page actually allows. */}
+        {s.returnsEnabled ? (
+          <>
+            <p>
+              Because every piece is handmade to order, we accept returns only
+              where the item is damaged, defective or incorrect — not for change
+              of mind or for the natural variation in colour, bubbles and swirl
+              described in our{" "}
+              <Link href="/terms" className="text-accent underline">
+                terms
+              </Link>
+              .
+            </p>
+            <p className="text-foreground">
+              Raise a return within{" "}
+              <strong>
+                {s.returnWindowDays} day{s.returnWindowDays === 1 ? "" : "s"} of
+                delivery
+              </strong>{" "}
+              from your order page — open the confirmation link we emailed you, or
+              find the order under{" "}
+              <Link href="/account" className="text-accent underline">
+                your account
+              </Link>
+              . Please keep the original packaging and add photos of the issue.
+            </p>
+            <p>
+              Custom and commissioned pieces cannot be returned once production
+              has begun, as they cannot be resold.
+            </p>
+            <p className="text-foreground">
+              Whether a given piece is returnable is shown on its product page.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="text-foreground">
+              We aren&apos;t accepting return requests online at the moment.
+            </p>
+            <p>
+              If your piece arrived damaged, defective or incorrect, message us
+              on WhatsApp or use the{" "}
+              <Link href="/contact" className="text-accent underline">
+                contact form
+              </Link>{" "}
+              with photos and we will put it right.
+            </p>
+          </>
+        )}
       </PolicySection>
 
       <PolicySection title="Refunds">

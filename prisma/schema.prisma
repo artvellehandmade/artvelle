@@ -62,6 +62,12 @@ model Product {
   materialsCare     String?
   shippingInfo      String?
   returnsInfo       String?
+  // NULL = inherit SiteSettings.defaultReturnable. False marks a piece
+  // non-returnable (customised / personalised work).
+  returnable        Boolean?
+  // Social/video links shown as "Video previews" under the info accordion.
+  // Shape: [{ title, url }] — YouTube, Instagram reels, packaging clips.
+  videos            Json     @default("[]")
   isFeatured        Boolean  @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -73,6 +79,7 @@ model Product {
   @@index([isActive])
 
   productImages     ProductImage[]
+  reviews           Review[]
 }
 
 // -------- Orders --------
@@ -118,6 +125,8 @@ model Order {
   discountTotal Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  returnRequests ReturnRequest[]
 
   @@index([status])
   @@index([userId])
@@ -209,6 +218,13 @@ model SiteSettings {
   defaultMaterialsCare  String   @default("Premium quality resin, hand-poured and hand-finished\nWipe with a soft dry cloth — no chemical cleaners\nKeep away from direct sunlight and heat")
   defaultShippingInfo   String   @default("Handmade to order — dispatched in 2–4 working days\nDelivered across India, tracking shared on dispatch\nCash on Delivery available on eligible pin codes")
   defaultReturnsInfo    String   @default("Damaged or wrong item? Report within 48 hours of delivery with unboxing photos.\nMade-to-order pieces can't be returned for a change of mind.\nApproved claims are replaced or refunded to the original payment method.")
+  // ---- Returns ----
+  // Master switch: OFF hides the request form everywhere, whatever a product says.
+  returnsEnabled        Boolean  @default(true)
+  // Applies to every product that hasn't set Product.returnable.
+  defaultReturnable     Boolean  @default(true)
+  // Days after delivery a request can still be raised.
+  returnWindowDays      Int      @default(7)
   updatedAt             DateTime @updatedAt
 }
 
@@ -270,18 +286,70 @@ model Subcategory {
 model Review {
   id        String   @id @default(cuid())
   productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   userId    String?  // null = guest / manually added
   name      String   // reviewer display name
+  email     String?  // contact for follow-up; never shown publicly
   rating    Int      // 1–5 stars
   title     String?  // short headline
   body      String   // review text
   approved  Boolean  @default(false) // admin must approve before public display
-  featured  Boolean  @default(false) // show on Portfolio section
+  featured  Boolean  @default(false) // pinned to the top of the product's reviews
+  // Set when the reviewer has a delivered order containing this product — shown
+  // as a "Verified buyer" badge. Never self-declared by the reviewer.
+  verified  Boolean  @default(false)
+  // Private reply/reason the admin recorded when moderating.
+  adminNote String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([productId])
   @@index([approved])
   @@index([featured])
+  @@index([productId, approved])
+  @@index([createdAt])
+}
+
+// -------- Returns --------
+// A customer's request to send a delivered item back. Kept separate from Order
+// so one order can have several independent requests (different items, or a
+// second attempt after a rejection).
+model ReturnRequest {
+  id            String   @id @default(cuid())
+  // Human-quotable reference (RET-XXXXXX) — what support asks for on the phone.
+  requestNumber String   @unique
+  orderId       String
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  // Order.items is JSON, so the line is captured by value — a later product
+  // rename or price change must not rewrite what was actually returned.
+  productId     String?
+  productName   String
+  variantLabel  String?  // e.g. "Design: Pink · Size: 8\""
+  quantity      Int      @default(1)
+  unitPrice     Int      @default(0)
+  reason        String   // see RETURN_REASONS in lib/returns.ts
+  customerNote  String?
+  images        String[] @default([]) // unboxing / damage photos from the customer
+  status        String   @default("pending") // see RETURN_STATUSES in lib/returns.ts
+  // Shown to the customer on the order page — the decision explained.
+  adminNote     String?
+  refundAmount  Int?
+  refundMethod  String?  // "original" | "upi" | "bank" | "replacement"
+  // ---- Reverse pickup (NimbusPost) ----
+  nimbusOrderId String?  // draft reverse order id
+  nimbusAwb     String?  // AWB once the reverse shipment is booked
+  nimbusCourier String?
+  // Last reverse-pickup failure, surfaced in the admin so a silent Nimbus error
+  // can't leave an approved return with no pickup booked.
+  nimbusError   String?
+  statusHistory Json     @default("[]") // [{ status, note, at, by }]
+  resolvedAt    DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([orderId])
+  @@index([createdAt])
 }
 
 // -------- Coupons --------

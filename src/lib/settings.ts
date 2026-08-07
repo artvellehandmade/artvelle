@@ -42,6 +42,9 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
     "Made-to-order pieces can't be returned for a change of mind.",
     "Approved claims are replaced or refunded to the original payment method.",
   ].join("\n"),
+  returnsEnabled: true,
+  defaultReturnable: true,
+  returnWindowDays: 7,
 };
 
 /**
@@ -108,6 +111,9 @@ export const getSettings = cache(async (): Promise<SettingsDTO> => {
       defaultMaterialsCare: row.defaultMaterialsCare,
       defaultShippingInfo: row.defaultShippingInfo,
       defaultReturnsInfo: row.defaultReturnsInfo,
+      returnsEnabled: row.returnsEnabled,
+      defaultReturnable: row.defaultReturnable,
+      returnWindowDays: row.returnWindowDays,
     };
   } catch {
     return DEFAULT_SETTINGS;

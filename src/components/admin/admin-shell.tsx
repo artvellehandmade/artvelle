@@ -17,6 +17,8 @@ import {
   X,
   Ticket,
   Images,
+  Star,
+  PackageX,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { logout } from "@/app/actions/auth";
@@ -27,6 +29,8 @@ const nav = [
   { href: "/admin/products", label: "Products", icon: Package },
   { href: "/admin/categories", label: "Categories", icon: Tag },
   { href: "/admin/orders", label: "Orders", icon: ShoppingCart },
+  { href: "/admin/returns", label: "Returns", icon: PackageX },
+  { href: "/admin/reviews", label: "Reviews", icon: Star },
   { href: "/admin/coupons", label: "Coupons", icon: Ticket },
   { href: "/admin/media", label: "Media Library", icon: Images },
   { href: "/admin/leads", label: "Interested customers", icon: Users },
