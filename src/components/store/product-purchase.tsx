@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Image from "next/image";
+import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   ShoppingBag,
@@ -19,12 +19,13 @@ import { useCart } from "@/context/cart";
 import { useProductView } from "@/context/product-view";
 import { Button } from "@/components/ui/button";
 import { WhatsAppProductButton } from "@/components/store/product-actions";
+import { VisualVariantPicker } from "@/components/store/visual-variant-picker";
 import { formatINR, cn } from "@/lib/utils";
 import {
   priceForSelection,
-  priceRange,
   isChoiceEnabled,
   repairSelection,
+  visualAttributeName,
 } from "@/lib/variants";
 import type { ProductDTO, Attribute, SellableVariant } from "@/lib/types";
 import { comboKey } from "@/lib/options";
@@ -50,6 +51,54 @@ function TrustRow() {
   );
 }
 
+/** Quantity stepper, shared by the inline CTA and the sticky mobile bar. */
+function QtyStepper({
+  qty,
+  max,
+  onChange,
+  compact = false,
+}: {
+  qty: number;
+  max: number;
+  onChange: (next: number) => void;
+  compact?: boolean;
+}) {
+  const btn = cn(
+    "grid shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30",
+    compact ? "h-8 w-8" : "h-10 w-10"
+  );
+  return (
+    <div
+      className={cn(
+        "flex shrink-0 items-center rounded-full border border-border bg-card p-1",
+        compact && "p-0.5"
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onChange(Math.max(1, qty - 1))}
+        disabled={qty <= 1}
+        className={btn}
+        aria-label="Decrease quantity"
+      >
+        <Minus className="h-4 w-4" />
+      </button>
+      <span className={cn("text-center text-sm font-medium", compact ? "w-6" : "w-8")}>
+        {qty}
+      </span>
+      <button
+        type="button"
+        onClick={() => onChange(Math.min(max, qty + 1))}
+        disabled={qty >= max}
+        className={btn}
+        aria-label="Increase quantity"
+      >
+        <Plus className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
 function StrikeThrough() {
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
@@ -61,10 +110,18 @@ function StrikeThrough() {
 export function ProductPurchase({ product }: { product: ProductDTO }) {
   const { addItem, buyNow, leadInfo } = useCart();
   const { selection, setSelection }   = useProductView();
-  
+
   const attributes = (product.attributes || []) as Attribute[];
   const hasOptions = attributes.length > 0;
   const sellable = (product.sellableVariants || []) as SellableVariant[];
+
+  // The image-driving attribute gets the image-card picker and is always shown
+  // first — it's the question the customer is actually asking. Everything else
+  // falls through to pills, in the admin's authored order.
+  const visualName    = visualAttributeName(product);
+  const visualGroup   = attributes.find((a) => a.name === visualName) ?? null;
+  const pillGroups    = attributes.filter((a) => a.name !== visualGroup?.name);
+  const orderedGroups = visualGroup ? [visualGroup, ...pillGroups] : pillGroups;
 
   const [qty, setQty]       = useState(1);
   const [added, setAdded]   = useState(false);
@@ -73,7 +130,6 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   const selKey    = comboKey(selection);
   const matched   = sellable.find((v) => v.id === selKey);
   const unitPrice = priceForSelection(product as any, selection);
-  const minMax    = priceRange(product as any);
 
   const missing = attributes.filter((g) => !selection[g.name]).map((g) => g.name);
   const needsChoice = missing.length > 0;
@@ -83,6 +139,28 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
   const variantStock = matched ? matched.stock : product.stock;
   const soldOut = (hasOptions ? variantStock : product.stock) <= 0;
   const canOrder = !soldOut && !needsChoice && !comboUnavailable;
+
+  // The sticky mobile bar only appears once the inline CTA has scrolled past the
+  // top of the viewport, so the two are never on screen at the same time.
+  // A passive scroll listener rather than IntersectionObserver: IO delivers no
+  // callbacks while the tab isn't compositing, which left the bar stuck hidden.
+  const ctaRef = useRef<HTMLDivElement | null>(null);
+  const [ctaVisible, setCtaVisible] = useState(true);
+  useEffect(() => {
+    const check = () => {
+      const el = ctaRef.current;
+      if (!el) return;
+      const { top, bottom } = el.getBoundingClientRect();
+      setCtaVisible(bottom > 0 && top < window.innerHeight);
+    };
+    check();
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check);
+    return () => {
+      window.removeEventListener("scroll", check);
+      window.removeEventListener("resize", check);
+    };
+  }, []);
 
   // Reset quantity whenever the customer switches variant.
   useEffect(() => {
@@ -95,6 +173,19 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
     if (selection[groupName] === value) return;
     if (!isChoiceEnabled(groupName, value, product)) return;
     setSelection(repairSelection(attributes, { ...selection, [groupName]: value }));
+  }
+
+  /**
+   * What this product would cost if only `groupName` changed to `val` — used for
+   * the "+₹80" hints on the pills. Returns null when no available sellable
+   * variant matches that combo, so we never advertise a price for something the
+   * customer can't actually buy.
+   */
+  function priceIfSwapped(groupName: string, val: string): number | null {
+    if (selection[groupName] === val) return unitPrice;
+    const next = repairSelection(attributes, { ...selection, [groupName]: val });
+    const v = sellable.find((s) => s.id === comboKey(next));
+    return v && v.available ? v.price : null;
   }
 
   function listNames(names: string[]) {
@@ -134,95 +225,108 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
     buyNow(buildItem(), qty);
   }
 
-
   return (
-    <div className="space-y-5">
-      {hasOptions && (
-        <div className="flex items-baseline gap-2">
-          <span className="text-sm text-muted-foreground">
-            {missing.length === 0 ? "Your selection:" : "From"}
-          </span>
-          <AnimatePresence mode="popLayout" initial={false}>
-            <motion.span
-              key={`${unitPrice}-${missing.length}`}
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.15 }}
-              className="text-2xl font-semibold"
-            >
-              {formatINR(missing.length === 0 ? unitPrice : minMax.min)}
-            </motion.span>
-          </AnimatePresence>
-        </div>
-      )}
+    <div className="space-y-6">
+      {/* ── Option groups: visual attribute as image cards, the rest as pills ── */}
+      {orderedGroups.map((group, i) => {
+        const step = orderedGroups.length > 1 ? i + 1 : undefined;
 
-      {/* ── Variant Preview Strip ── */}
-      {/* ── Option groups — pill style ── */}
-      {attributes.map((group) => (
-        <div key={group.name}>
-          <p className="mb-2.5 flex flex-wrap items-center gap-x-2 text-sm font-medium">
-            <span>{group.name} <span className="text-danger">*</span></span>
-            {selection[group.name] ? (
-              <span className="font-normal text-muted-foreground">— {selection[group.name]}</span>
-            ) : (
-              <span className="font-normal text-danger text-xs">Select one</span>
+        if (group.name === visualGroup?.name) {
+          return (
+            <VisualVariantPicker
+              key={group.name}
+              product={product}
+              attributeName={group.name}
+              values={group.values}
+              selected={selection[group.name]}
+              onSelect={(val) => toggle(group.name, val)}
+              isEnabled={(val) => isChoiceEnabled(group.name, val, product)}
+              index={step}
+            />
+          );
+        }
+
+        return (
+          <section key={group.name} aria-label={`Choose ${group.name}`}>
+            <p className="mb-2.5 flex flex-wrap items-baseline gap-x-1.5 text-sm font-semibold">
+              <span>
+                {step ? `${step}. ` : ""}Choose {group.name}
+              </span>
+              {selection[group.name] ? (
+                <span className="font-normal text-muted-foreground">
+                  — {selection[group.name]}
+                </span>
+              ) : (
+                <span className="text-xs font-normal text-danger">Select one</span>
+              )}
+            </p>
+
+            <div className="flex flex-wrap gap-2">
+              {group.values.map((val) => {
+                const isActive = selection[group.name] === val;
+                const enabled = isChoiceEnabled(group.name, val, product);
+                const swapped = enabled ? priceIfSwapped(group.name, val) : null;
+                const delta = swapped == null ? 0 : swapped - unitPrice;
+
+                return (
+                  <motion.button
+                    key={val}
+                    type="button"
+                    disabled={!enabled}
+                    whileTap={enabled ? { scale: 0.96 } : undefined}
+                    onClick={() => toggle(group.name, val)}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "relative flex flex-col items-center overflow-hidden rounded-xl border px-4 py-2 text-sm font-medium transition-all",
+                      isActive
+                        ? "border-primary bg-primary/5 text-primary"
+                        : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                      !enabled && "pointer-events-none opacity-40"
+                    )}
+                  >
+                    <span className="relative z-10">{val}</span>
+                    {delta !== 0 && (
+                      <span className="relative z-10 text-[11px] font-normal text-muted-foreground">
+                        {delta > 0 ? "+" : "−"}
+                        {formatINR(Math.abs(delta))}
+                      </span>
+                    )}
+                    {!enabled && <StrikeThrough />}
+                  </motion.button>
+                );
+              })}
+            </div>
+          </section>
+        );
+      })}
+
+      {/* ── Quantity + Add to cart / Buy CTA ── */}
+      <div ref={ctaRef} className="space-y-3 pt-1">
+        {hasOptions && (
+          <div className="flex items-baseline gap-2">
+            <span className="text-sm text-muted-foreground">Your selection:</span>
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={unitPrice}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+                className="text-xl font-semibold"
+              >
+                {formatINR(unitPrice)}
+              </motion.span>
+            </AnimatePresence>
+            {qty > 1 && (
+              <span className="text-sm text-muted-foreground">
+                × {qty} = {formatINR(unitPrice * qty)}
+              </span>
             )}
-          </p>
-
-          <div className="flex flex-wrap gap-2">
-            {group.values.map((val) => {
-              const isActive = selection[group.name] === val;
-              const enabled = isChoiceEnabled(group.name, val, product);
-
-              return (
-                <motion.button
-                  key={val}
-                  type="button"
-                  disabled={!enabled}
-                  whileTap={enabled ? { scale: 0.96 } : undefined}
-                  onClick={() => toggle(group.name, val)}
-                  aria-pressed={isActive}
-                  className={cn(
-                    "relative overflow-hidden rounded-full border px-4 py-2 text-sm font-medium transition-all",
-                    isActive
-                      ? "border-accent bg-accent/5 text-accent"
-                      : "border-border text-muted-foreground hover:border-foreground/30 hover:text-foreground",
-                    !enabled && "pointer-events-none opacity-40"
-                  )}
-                >
-                  <span className="relative z-10">{val}</span>
-                  {!enabled && <StrikeThrough />}
-                </motion.button>
-              );
-            })}
           </div>
-        </div>
-      ))}
-      {/* ── Add to cart / Buy CTA ── */}
-      <div className="space-y-3 pt-2">
-        <div className="flex gap-3 h-14">
-          <div className="flex shrink-0 items-center rounded-full border border-border bg-card p-1">
-            <button
-              type="button"
-              onClick={() => setQty(Math.max(1, qty - 1))}
-              disabled={qty <= 1}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30"
-              aria-label="Decrease quantity"
-            >
-              <Minus className="h-4 w-4" />
-            </button>
-            <span className="w-8 text-center text-sm font-medium">{qty}</span>
-            <button
-              type="button"
-              onClick={() => setQty(Math.min(variantStock, qty + 1))}
-              disabled={qty >= variantStock}
-              className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-muted disabled:opacity-30"
-              aria-label="Increase quantity"
-            >
-              <Plus className="h-4 w-4" />
-            </button>
-          </div>
+        )}
+
+        <div className="flex h-14 gap-3">
+          <QtyStepper qty={qty} max={variantStock} onChange={setQty} />
 
           <Button
             size="lg"
@@ -243,12 +347,12 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
           {buying ? (
             <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Preparing checkout...</span>
           ) : (
-            <span className="flex items-center gap-2"><Zap className="h-4 w-4 fill-current" /> Buy it now</span>
+            <span className="flex items-center gap-2"><Zap className="h-4 w-4 fill-current" /> Buy Now</span>
           )}
         </Button>
         <WhatsAppProductButton product={product} />
 
-        <div className="pt-2">
+        <div className="pt-1">
           {soldOut ? (
             <p className="text-center text-sm font-medium text-danger">Sold out</p>
           ) : needsChoice ? (
@@ -262,6 +366,56 @@ export function ProductPurchase({ product }: { product: ProductDTO }) {
       </div>
 
       <TrustRow />
+
+      {/* ── Sticky mobile buy bar — sits above the app's bottom tab bar ── */}
+      {/* Portalled to <body>: an animated ancestor on this page carries a
+          transform, which would otherwise become the containing block and make
+          `fixed` scroll with the page. */}
+      {typeof document !== "undefined" &&
+        createPortal(
+          <AnimatePresence>
+            {!ctaVisible && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="fixed inset-x-0 bottom-[calc(3.75rem+env(safe-area-inset-bottom,0px))] z-40 border-t border-border bg-background/95 px-4 py-2.5 backdrop-blur-xl md:hidden"
+          >
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {Object.values(selection).join(" · ") || product.name}
+                </p>
+                <p className="text-sm font-semibold leading-tight">
+                  {formatINR(unitPrice * qty)}
+                </p>
+              </div>
+              <QtyStepper qty={qty} max={variantStock} onChange={setQty} compact />
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={onAdd}
+                disabled={!canOrder || added}
+                className="h-10 shrink-0 px-3 text-xs font-semibold"
+              >
+                {added ? <Check className="h-4 w-4" /> : "Add"}
+              </Button>
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={onBuy}
+                disabled={!canOrder || buying}
+                className="h-10 shrink-0 px-4 text-xs font-semibold"
+              >
+                {buying ? <Loader2 className="h-4 w-4 animate-spin" /> : "Buy Now"}
+              </Button>
+            </div>
+          </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
+        )}
     </div>
   );
 }

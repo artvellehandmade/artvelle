@@ -62,7 +62,7 @@ export function ProductGallery({
   }
 
   return (
-    <div className="sticky top-24 flex flex-col gap-4">
+    <div className="sticky top-24 flex flex-col gap-3">
       <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-muted">
         {/* Directional crossfade: the incoming photo slides in from the side
             being paginated towards while the old one fades under it. */}
@@ -70,6 +70,15 @@ export function ProductGallery({
           <motion.div
             key={currentUrl}
             custom={direction}
+            drag={activeImages.length > 1 ? "x" : false}
+            dragConstraints={{ left: 0, right: 0 }}
+            dragElastic={0.12}
+            onDragEnd={(_, info) => {
+              // Swipe past ~60px (or a fast flick) advances the gallery — the
+              // gesture mobile shoppers reach for before the arrows.
+              if (info.offset.x < -60 || info.velocity.x < -450) paginate(1);
+              else if (info.offset.x > 60 || info.velocity.x > 450) paginate(-1);
+            }}
             variants={{
               enter: (dir: number) => ({
                 opacity: 0,
@@ -87,7 +96,10 @@ export function ProductGallery({
             animate="center"
             exit="exit"
             transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute inset-0"
+            className={cn(
+              "absolute inset-0",
+              activeImages.length > 1 && "cursor-grab active:cursor-grabbing"
+            )}
           >
             {isVideo ? (
               <video
@@ -125,23 +137,34 @@ export function ProductGallery({
             >
               <ChevronRight className="h-5 w-5" />
             </button>
-            <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
-              {activeImages.map((_, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-300",
-                    i === activeIndex ? "w-4 bg-white" : "w-1.5 bg-white/50"
-                  )}
-                />
-              ))}
-            </div>
+            {/* Dots for a handful of photos; a counter once a strip of dots
+                stops being readable. */}
+            {activeImages.length <= 8 ? (
+              <div className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 gap-1.5">
+                {activeImages.map((_, i) => (
+                  <div
+                    key={i}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all duration-300",
+                      i === activeIndex ? "w-4 bg-white" : "w-1.5 bg-white/50"
+                    )}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="absolute bottom-3 right-3 z-10 rounded-full bg-black/55 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+                {activeIndex + 1} / {activeImages.length}
+              </div>
+            )}
           </>
         )}
       </div>
 
+      {/* Thumbnail strip — a scrolling row rather than a 6-up grid, so a variant
+          with 12 photos doesn't turn into two cramped rows of 40px squares. */}
       {activeImages.length > 1 && (
-        <div className="grid grid-cols-6 gap-2">
+        <div className="-mx-5 sm:mx-0">
+          <div className="no-scrollbar flex gap-2 overflow-x-auto px-5 pb-1 sm:px-0">
           {activeImages.map((url, i) => {
             const thumbIsVideo = url.match(/\.(mp4|webm|mov)$/i);
             return (
@@ -151,10 +174,11 @@ export function ProductGallery({
                   setDirection(i > activeIndex ? 1 : -1);
                   setActiveIndex(i);
                 }}
+                aria-label={`View image ${i + 1}`}
                 className={cn(
-                  "relative aspect-square overflow-hidden rounded-lg bg-muted transition-all duration-300 hover:-translate-y-0.5",
+                  "relative h-[68px] w-[68px] shrink-0 overflow-hidden rounded-lg bg-muted transition-all duration-300 hover:-translate-y-0.5 md:h-[76px] md:w-[76px]",
                   i === activeIndex
-                    ? "ring-2 ring-primary ring-offset-2"
+                    ? "ring-2 ring-primary ring-offset-1"
                     : "opacity-70 hover:opacity-100 hover:shadow-md"
                 )}
               >
@@ -174,6 +198,7 @@ export function ProductGallery({
               </button>
             );
           })}
+          </div>
         </div>
       )}
     </div>

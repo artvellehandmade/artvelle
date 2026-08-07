@@ -2,12 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { toast } from "sonner";
-import { Loader2, Upload, X, LinkIcon, Star, Plus, Trash2, GripVertical, ArrowLeft, ArrowRight } from "lucide-react";
+import { Loader2, X, Star, Plus, Trash2, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createProduct, updateProduct } from "@/app/actions/admin";
-import { PhotoPicker } from "@/components/admin/photo-picker";
 import { VariantMediaTab, type VisualGalleryState } from "@/components/admin/variant-media-tab";
 import { allCombinations, comboKey } from "@/lib/options";
 import { formatINR } from "@/lib/utils";
@@ -30,13 +28,18 @@ type EditorTab = "optvar" | "pricing" | "media";
 /**
  * ProductForm — the admin product editor.
  *
- * A persistent section (Basic Info, Organisation, Images, Checkout modes,
- * Shipping) sits above three top-level tabs: "Options & Variants" (the option
- * builder + combination generation), "Price & Stock" (base price / discount /
- * stock plus the per-combination pricing table) and "Media" (the visual-variant
- * gallery manager). Pricing uses a "Discount %" model (compareAtPrice is derived
- * from it) and, when variants exist, the product price is the minimum available
- * variant price.
+ * A persistent section (Basic Info, Organisation, Checkout modes, Shipping) sits
+ * above three top-level tabs: "Options & Variants" (the option builder +
+ * combination generation), "Price & Stock" (base price / discount / stock plus
+ * the per-combination pricing table) and "Media" (the gallery manager). Pricing
+ * uses a "Discount %" model (compareAtPrice is derived from it) and, when
+ * variants exist, the product price is the minimum available variant price.
+ *
+ * Photos are managed ONLY in the Media tab. The details form used to carry its
+ * own "Images" picker writing to `Product.images`, which meant two systems
+ * feeding one gallery and no way to tell which one won. `Product.images` is now
+ * derived on save (union of every gallery) and kept purely as the flat list that
+ * OG tags / JSON-LD / listing cards read.
  */
 export function ProductForm({
   product,
@@ -51,6 +54,9 @@ export function ProductForm({
   const editing = !!product?.id;
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Set once the "some values have no photos" warning has been shown, so a
+  // second click on Save goes through (existing products only — see onSubmit).
+  const [mediaWarningAck, setMediaWarningAck] = useState(false);
 
   // Which top-level tab is visible.
   const [tab, setTab] = useState<EditorTab>("optvar");
@@ -106,10 +112,6 @@ export function ProductForm({
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
     );
   }
-  const [images, setImages] = useState<string[]>(product?.images ?? []);
-  const [urlInput, setUrlInput] = useState("");
-  // Index of the image currently being dragged (for reordering).
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [options, setOptions] = useState<ProductOption[]>(
     product?.options ?? []
   );
@@ -244,6 +246,25 @@ export function ProductForm({
   const hasVariants = useVariants && combos.length > 0;
   const effectivePrice = hasVariants ? variantMinPrice : base;
 
+  // Values of the image-driving option — the keys every gallery is filed under.
+  const visualValues = useMemo(
+    () => optionMatrix.find((o) => o.name === imageDrivingOption)?.values ?? [],
+    [optionMatrix, imageDrivingOption]
+  );
+  // Values that still have at least one available combo. A value the admin has
+  // switched off everywhere never reaches the storefront, so it's exempt from the
+  // "needs its own photos" requirement.
+  const activeVisualValues = useMemo(() => {
+    if (!hasVariants) return visualValues;
+    return visualValues.filter((val) =>
+      combos.some(
+        (c) =>
+          c[imageDrivingOption] === val &&
+          (variantMap[comboKey(c)]?.available ?? true)
+      )
+    );
+  }, [visualValues, combos, imageDrivingOption, variantMap, hasVariants]);
+
   function variantOf(key: string): VariantEntry {
     return variantMap[key] ?? { available: true, price: "", stock: "" };
   }
@@ -353,53 +374,27 @@ export function ProductForm({
     });
   }
 
-  async function onUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = e.target.files;
-    if (!files?.length) return;
+  /**
+   * Uploads files and resolves with their public urls. Handed to the Media tab so
+   * each section can upload straight into itself — a file dropped under "Pink"
+   * lands in Pink's gallery, not in a shared pile the admin then has to sort.
+   */
+  async function uploadFiles(files: File[]): Promise<string[]> {
     setUploading(true);
+    const urls: string[] = [];
     try {
-      for (const file of Array.from(files)) {
+      for (const file of files) {
         const fd = new FormData();
         fd.append("file", file);
         const res = await fetch("/api/upload", { method: "POST", body: fd });
         const data = await res.json();
-        if (res.ok && data.url) {
-          setImages((prev) => [...prev, data.url]);
-        } else {
-          toast.error(data.error || "Upload failed");
-        }
+        if (res.ok && data.url) urls.push(data.url);
+        else toast.error(data.error || `Upload failed: ${file.name}`);
       }
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
-  }
-
-  function addUrl() {
-    const url = urlInput.trim();
-    if (!url) return;
-    setImages((prev) => [...prev, url]);
-    setUrlInput("");
-  }
-
-  function removeImage(i: number) {
-    setImages((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  // Move an image from one position to another (used by drag-drop and arrows).
-  function moveImage(from: number, to: number) {
-    setImages((prev) => {
-      if (to < 0 || to >= prev.length || from === to) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  }
-
-  function onImageDrop(target: number) {
-    if (dragIndex !== null) moveImage(dragIndex, target);
-    setDragIndex(null);
+    return urls;
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -429,6 +424,39 @@ export function ProductForm({
       toast.error("Stock is required");
       setSaving(false);
       return;
+    }
+
+    // ── Media validation ──
+    // The Media tab is now the only source of photos, so nothing can reach the
+    // storefront with an empty gallery. A value with no gallery of its own falls
+    // back to a common photo, which makes two values look identical on the
+    // picker — that's a broken product page, not a cosmetic issue.
+    if (visualValues.length === 0) {
+      if (visualGallery.common.length === 0) {
+        setTab("media");
+        toast.error("Add at least one photo in the Media tab");
+        setSaving(false);
+        return;
+      }
+    } else {
+      const missing = activeVisualValues.filter(
+        (val) => (visualGallery.galleries[val]?.length ?? 0) === 0
+      );
+      // New products are held to the rule outright. Existing ones only warn the
+      // first time, then let the save through: most of the catalogue predates
+      // per-value galleries, and refusing to save a price fix until someone
+      // shoots five more designs is worse than the duplicate picker card.
+      if (missing.length > 0 && (!editing || !mediaWarningAck)) {
+        setTab("media");
+        setMediaWarningAck(true);
+        toast.error(
+          editing
+            ? `No photos for ${missing.join(", ")} — these fall back to a common photo. Save again to keep it that way.`
+            : `No photos for ${missing.join(", ")} — add them in the Media tab`
+        );
+        setSaving(false);
+        return;
+      }
     }
 
     // Drop empty option groups / choices before saving.
@@ -491,14 +519,20 @@ export function ProductForm({
         })
       : [];
 
-    // Derive a flat images array for the product (unique gallery images).
+    // Product.images is derived, never authored: the union of every gallery, in a
+    // stable order (variant galleries in option order, then common). It backs the
+    // listing card, OG image and JSON-LD — the storefront gallery itself reads the
+    // relational ProductImage rows written by syncProductImages.
     const allVariantImages = new Set<string>();
+    for (const val of visualValues) {
+      for (const img of cleanGalleries[val] ?? []) allVariantImages.add(img);
+    }
+    // Any gallery left over from a value that is no longer in the matrix.
     for (const gal of Object.values(cleanGalleries)) {
       for (const img of gal) allVariantImages.add(img);
     }
     for (const img of visualGallery.common) allVariantImages.add(img);
-    // Fall back to the old `images` state if gallery is empty (e.g. product with no variants).
-    const derivedImages = allVariantImages.size > 0 ? [...allVariantImages] : images;
+    const derivedImages = [...allVariantImages];
 
     // Persist which option drives the image galleries (storefront reader contract:
     // Product.propertyModules.images = [optionName]). Preserve any other modules.
@@ -689,131 +723,6 @@ export function ProductForm({
             />
           </Card>
 
-          <div className="lg:col-span-2">
-            <Card title="Images">
-              {images.length > 0 && (
-                <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
-                  {images.map((img, i) => (
-                    <div
-                      key={`${img}-${i}`}
-                      draggable
-                      onDragStart={() => setDragIndex(i)}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => onImageDrop(i)}
-                      onDragEnd={() => setDragIndex(null)}
-                      className={`group relative aspect-square cursor-move overflow-hidden rounded-xl border bg-muted transition-all ${
-                        dragIndex === i
-                          ? "border-accent opacity-40 ring-2 ring-accent"
-                          : "border-border"
-                      }`}
-                    >
-                      <Image
-                        src={img}
-                        alt={`Image ${i + 1}`}
-                        fill
-                        sizes="120px"
-                        className="pointer-events-none object-cover"
-                      />
-                      {i === 0 && (
-                        <span className="absolute left-1 top-1 rounded-full bg-accent px-1.5 py-0.5 text-[10px] text-accent-foreground">
-                          Cover
-                        </span>
-                      )}
-
-                      {/* Drag handle hint */}
-                      <span className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded-full bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                        <GripVertical className="h-3.5 w-3.5" />
-                      </span>
-
-                      {/* Reorder + remove controls (touch-friendly fallback for drag) */}
-                      <div className="absolute inset-x-1 bottom-1 flex items-center justify-between opacity-0 transition-opacity group-hover:opacity-100">
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            onClick={() => moveImage(i, i - 1)}
-                            disabled={i === 0}
-                            className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white disabled:opacity-30"
-                            aria-label="Move left"
-                            title="Move left"
-                          >
-                            <ArrowLeft className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveImage(i, i + 1)}
-                            disabled={i === images.length - 1}
-                            className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white disabled:opacity-30"
-                            aria-label="Move right"
-                            title="Move right"
-                          >
-                            <ArrowRight className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeImage(i)}
-                          className="grid h-6 w-6 place-items-center rounded-full bg-black/60 text-white hover:bg-danger"
-                          aria-label="Remove"
-                          title="Remove"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <PhotoPicker
-                  selected={images}
-                  onChange={setImages}
-                  preferCategory={form.category}
-                />
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border px-4 py-2.5 text-sm hover:bg-muted">
-                  {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Upload
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={onUpload}
-                    className="hidden"
-                    disabled={uploading}
-                  />
-                </label>
-                <div className="flex flex-1 items-center gap-2">
-                  <div className="relative flex-1">
-                    <LinkIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <input
-                      value={urlInput}
-                      onChange={(e) => setUrlInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          addUrl();
-                        }
-                      }}
-                      className="input pl-9"
-                      placeholder="…or paste an image URL"
-                    />
-                  </div>
-                  <Button type="button" variant="outline" size="sm" onClick={addUrl}>
-                    Add
-                  </Button>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Drag photos to reorder them (or use the arrows on hover). The first
-                image is used as the cover. When you use the <b>Media</b> tab, the
-                product gallery is built from those variant galleries instead.
-              </p>
-            </Card>
-          </div>
 
           <Card title="Checkout modes">
             <p className="text-xs text-muted-foreground">
@@ -1378,50 +1287,43 @@ export function ProductForm({
       {/* ── Media ── */}
       {tab === "media" && (
         <Card title="Media">
-          {optionMatrix.length > 1 && (
-            <label className="block max-w-xs">
-              <span className="label">Which option controls the images?</span>
-              <select
-                value={imageDrivingOption}
-                onChange={(e) => setImageOption(e.target.value)}
-                className="input"
-              >
-                {optionMatrix.map((o) => (
-                  <option key={o.name} value={o.name}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-              <span className="mt-1 block text-xs text-muted-foreground">
-                Galleries below are organised by this option&apos;s values. Combos
-                that differ only by the other options reuse the same photos.
-              </span>
-            </label>
-          )}
           <p className="-mt-1 mb-4 text-xs text-muted-foreground">
-            Manage photos by <b>{imageDrivingOption || "variant"}</b> — not by every
-            combination. Every combination sharing the same{" "}
-            {imageDrivingOption || "value"} automatically uses that value&apos;s
-            gallery. Images with no variant tag go in the Common Gallery (packaging,
-            lifestyle, dimensions).
+            The only place this product&apos;s photos live. Galleries are filed by
+            one option&apos;s values (the <b>Image Controller</b>) rather than by
+            every combination, so you assign photos once per value — every
+            combination sharing that value reuses them.
           </p>
           <VariantMediaTab
             options={options}
             visualOptionName={imageDrivingOption}
+            onVisualOptionChange={setImageOption}
             state={visualGallery}
             onChange={setVisualGallery}
             productCategory={form.category}
             productSubcategory={
               subcategories.find((s) => s.id === form.subcategoryId)?.name
             }
+            activeValues={activeVisualValues}
+            onUploadFiles={uploadFiles}
           />
         </Card>
       )}
 
       {/* ── Actions (save / cancel — always visible) ── */}
       <div className="flex gap-3">
-        <Button type="submit" disabled={saving} className="flex-1 sm:flex-none" size="lg">
-          {saving ? (
+        {/* Blocked while an upload is in flight — saving mid-upload would persist
+            galleries missing the photos still being written. */}
+        <Button
+          type="submit"
+          disabled={saving || uploading}
+          className="flex-1 sm:flex-none"
+          size="lg"
+        >
+          {uploading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Uploading…
+            </>
+          ) : saving ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" /> Saving…
             </>

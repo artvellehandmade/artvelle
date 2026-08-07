@@ -9,7 +9,7 @@ import { ProductGallery } from "@/components/store/product-gallery";
 import { ProductPurchase } from "@/components/store/product-purchase";
 import { ProductPrice } from "@/components/store/product-price";
 import { ProductCard } from "@/components/store/product-card";
-import { DescriptionCollapse } from "@/components/store/description-collapse";
+import { ProductInfoSections } from "@/components/store/product-info-sections";
 import { ProductViewProvider } from "@/context/product-view";
 import { priceRange, firstAvailableSelection } from "@/lib/variants";
 import { getSettings } from "@/lib/settings";
@@ -103,6 +103,19 @@ export default async function ProductPage({
   const range     = priceRange(product);
   const { rating, count } = stubRating(product.name);
   const initialSelection = firstAvailableSelection(product);
+
+  // Physical specs, shown inside the Materials & Care panel when the admin has
+  // filled the parcel fields.
+  const dims = [product.lengthCm, product.breadthCm, product.heightCm];
+  const specs = [
+    ...(dims.every((d) => d != null)
+      ? [{ label: "Dimensions", value: `${dims[0]} × ${dims[1]} × ${dims[2]} cm` }]
+      : []),
+    ...(product.weightGrams != null
+      ? [{ label: "Weight", value: `${product.weightGrams} g` }]
+      : []),
+    { label: "Category", value: product.category },
+  ];
 
   const base            = siteUrl();
   const productUrl      = `${base}/product/${product.slug}`;
@@ -200,7 +213,11 @@ export default async function ProductPage({
             />
           </div>
 
-          {/* ── Product info + purchase ── */}
+          {/* ── Product summary + variant selection + purchase ──
+              Order is deliberate: the customer's first question is "which one do
+              I want", so the option pickers sit directly under the price and the
+              long-form copy (details, care, shipping, reviews) moves below the
+              fold into <ProductInfoSections />. */}
           <div className="md:pt-2">
             {/* Category */}
             <p className="text-[10px] uppercase tracking-widest text-muted-foreground sm:text-xs">
@@ -212,27 +229,23 @@ export default async function ProductPage({
               {product.name}
             </h1>
 
-            {/* Rating row */}
-            <div className="mt-1.5 flex items-center gap-1.5">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  className={`h-3.5 w-3.5 ${
-                    star <= Math.round(rating)
-                      ? "fill-accent text-accent"
-                      : "fill-muted text-muted-foreground"
-                  }`}
-                />
-              ))}
-              <span className="ml-1 text-sm font-medium">{rating}</span>
-              <span className="text-sm text-muted-foreground">({count} reviews)</span>
-            </div>
-
-            {/* Price — tracks the selected variant (client component) */}
-            <ProductPrice product={product} />
-
-            {/* Stock status */}
-            <p className="mt-2 text-sm">
+            {/* Rating + stock on one compact line */}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+              <span className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    className={`h-3.5 w-3.5 ${
+                      star <= Math.round(rating)
+                        ? "fill-accent text-accent"
+                        : "fill-muted text-muted-foreground"
+                    }`}
+                  />
+                ))}
+                <span className="ml-0.5 font-medium">{rating}</span>
+              </span>
+              <span className="text-muted-foreground">({count} reviews)</span>
+              <span className="text-border">|</span>
               {product.stock > 0 ? (
                 <span className="text-success">
                   In stock{product.stock <= 5 ? ` · only ${product.stock} left` : ""}
@@ -240,22 +253,31 @@ export default async function ProductPage({
               ) : (
                 <span className="text-danger">Currently sold out</span>
               )}
-            </p>
+            </div>
+
+            {/* Price — tracks the selected variant (client component) */}
+            <ProductPrice product={product} />
+            <p className="mt-1 text-xs text-muted-foreground">Inclusive of all taxes</p>
 
             <div className="mt-5 h-px bg-border" />
 
-            {/* Collapsible description */}
+            {/* Purchase controls (variant pickers, qty, CTAs, trust) */}
             <div className="mt-5">
-              <DescriptionCollapse text={product.description} />
-            </div>
-
-            {/* Purchase controls (variants, CTAs, trust) */}
-            <div className="mt-6">
               <ProductPurchase product={product} />
             </div>
           </div>
         </div>
       </ProductViewProvider>
+
+      {/* ── Below the fold: everything read after the decision is made ── */}
+      <section className="mt-10 md:mt-16 md:max-w-3xl">
+        <ProductInfoSections
+          description={product.description}
+          rating={rating}
+          reviewCount={count}
+          specs={specs}
+        />
+      </section>
 
       {/* ── You may also love — horizontal carousel ── */}
       {related.length > 0 && (

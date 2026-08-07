@@ -114,6 +114,58 @@ export function imagesForSelection(
 }
 
 /**
+ * The name of the "visual" attribute — the one whose value swaps the gallery.
+ * Authored in admin as the image-driving option and persisted as
+ * `propertyModules.images = [name]`; falls back to the first attribute for
+ * products saved before that contract existed. Returns null when the product
+ * has no options at all. Nothing about the storefront hardcodes "Design" — the
+ * label the customer sees is whatever this returns.
+ */
+export function visualAttributeName(product: {
+  attributes?: Attribute[];
+  propertyModules?: PropertyDependencies;
+}): string | null {
+  const pmImages = product.propertyModules?.images;
+  const declared = Array.isArray(pmImages) ? pmImages[0] : undefined;
+  const attributes = product.attributes ?? [];
+  // Only honour a declared name that is still a real attribute (the admin may
+  // have renamed or deleted the option since).
+  if (declared && attributes.some((a) => a.name === declared)) return declared;
+  return attributes[0]?.name ?? null;
+}
+
+/**
+ * The single thumbnail that represents one value of the visual attribute (e.g.
+ * the pink thali shot for Design = "Pink"), used by the visual variant picker.
+ * Priority: the admin's manual pick (ProductImage slot="preview"), then that
+ * value's first gallery photo, then the first common photo, then the product's
+ * flat image list. Videos are skipped — a picker card needs a still.
+ */
+export function previewImageForValue(
+  product: { images: string[]; media?: MediaDTO[] },
+  value: string
+): string | null {
+  const isStill = (url: string) => !!url && !/\.(mp4|webm|mov)$/i.test(url);
+  const media = product.media ?? [];
+  const bySort = (a: MediaDTO, b: MediaDTO) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+  const forValue = media.filter((m) => m.variantValue === value).sort(bySort);
+
+  const manual = forValue.find((m) => m.slot === "preview" && isStill(m.url));
+  if (manual) return manual.url;
+
+  const firstOfValue = forValue.find((m) => isStill(m.url));
+  if (firstOfValue) return firstOfValue.url;
+
+  const firstCommon = media
+    .filter((m) => m.variantValue == null)
+    .sort(bySort)
+    .find((m) => isStill(m.url));
+  if (firstCommon) return firstCommon.url;
+
+  return (product.images ?? []).find(isStill) ?? null;
+}
+
+/**
  * Resolves the storefront gallery for a selection from the relational
  * ProductImage rows (`product.media`) — the intended source of truth.
  *
@@ -139,12 +191,8 @@ export function galleryForSelection(
 ): string[] {
   const media = product.media ?? [];
   if (media.length > 0) {
-    // Visual attribute is dynamic: prefer the first image-driving property, then
-    // fall back to the first attribute. Guard against a non-array `images`.
-    const pmImages = product.propertyModules?.images;
-    const visualName =
-      (Array.isArray(pmImages) ? pmImages[0] : undefined) ??
-      product.attributes?.[0]?.name;
+    // Visual attribute is dynamic — see visualAttributeName().
+    const visualName = visualAttributeName(product);
     const visualVal = visualName ? selected[visualName] : undefined;
 
     // Defensive: the query already orders by sortOrder, but never trust the
