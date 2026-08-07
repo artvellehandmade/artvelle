@@ -20,6 +20,16 @@ type Props = {
   /** Preselected when arriving from "Add product" inside a subcategory. */
   initialCategory?: string;
   initialSubcategoryId?: string;
+  /**
+   * Store-wide product-page copy (Settings > Product defaults), shown read-only
+   * so the admin can see exactly what this product inherits before deciding to
+   * override it.
+   */
+  infoDefaults?: {
+    materialsCare: string;
+    shippingInfo: string;
+    returnsInfo: string;
+  };
 };
 
 /** Which top-level tab of the editor is showing. */
@@ -47,6 +57,7 @@ export function ProductForm({
   subcategories = [],
   initialCategory,
   initialSubcategoryId,
+  infoDefaults,
 }: Props) {
   const router = useRouter();
   // A duplicate arrives as a fully populated product with a blank id — that is
@@ -112,6 +123,18 @@ export function ProductForm({
       prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
     );
   }
+  // Product-page info blocks. null = inherit the store default; a string (even
+  // an empty one) is this product's own copy.
+  const [info, setInfo] = useState({
+    materialsCare: product?.materialsCare ?? null,
+    shippingInfo: product?.shippingInfo ?? null,
+    returnsInfo: product?.returnsInfo ?? null,
+  });
+  type InfoKey = keyof typeof info;
+  function setInfoField(key: InfoKey, value: string | null) {
+    setInfo((prev) => ({ ...prev, [key]: value }));
+  }
+
   const [options, setOptions] = useState<ProductOption[]>(
     product?.options ?? []
   );
@@ -587,6 +610,9 @@ export function ProductForm({
       shippingType: shipping.shippingType,
       shippingFee: Number(shipping.shippingFee || 0),
       shippingMarkup: Number(shipping.shippingMarkup || 0),
+      materialsCare: info.materialsCare,
+      shippingInfo: info.shippingInfo,
+      returnsInfo: info.returnsInfo,
     };
 
     const res = editing
@@ -638,6 +664,11 @@ export function ProductForm({
                 onChange={(e) => set("description", e.target.value)}
                 className="input resize-none"
               />
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Shown as <b>Product Details</b> on the product page — unique to
+                this piece. The other info sections come from Settings &gt;
+                Product defaults unless you override them below.
+              </span>
             </label>
             <label className="block">
               <span className="label">Tags (comma separated)</span>
@@ -649,6 +680,38 @@ export function ProductForm({
               />
             </label>
           </Card>
+
+          <div className="lg:col-span-2">
+            <Card title="Product information">
+              <p className="text-xs text-muted-foreground">
+                The info sections below the Buy button. Every product uses the
+                store-wide copy from <b>Settings &gt; Product defaults</b> — only
+                switch a block to custom when this piece genuinely differs (a
+                preservation order that ships in 20 days, a non-returnable
+                customised piece). One point per line.
+              </p>
+              <div className="grid gap-4 md:grid-cols-3">
+                <InfoOverride
+                  label="Materials & Care"
+                  value={info.materialsCare}
+                  fallback={infoDefaults?.materialsCare ?? ""}
+                  onChange={(v) => setInfoField("materialsCare", v)}
+                />
+                <InfoOverride
+                  label="Shipping & Delivery"
+                  value={info.shippingInfo}
+                  fallback={infoDefaults?.shippingInfo ?? ""}
+                  onChange={(v) => setInfoField("shippingInfo", v)}
+                />
+                <InfoOverride
+                  label="Returns & Refunds"
+                  value={info.returnsInfo}
+                  fallback={infoDefaults?.returnsInfo ?? ""}
+                  onChange={(v) => setInfoField("returnsInfo", v)}
+                />
+              </div>
+            </Card>
+          </div>
 
           <Card title="Organisation">
             <label className="block">
@@ -1351,6 +1414,68 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
     <div className="rounded-2xl border border-border bg-card p-5">
       <h2 className="mb-4 font-serif text-lg">{title}</h2>
       <div className="space-y-4">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * One product-page info block: inherit the store default (null) or override it
+ * with this product's own copy. Switching to custom seeds the textarea with the
+ * default so the admin edits from it rather than starting on a blank box;
+ * switching back to default discards the custom text (that's the point — there's
+ * no half state where both exist and you can't tell which is live).
+ */
+function InfoOverride({
+  label,
+  value,
+  fallback,
+  onChange,
+}: {
+  label: string;
+  /** null = inherit the store default. */
+  value: string | null;
+  /** The store default, shown read-only while inheriting. */
+  fallback: string;
+  onChange: (next: string | null) => void;
+}) {
+  const custom = value !== null;
+  const shown = custom ? value : fallback;
+  const points = shown.split("\n").filter((l) => l.trim()).length;
+
+  return (
+    <div className="rounded-xl border border-border p-3">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-sm font-medium">{label}</span>
+        <button
+          type="button"
+          onClick={() => onChange(custom ? null : fallback)}
+          className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
+            custom
+              ? "bg-accent/10 text-accent hover:bg-accent/20"
+              : "bg-muted text-muted-foreground hover:bg-muted/70"
+          }`}
+        >
+          {custom ? "Using custom — revert" : "Store default"}
+        </button>
+      </div>
+
+      <textarea
+        rows={5}
+        value={shown}
+        readOnly={!custom}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="One point per line"
+        className={`input mt-2 resize-y font-mono text-xs leading-relaxed ${
+          custom ? "" : "cursor-not-allowed opacity-60"
+        }`}
+      />
+
+      <p className="mt-1 text-[11px] text-muted-foreground">
+        {points === 0
+          ? "Empty — this section is hidden on the product page."
+          : `${points} bullet${points === 1 ? "" : "s"}`}
+        {!custom && " · edit under Settings > Product defaults"}
+      </p>
     </div>
   );
 }

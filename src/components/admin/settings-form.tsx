@@ -78,6 +78,9 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
       razorpayEnabled: f.razorpayEnabled,
       nimbusEnabled: f.nimbusEnabled,
       announcement: f.announcement || null,
+      defaultMaterialsCare: f.defaultMaterialsCare,
+      defaultShippingInfo: f.defaultShippingInfo,
+      defaultReturnsInfo: f.defaultReturnsInfo,
     });
     setSaving(false);
     if (res.ok) {
@@ -252,6 +255,35 @@ export function SettingsForm({ initial }: { initial: SettingsDTO }) {
         />
       </Card>
 
+      <Card title="Product defaults">
+        <p className="text-sm text-muted-foreground">
+          The copy shown in the info accordion on every product page. Write it
+          once here; a product only needs its own version when it genuinely
+          differs (a preservation piece that ships in 20 days, say). Put{" "}
+          <b>one point per line</b> — each line renders as a bullet. Leave a box
+          empty to hide that section across the whole store.
+        </p>
+        <Lines
+          label="Materials & Care"
+          value={f.defaultMaterialsCare}
+          onChange={(v) => set("defaultMaterialsCare", v)}
+        />
+        <Lines
+          label="Shipping & Delivery"
+          value={f.defaultShippingInfo}
+          onChange={(v) => set("defaultShippingInfo", v)}
+        />
+        <Lines
+          label="Returns & Refunds"
+          value={f.defaultReturnsInfo}
+          onChange={(v) => set("defaultReturnsInfo", v)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Product Details comes from each product&apos;s own description, and
+          Customer Reviews is driven by review data — neither is set here.
+        </p>
+      </Card>
+
       <Card title="Integrations">
         <p className="text-sm text-muted-foreground">
           Master switches for the payment gateway and courier. Prepaid & Advance
@@ -336,6 +368,36 @@ function Area({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="input resize-none"
+      />
+    </label>
+  );
+}
+
+/** Textarea whose lines each become a bullet on the storefront. */
+function Lines({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const points = value.split("\n").filter((l) => l.trim()).length;
+  return (
+    <label className="block">
+      <span className="label flex items-baseline justify-between gap-2">
+        <span>{label}</span>
+        <span className="text-xs font-normal text-muted-foreground">
+          {points === 0 ? "hidden on product pages" : `${points} bullet${points === 1 ? "" : "s"}`}
+        </span>
+      </span>
+      <textarea
+        rows={4}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input resize-y font-mono text-xs leading-relaxed"
+        placeholder="One point per line"
       />
     </label>
   );

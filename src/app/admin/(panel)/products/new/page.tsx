@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { ProductForm } from "@/components/admin/product-form";
 import { prisma } from "@/lib/prisma";
+import { getSettings } from "@/lib/settings";
 import type { ProductDTO } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export default async function NewProductPage({
 }) {
   const sp = await searchParams;
 
-  const [categoriesList, subcategories, source] = await Promise.all([
+  const [categoriesList, subcategories, source, settings] = await Promise.all([
     prisma.category.findMany({ orderBy: { name: "asc" } }),
     prisma.subcategory.findMany({
       orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
@@ -33,6 +34,7 @@ export default async function NewProductPage({
     sp.copyOf
       ? prisma.product.findUnique({ where: { id: sp.copyOf } })
       : Promise.resolve(null),
+    getSettings(),
   ]);
 
   const categories = categoriesList.map((c) => c.name);
@@ -90,6 +92,11 @@ export default async function NewProductPage({
         subcategories={subs}
         initialCategory={sp.category}
         initialSubcategoryId={sp.subcategoryId}
+        infoDefaults={{
+          materialsCare: settings.defaultMaterialsCare,
+          shippingInfo: settings.defaultShippingInfo,
+          returnsInfo: settings.defaultReturnsInfo,
+        }}
       />
     </div>
   );

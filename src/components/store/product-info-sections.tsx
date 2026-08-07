@@ -71,11 +71,21 @@ function Row({
   );
 }
 
-function Bullets({ items }: { items: string[] }) {
+/**
+ * Renders admin-authored copy as bullets — one line in, one bullet out. Leading
+ * "-"/"•" markers are tolerated so it doesn't matter whether the admin typed
+ * them. Returns null for blank copy, which is how a section gets hidden.
+ */
+function Bullets({ text }: { text: string }) {
+  const items = text
+    .split("\n")
+    .map((l) => l.replace(/^\s*[-•*]\s*/, "").trim())
+    .filter(Boolean);
+  if (items.length === 0) return null;
   return (
     <ul className="space-y-1.5">
-      {items.map((t) => (
-        <li key={t} className="flex gap-2">
+      {items.map((t, i) => (
+        <li key={`${i}-${t}`} className="flex gap-2">
           <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-accent" />
           <span>{t}</span>
         </li>
@@ -86,16 +96,30 @@ function Bullets({ items }: { items: string[] }) {
 
 export function ProductInfoSections({
   description,
+  materialsCare,
+  shippingInfo,
+  returnsInfo,
   rating,
   reviewCount,
   specs,
 }: {
+  /** Always per-product — Admin › Products › Description. */
   description: string;
+  /**
+   * Already resolved by `resolveProductInfo()` — the product's own copy or the
+   * store default. Blank hides the section, so an admin can switch a block off
+   * store-wide (clear it under Settings › Product defaults) or per product.
+   */
+  materialsCare: string;
+  shippingInfo: string;
+  returnsInfo: string;
   rating: number;
   reviewCount: number;
   /** Label/value pairs rendered inside Materials & Care (dimensions, weight…). */
   specs?: { label: string; value: string }[];
 }) {
+  const hasSpecs = !!specs && specs.length > 0;
+
   return (
     <div className="rounded-2xl border border-border px-4 md:px-5">
       <Row
@@ -106,45 +130,33 @@ export function ProductInfoSections({
         <p className="whitespace-pre-line">{description}</p>
       </Row>
 
-      <Row icon={<Sparkles className="h-4 w-4" />} title="Materials & Care">
-        <Bullets
-          items={[
-            "Premium quality resin, hand-poured and hand-finished",
-            "Wipe with a soft dry cloth — no chemical cleaners",
-            "Keep away from direct sunlight and heat",
-          ]}
-        />
-        {specs && specs.length > 0 && (
-          <dl className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            {specs.map(({ label, value }) => (
-              <div key={label} className="flex justify-between gap-3 sm:justify-start">
-                <dt className="text-muted-foreground">{label}</dt>
-                <dd className="font-medium text-foreground sm:ml-auto">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-      </Row>
+      {(materialsCare.trim() || hasSpecs) && (
+        <Row icon={<Sparkles className="h-4 w-4" />} title="Materials & Care">
+          <Bullets text={materialsCare} />
+          {hasSpecs && (
+            <dl className="mt-3 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+              {specs.map(({ label, value }) => (
+                <div key={label} className="flex justify-between gap-3 sm:justify-start">
+                  <dt className="text-muted-foreground">{label}</dt>
+                  <dd className="font-medium text-foreground sm:ml-auto">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </Row>
+      )}
 
-      <Row icon={<Truck className="h-4 w-4" />} title="Shipping & Delivery">
-        <Bullets
-          items={[
-            "Handmade to order — dispatched in 2–4 working days",
-            "Delivered across India, tracking shared on dispatch",
-            "Cash on Delivery available on eligible pin codes",
-          ]}
-        />
-      </Row>
+      {shippingInfo.trim() && (
+        <Row icon={<Truck className="h-4 w-4" />} title="Shipping & Delivery">
+          <Bullets text={shippingInfo} />
+        </Row>
+      )}
 
-      <Row icon={<RotateCcw className="h-4 w-4" />} title="Returns & Refunds">
-        <Bullets
-          items={[
-            "Damaged or wrong item? Report within 48 hours of delivery with unboxing photos.",
-            "Made-to-order pieces can't be returned for a change of mind.",
-            "Approved claims are replaced or refunded to the original payment method.",
-          ]}
-        />
-      </Row>
+      {returnsInfo.trim() && (
+        <Row icon={<RotateCcw className="h-4 w-4" />} title="Returns & Refunds">
+          <Bullets text={returnsInfo} />
+        </Row>
+      )}
 
       <Row
         icon={<Star className="h-4 w-4" />}

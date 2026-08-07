@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { ProductForm } from "@/components/admin/product-form";
+import { getSettings } from "@/lib/settings";
 import type { ProductDTO, ProductOption, VariantPrice, Variant } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [product, categoriesList, subcategories] = await Promise.all([
+  const [product, categoriesList, subcategories, settings] = await Promise.all([
     prisma.product.findUnique({ where: { id } }),
     prisma.category.findMany({ orderBy: { name: "asc" } }),
     prisma.subcategory.findMany({
@@ -25,6 +26,7 @@ export default async function EditProductPage({
         category: { select: { name: true } },
       },
     }),
+    getSettings(),
   ]);
   if (!product) notFound();
 
@@ -57,7 +59,16 @@ export default async function EditProductPage({
         <ChevronLeft className="h-4 w-4" /> Back to products
       </Link>
       <h1 className="mb-6 font-serif text-3xl">Edit product</h1>
-      <ProductForm product={dto} categories={categories} subcategories={subs} />
+      <ProductForm
+        product={dto}
+        categories={categories}
+        subcategories={subs}
+        infoDefaults={{
+          materialsCare: settings.defaultMaterialsCare,
+          shippingInfo: settings.defaultShippingInfo,
+          returnsInfo: settings.defaultReturnsInfo,
+        }}
+      />
     </div>
   );
 }

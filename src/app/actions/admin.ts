@@ -94,6 +94,11 @@ const productSchema = z.object({
   shippingType: z.string().default("free"),
   shippingFee: z.coerce.number().int().nonnegative().default(0),
   shippingMarkup: z.coerce.number().int().default(0),
+  // Per-product overrides for the info accordion. `null` = inherit the store
+  // default (see resolveProductInfo); a string replaces it for this product.
+  materialsCare: z.string().nullable().optional(),
+  shippingInfo: z.string().nullable().optional(),
+  returnsInfo: z.string().nullable().optional(),
 });
 
 export type ProductInput = z.input<typeof productSchema>;
@@ -140,6 +145,11 @@ export async function createProduct(input: ProductInput) {
       shippingType: data.shippingType,
       shippingFee: data.shippingFee,
       shippingMarkup: data.shippingMarkup,
+      // `undefined` would leave the column at its previous value on update, so
+      // collapse it to null — the "inherit the store default" state.
+      materialsCare: data.materialsCare ?? null,
+      shippingInfo: data.shippingInfo ?? null,
+      returnsInfo: data.returnsInfo ?? null,
       slug,
     },
   });
@@ -312,6 +322,9 @@ export async function updateProduct(id: string, input: ProductInput) {
       heightCm: data.heightCm ?? null,
       shippingType: data.shippingType,
       shippingFee: data.shippingFee,
+      materialsCare: data.materialsCare ?? null,
+      shippingInfo: data.shippingInfo ?? null,
+      returnsInfo: data.returnsInfo ?? null,
       slug,
     },
   });
@@ -612,6 +625,11 @@ const settingsSchema = z.object({
   razorpayEnabled: z.boolean().default(false),
   nimbusEnabled: z.boolean().default(false),
   announcement: z.string().nullable().optional(),
+  // Store-wide product-page copy. Every product inherits these unless it
+  // overrides them; blank hides that section on every product page.
+  defaultMaterialsCare: z.string().default(""),
+  defaultShippingInfo: z.string().default(""),
+  defaultReturnsInfo: z.string().default(""),
 });
 
 export type SettingsInput = z.input<typeof settingsSchema>;

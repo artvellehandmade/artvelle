@@ -150,6 +150,14 @@ export type ProductDTO = {
   shippingType: string;
   shippingFee: number;
   shippingMarkup: number;
+  /**
+   * Product-page info blocks. `null` = inherit the store default from
+   * SettingsDTO.default*; a string overrides it for this product. One line per
+   * bullet. Resolve with `resolveProductInfo()` — never read these directly.
+   */
+  materialsCare: string | null;
+  shippingInfo: string | null;
+  returnsInfo: string | null;
   isFeatured: boolean;
   isActive: boolean;
 };
@@ -177,4 +185,12 @@ export type SettingsDTO = {
   razorpayEnabled: boolean;
   nimbusEnabled: boolean;
   announcement: string | null;
+  /**
+   * Store-wide defaults for the product page's info accordion — used by every
+   * product that doesn't override them. One line per bullet; blank hides the
+   * section on the product page.
+   */
+  defaultMaterialsCare: string;
+  defaultShippingInfo: string;
+  defaultReturnsInfo: string;
 };

@@ -145,24 +145,87 @@ export function previewImageForValue(
   product: { images: string[]; media?: MediaDTO[] },
   value: string
 ): string | null {
-  const isStill = (url: string) => !!url && !/\.(mp4|webm|mov)$/i.test(url);
-  const media = product.media ?? [];
-  const bySort = (a: MediaDTO, b: MediaDTO) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
-  const forValue = media.filter((m) => m.variantValue === value).sort(bySort);
+  const own = ownPreviewForValue(product.media ?? [], value);
+  if (own) return own;
+  // Unlike a listing card, a picker card must render something for every value.
+  return coverStill(product);
+}
 
-  const manual = forValue.find((m) => m.slot === "preview" && isStill(m.url));
+/** Is this url a still image (the gallery treats videos by extension)? */
+function isStill(url: string | undefined | null): url is string {
+  return !!url && !/\.(mp4|webm|mov)$/i.test(url);
+}
+
+const bySortOrder = (a: MediaDTO, b: MediaDTO) =>
+  (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
+
+/**
+ * The ONE photo that stands for a value, using only that value's own media —
+ * no common-photo fallback. Distinct from `previewImageForValue`, which does
+ * fall back: a picker card on the product page must render something for every
+ * value, whereas a listing card must not claim a packaging shot is a design.
+ */
+function ownPreviewForValue(
+  media: MediaDTO[],
+  value: string
+): string | null {
+  const rows = media.filter((m) => m.variantValue === value).sort(bySortOrder);
+  const manual = rows.find((m) => m.slot === "preview" && isStill(m.url));
   if (manual) return manual.url;
+  return rows.find((m) => isStill(m.url))?.url ?? null;
+}
 
-  const firstOfValue = forValue.find((m) => isStill(m.url));
-  if (firstOfValue) return firstOfValue.url;
-
-  const firstCommon = media
+/** A single representative still: first common photo, else the flat list. */
+function coverStill(product: { images: string[]; media?: MediaDTO[] }): string | null {
+  const common = (product.media ?? [])
     .filter((m) => m.variantValue == null)
-    .sort(bySort)
+    .sort(bySortOrder)
     .find((m) => isStill(m.url));
-  if (firstCommon) return firstCommon.url;
-
+  if (common) return common.url;
   return (product.images ?? []).find(isStill) ?? null;
+}
+
+/**
+ * The gallery a *listing card* swipes through: exactly one preview per value of
+ * the visual attribute — the same thumbnails the product page's picker shows.
+ *
+ * Deliberately NOT `product.images`, which is the union of every gallery and so
+ * made a 2-design product swipe through 20 photos. Common photos (packaging,
+ * dimensions, care card) and the rest of each value's gallery are excluded: a
+ * card answers "which designs exist", not "show me everything".
+ *
+ * Values with no photos of their own are skipped rather than falling back to a
+ * common shot — otherwise four untagged designs render as four identical
+ * packaging photos. Products with no options (or no per-value photos at all)
+ * fall back to a single cover still. Pure — no DB/server deps.
+ */
+export function variantPreviewImages(
+  product: {
+    images: string[];
+    media?: MediaDTO[];
+    attributes?: Attribute[];
+    propertyModules?: PropertyDependencies;
+  },
+  limit = 6
+): string[] {
+  const media = product.media ?? [];
+  const visualName = visualAttributeName(product);
+  const values =
+    (visualName
+      ? product.attributes?.find((a) => a.name === visualName)?.values
+      : undefined) ?? [];
+
+  const out: string[] = [];
+  for (const val of values) {
+    const url = ownPreviewForValue(media, val);
+    // De-dupe: the admin may legitimately point two values at the same photo.
+    if (url && !out.includes(url)) out.push(url);
+    if (out.length >= limit) break;
+  }
+  if (out.length > 0) return out;
+
+  const cover = coverStill(product);
+  return cover ? [cover] : [];
 }
 
 /**

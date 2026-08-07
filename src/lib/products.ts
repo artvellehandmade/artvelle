@@ -93,6 +93,15 @@ export function toDTO(
   };
 }
 
+/**
+ * The relational gallery every list/detail query needs. ProductCard and the
+ * subcategory tiles read `product.media` (one preview per design); a query that
+ * forgets this include degrades those cards to one photo with no error.
+ */
+const GALLERY_INCLUDE = {
+  include: { productImages: { include: { media: true }, orderBy: { sortOrder: "asc" } } },
+} as const;
+
 export type ShopQuery = {
   category?: string;
   q?: string;
@@ -178,10 +187,14 @@ export async function searchCatalogue(
 
 export async function getFeatured(limit = 4): Promise<ProductDTO[]> {
   try {
+    // GALLERY_INCLUDE on every list query: ProductCard builds its swipe gallery
+    // from the relational rows (one preview per design), so omitting it makes the
+    // card fall back to a single cover photo.
     const products = await prisma.product.findMany({
       where: { isActive: true, isFeatured: true },
       orderBy: { createdAt: "desc" },
       take: limit,
+      ...GALLERY_INCLUDE,
     });
     if (products.length === 0) {
       return (
@@ -189,6 +202,7 @@ export async function getFeatured(limit = 4): Promise<ProductDTO[]> {
           where: { isActive: true },
           orderBy: { createdAt: "desc" },
           take: limit,
+          ...GALLERY_INCLUDE,
         })
       ).map(toDTO);
     }
@@ -237,6 +251,7 @@ export async function getRelated(
           where: { isActive: true, id: { not: excludeId }, subcategoryId },
           take: limit,
           orderBy: { createdAt: "desc" },
+          ...GALLERY_INCLUDE,
         })
       : [];
     if (siblings.length >= limit) return siblings.slice(0, limit).map(toDTO);
@@ -250,6 +265,7 @@ export async function getRelated(
       },
       take: limit - siblings.length,
       orderBy: { createdAt: "desc" },
+      ...GALLERY_INCLUDE,
     });
     return [...siblings, ...rest].map(toDTO);
   } catch {

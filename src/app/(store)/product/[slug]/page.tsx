@@ -12,7 +12,7 @@ import { ProductCard } from "@/components/store/product-card";
 import { ProductInfoSections } from "@/components/store/product-info-sections";
 import { ProductViewProvider } from "@/context/product-view";
 import { priceRange, firstAvailableSelection } from "@/lib/variants";
-import { getSettings } from "@/lib/settings";
+import { getSettings, resolveProductInfo } from "@/lib/settings";
 import { siteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
@@ -103,6 +103,10 @@ export default async function ProductPage({
   const range     = priceRange(product);
   const { rating, count } = stubRating(product.name);
   const initialSelection = firstAvailableSelection(product);
+
+  // Info-accordion copy: this product's own text where set, otherwise the
+  // store-wide default from Settings > Product defaults.
+  const info = resolveProductInfo(product, settings);
 
   // Physical specs, shown inside the Materials & Care panel when the admin has
   // filled the parcel fields.
@@ -273,6 +277,9 @@ export default async function ProductPage({
       <section className="mt-10 md:mt-16 md:max-w-3xl">
         <ProductInfoSections
           description={product.description}
+          materialsCare={info.materialsCare}
+          shippingInfo={info.shippingInfo}
+          returnsInfo={info.returnsInfo}
           rating={rating}
           reviewCount={count}
           specs={specs}

@@ -27,7 +27,52 @@ export const DEFAULT_SETTINGS: SettingsDTO = {
   razorpayEnabled: false,
   nimbusEnabled: false,
   announcement: "Free shipping on all prepaid orders • Handmade in India",
+  defaultMaterialsCare: [
+    "Premium quality resin, hand-poured and hand-finished",
+    "Wipe with a soft dry cloth — no chemical cleaners",
+    "Keep away from direct sunlight and heat",
+  ].join("\n"),
+  defaultShippingInfo: [
+    "Handmade to order — dispatched in 2–4 working days",
+    "Delivered across India, tracking shared on dispatch",
+    "Cash on Delivery available on eligible pin codes",
+  ].join("\n"),
+  defaultReturnsInfo: [
+    "Damaged or wrong item? Report within 48 hours of delivery with unboxing photos.",
+    "Made-to-order pieces can't be returned for a change of mind.",
+    "Approved claims are replaced or refunded to the original payment method.",
+  ].join("\n"),
 };
+
+/**
+ * Resolve the product page's info blocks: a product's own copy wins, otherwise
+ * the store-wide default. A blank result means "hide this section" — that's how
+ * an admin switches a block off store-wide (clear it in Product defaults).
+ *
+ * Single source of truth for the rule, so the product page, any future PDP
+ * variant and the admin preview can't drift apart.
+ */
+export function resolveProductInfo(
+  product: {
+    materialsCare?: string | null;
+    shippingInfo?: string | null;
+    returnsInfo?: string | null;
+  },
+  settings: Pick<
+    SettingsDTO,
+    "defaultMaterialsCare" | "defaultShippingInfo" | "defaultReturnsInfo"
+  >
+): { materialsCare: string; shippingInfo: string; returnsInfo: string } {
+  // Only `null` inherits. An empty string is a deliberate per-product "hide
+  // this section", which is why this isn't a `||` chain.
+  const pick = (own: string | null | undefined, fallback: string) =>
+    (own ?? fallback).trim();
+  return {
+    materialsCare: pick(product.materialsCare, settings.defaultMaterialsCare),
+    shippingInfo: pick(product.shippingInfo, settings.defaultShippingInfo),
+    returnsInfo: pick(product.returnsInfo, settings.defaultReturnsInfo),
+  };
+}
 
 /**
  * Load site settings. Falls back to defaults if the DB is unavailable so the
@@ -60,6 +105,9 @@ export const getSettings = cache(async (): Promise<SettingsDTO> => {
       razorpayEnabled: row.razorpayEnabled,
       nimbusEnabled: row.nimbusEnabled,
       announcement: row.announcement,
+      defaultMaterialsCare: row.defaultMaterialsCare,
+      defaultShippingInfo: row.defaultShippingInfo,
+      defaultReturnsInfo: row.defaultReturnsInfo,
     };
   } catch {
     return DEFAULT_SETTINGS;

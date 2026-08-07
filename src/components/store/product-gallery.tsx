@@ -40,7 +40,7 @@ export function ProductGallery({
 
   if (!activeImages.length) {
     return (
-      <div className="aspect-[4/5] w-full rounded-2xl bg-muted flex items-center justify-center">
+      <div className="aspect-square w-full rounded-2xl bg-muted flex items-center justify-center">
         <span className="text-muted-foreground text-sm font-medium tracking-wide">
           NO IMAGES
         </span>
@@ -63,7 +63,7 @@ export function ProductGallery({
 
   return (
     <div className="sticky top-24 flex flex-col gap-3">
-      <div className="relative aspect-[4/5] w-full overflow-hidden rounded-2xl bg-muted">
+      <div className="relative aspect-square w-full overflow-hidden rounded-2xl bg-muted">
         {/* Directional crossfade: the incoming photo slides in from the side
             being paginated towards while the old one fades under it. */}
         <AnimatePresence initial={false} custom={direction} mode="popLayout">

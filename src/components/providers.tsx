@@ -3,15 +3,14 @@
 import { ThemeProvider } from "next-themes";
 import { Toaster } from "sonner";
 import { CartProvider } from "@/context/cart";
-import { SettingsProvider } from "@/context/settings";
-import type { SettingsDTO } from "@/lib/types";
+import { SettingsProvider, type ClientSettings } from "@/context/settings";
 
 export function Providers({
   settings,
   initialLead,
   children,
 }: {
-  settings: SettingsDTO;
+  settings: ClientSettings;
   initialLead?: { name: string; phone: string } | null;
   children: React.ReactNode;
 }) {

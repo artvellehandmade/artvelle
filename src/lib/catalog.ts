@@ -2,6 +2,7 @@ import { prisma } from "./prisma";
 import type { ProductDTO, MediaDTO } from "./types";
 import { toDTO } from "./products";
 import { remapGalleryUrl } from "./gallery-remap";
+import { variantPreviewImages } from "./variants";
 
 /**
  * The browsing hierarchy: Category → Subcategory → Product.
@@ -77,21 +78,28 @@ const SUBCATEGORY_SELECT = {
 } as const;
 
 /**
- * Cover photos for a group. Its own pick wins; otherwise the first photo of
- * each of the first few products stands in — so a photo already attached to a
- * product never has to be uploaded or re-picked for the group as well.
+ * Cover photos for a group. Its own pick wins; otherwise ONE photo per product
+ * inside stands in — four thalis in "Pooja Thalis" give four covers — so a photo
+ * already attached to a product never has to be re-picked for the group.
+ *
+ * Borrowing takes each product's leading variant preview rather than
+ * `p.images[0]`: the flat list is the union of every gallery, so its first entry
+ * could be a packaging shot, and a product whose photos are all relational (an
+ * empty `images` column) contributed nothing at all.
  */
+const MAX_COVERS = 6;
+
 function coverImages(
   sub: { images: string[] },
   products: ProductDTO[]
 ): string[] {
   const own = sub.images.filter(Boolean).map(remapGalleryUrl);
-  if (own.length > 0) return own.slice(0, 6);
+  if (own.length > 0) return own.slice(0, MAX_COVERS);
   const borrowed: string[] = [];
   for (const p of products) {
-    const first = p.images[0];
-    if (first && !borrowed.includes(first)) borrowed.push(first);
-    if (borrowed.length === 6) break;
+    const [preview] = variantPreviewImages(p, 1);
+    if (preview && !borrowed.includes(preview)) borrowed.push(preview);
+    if (borrowed.length === MAX_COVERS) break;
   }
   return borrowed;
 }
@@ -209,7 +217,14 @@ export async function getShopTiles(
   try {
     const [products, subs] = await Promise.all([
       prisma.product
-        .findMany({ where: { isActive: true }, orderBy: { createdAt: "desc" } })
+        .findMany({
+          where: { isActive: true },
+          orderBy: { createdAt: "desc" },
+          // Cards derive their swipe gallery from the relational rows, so the
+          // list queries must load them — without this a card silently degrades
+          // to a single photo.
+          include: { productImages: { include: { media: true } } },
+        })
         .then((rows) => rows.map(toDTO)),
       prisma.subcategory.findMany({
         where: { isActive: true },
@@ -267,6 +282,7 @@ export async function getSubcategoryView(
       await prisma.product.findMany({
         where: { isActive: true, subcategoryId: sub.id },
         orderBy: { createdAt: "desc" },
+        include: { productImages: { include: { media: true } } },
       })
     ).map(toDTO);
     sortProducts(products, sort);
@@ -331,6 +347,7 @@ export async function getSubcategoriesForAdmin(categoryId: string) {
   const products = (
     await prisma.product.findMany({
       where: { subcategoryId: { in: subs.map((s) => s.id) } },
+      include: { productImages: { include: { media: true } } },
     })
   ).map(toDTO);
 

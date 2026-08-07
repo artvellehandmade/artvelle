@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Star, ChevronLeft, ChevronRight } from "lucide-react";
 import { formatINR, cn } from "@/lib/utils";
+import { variantPreviewImages } from "@/lib/variants";
 import type { ProductDTO } from "@/lib/types";
 import { WhatsAppProductButton } from "./product-actions";
 
@@ -63,7 +64,10 @@ export function ProductCard({ product }: { product: ProductDTO }) {
   const badge = resolveBadge(product);
   const { rating, count } = stubRating(product.name);
   
-  const images = (product.images ?? []).filter(Boolean);
+  // One photo per design, not the whole gallery. `product.images` is the union
+  // of every variant gallery plus the common photos, which made a 2-design
+  // product swipe through 20 shots (and buried the designs among packaging).
+  const images = useMemo(() => variantPreviewImages(product), [product]);
   const many = images.length > 1;
 
   const scrollRef = useRef<HTMLDivElement>(null);

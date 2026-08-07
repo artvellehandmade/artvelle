@@ -74,6 +74,12 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const settings = await getSettings();
+  const {
+    defaultMaterialsCare: _dmc,
+    defaultShippingInfo: _dsi,
+    defaultReturnsInfo: _dri,
+    ...clientSettings
+  } = settings;
 
   // If the shopper is logged in, hand their name/phone to the cart so the
   // add-to-cart mini sign-up never prompts them again.
@@ -142,7 +148,9 @@ export default async function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
-        <Providers settings={settings} initialLead={initialLead}>
+        {/* Server-only fields (the product-page default copy) are stripped here
+            so they don't ride along in every page's client payload. */}
+        <Providers settings={clientSettings} initialLead={initialLead}>
           {children}
         </Providers>
       </body>

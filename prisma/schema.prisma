@@ -56,6 +56,12 @@ model Product {
   shippingType      String   @default("nimbus") // "free", "fixed", "nimbus"
   shippingFee       Int      @default(0)
   shippingMarkup    Int      @default(0)
+  // Product-page info blocks. NULL = inherit the store-wide default from
+  // SiteSettings (defaultMaterialsCare / defaultShippingInfo / defaultReturnsInfo);
+  // a string here overrides it for this product only. One line per bullet.
+  materialsCare     String?
+  shippingInfo      String?
+  returnsInfo       String?
   isFeatured        Boolean  @default(false)
   isActive          Boolean  @default(true)
   createdAt         DateTime @default(now())
@@ -196,6 +202,13 @@ model SiteSettings {
   partialEnabled        Boolean  @default(true)  // Advance + COD — needs Razorpay
   directEnabled         Boolean  @default(true)  // Customised order (pay to owner)
   announcement          String?  @default("Free shipping on all prepaid orders • Handmade in India")
+  // ---- Product defaults ----
+  // Store-wide copy for the product page's info accordion. Every product uses
+  // these unless it sets its own (Product.materialsCare / shippingInfo /
+  // returnsInfo). One line per bullet; blank hides the section entirely.
+  defaultMaterialsCare  String   @default("Premium quality resin, hand-poured and hand-finished\nWipe with a soft dry cloth — no chemical cleaners\nKeep away from direct sunlight and heat")
+  defaultShippingInfo   String   @default("Handmade to order — dispatched in 2–4 working days\nDelivered across India, tracking shared on dispatch\nCash on Delivery available on eligible pin codes")
+  defaultReturnsInfo    String   @default("Damaged or wrong item? Report within 48 hours of delivery with unboxing photos.\nMade-to-order pieces can't be returned for a change of mind.\nApproved claims are replaced or refunded to the original payment method.")
   updatedAt             DateTime @updatedAt
 }
 
